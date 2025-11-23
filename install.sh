@@ -2,15 +2,18 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v2.1
+# Version: v3.0
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v2.1"
+VERSION="v3.0"
+
+# Paths
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
+BACKUP_DIR="/root/pasarguard_backups"
 
 # Node Paths
 NODE_CERT_FILE="/var/lib/pg-node/certs/ssl_cert.pem"
@@ -35,10 +38,10 @@ check_root() {
 }
 
 install_deps() {
-    if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null; then
+    if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null || ! command -v tar &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl cron openssl nano -qq > /dev/null
+        apt-get install -y certbot lsof curl cron openssl nano tar -qq > /dev/null
     fi
 }
 
@@ -56,7 +59,9 @@ restore_services() {
     systemctl start apache2 2>/dev/null
 }
 
-# --- Main Features ---
+# ==========================================
+#       FEATURE FUNCTIONS
+# ==========================================
 
 generate_ssl() {
     echo ""
@@ -170,34 +175,6 @@ generate_ssl() {
     read
 }
 
-view_keys() {
-    echo ""
-    echo -e "${CYAN}--- View Keys Content ---${NC}"
-    read -p "Enter Domain (Type 'b' to go back): " DOMAIN
-    if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
-
-    POSSIBLE_PATH="$DEFAULT_PATH/$DOMAIN"
-    LE_PATH="/etc/letsencrypt/live/$DOMAIN"
-
-    if [ -f "$POSSIBLE_PATH/fullchain.pem" ]; then
-        TARGET_PATH="$POSSIBLE_PATH"
-    elif [ -f "$LE_PATH/fullchain.pem" ]; then
-        TARGET_PATH="$LE_PATH"
-    else
-        echo -e "${RED}Files not found for $DOMAIN.${NC}"
-        read -p "Press Enter..."
-        return
-    fi
-    
-    echo -e "${CYAN}--- PUBLIC KEY (fullchain.pem) ---${NC}"
-    cat "$TARGET_PATH/fullchain.pem"
-    echo ""
-    echo -e "${CYAN}--- PRIVATE KEY (privkey.pem) ---${NC}"
-    cat "$TARGET_PATH/privkey.pem"
-    echo ""
-    read -p "Press Enter..."
-}
-
 show_location() {
     echo ""
     echo -e "${CYAN}--- Show SSL File Paths ---${NC}"
@@ -258,13 +235,84 @@ check_status() {
     read -p "Press Enter..."
 }
 
+delete_ssl() {
+    echo ""
+    echo -e "${RED}--- DELETE SSL CERTIFICATE ---${NC}"
+    read -p "Enter Domain to DELETE (Type 'b' to cancel): " DOMAIN
+    
+    if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
+
+    echo -e "${YELLOW}Are you sure you want to delete SSL for: $DOMAIN ?${NC}"
+    read -p "Type 'yes' to confirm: " CONFIRM
+    
+    if [[ "$CONFIRM" == "yes" ]]; then
+        certbot delete --cert-name "$DOMAIN" --non-interactive
+        
+        if [ -d "$DEFAULT_PATH/$DOMAIN" ]; then
+            rm -rf "$DEFAULT_PATH/$DOMAIN"
+            echo -e "${GREEN}✔ Custom folder deleted.${NC}"
+        fi
+        
+        (crontab -l 2>/dev/null | grep -v "$DOMAIN") | crontab -
+        echo -e "${GREEN}✔ Auto-renewal cronjob removed.${NC}"
+        
+        echo -e "${GREEN}Deletion Complete.${NC}"
+    else
+        echo -e "${YELLOW}Cancelled.${NC}"
+    fi
+    echo ""
+    read -p "Press Enter..."
+}
+
+backup_restore_menu() {
+    echo ""
+    echo -e "${CYAN}--- Backup & Restore SSL ---${NC}"
+    echo "1) Backup SSL Certificates (Zip)"
+    echo "2) Restore SSL Certificates"
+    echo "3) Back"
+    echo ""
+    read -p "Select [1-3]: " BR_OPT
+    
+    mkdir -p "$BACKUP_DIR"
+    TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
+    
+    case $BR_OPT in
+        1)
+            BACKUP_FILE="$BACKUP_DIR/ssl_backup_$TIMESTAMP.tar.gz"
+            echo -e "${BLUE}Backing up $DEFAULT_PATH ...${NC}"
+            if [ -d "$DEFAULT_PATH" ]; then
+                tar -czf "$BACKUP_FILE" -C "$DEFAULT_PATH" .
+                echo -e "${GREEN}✔ Backup saved at: $BACKUP_FILE${NC}"
+            else
+                echo -e "${RED}✘ Source directory not found ($DEFAULT_PATH).${NC}"
+            fi
+            ;;
+        2)
+            echo -e "${YELLOW}Enter full path to backup file (.tar.gz):${NC}"
+            read -p "Path: " RESTORE_FILE
+            if [ -f "$RESTORE_FILE" ]; then
+                echo -e "${BLUE}Restoring to $DEFAULT_PATH ...${NC}"
+                mkdir -p "$DEFAULT_PATH"
+                tar -xzf "$RESTORE_FILE" -C "$DEFAULT_PATH"
+                echo -e "${GREEN}✔ Restore completed.${NC}"
+            else
+                echo -e "${RED}✘ File not found.${NC}"
+            fi
+            ;;
+        *) return ;;
+    esac
+    echo ""
+    read -p "Press Enter..."
+}
+
+# --- PANEL & NODE FUNCTIONS ---
+
 edit_env_config() {
     echo ""
     echo -e "${CYAN}--- Edit Panel Config (.env) ---${NC}"
     
     if [ -f "$ENV_FILE_PATH" ]; then
         echo -e "${YELLOW}Opening $ENV_FILE_PATH with nano...${NC}"
-        echo -e "Press ${CYAN}Ctrl+X${NC}, then ${CYAN}Y${NC}, then ${CYAN}Enter${NC} to save and exit."
         read -p "Press Enter to open editor..."
         nano "$ENV_FILE_PATH"
         echo -e "${GREEN}✔ Editing finished.${NC}"
@@ -296,7 +344,6 @@ restart_panel() {
     read -p "Press Enter..."
 }
 
-# --- FIXED OPTION 7 LOGIC ---
 view_node_files_simple() {
     echo ""
     echo -e "${CYAN}--- View Node Configuration ---${NC}"
@@ -330,16 +377,83 @@ view_node_files_simple() {
                 echo -e "${RED}✘ File not found: $NODE_ENV_FILE${NC}"
             fi
             ;;
-        *)
-            return
-            ;;
+        *) return ;;
     esac
     echo ""
     read -p "Press Enter..."
 }
 
-# --- Menu Loop ---
+view_logs() {
+    echo ""
+    echo -e "${CYAN}--- View Pasarguard Logs (Last 50 lines) ---${NC}"
+    if command -v pasarguard &> /dev/null; then
+        journalctl -u pasarguard -n 50 --no-pager
+    else
+        echo -e "${RED}Pasarguard command/service not detected properly.${NC}"
+    fi
+    echo -e "\n${GREEN}----------------------------------${NC}"
+    read -p "Press Enter..."
+}
 
+# ==========================================
+#       MENU STRUCTURE
+# ==========================================
+
+# Sub-Menu: SSL Management
+ssl_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}===========================================${NC}"
+        echo -e "${YELLOW}        SSL MANAGEMENT MENU                ${NC}"
+        echo -e "${BLUE}===========================================${NC}"
+        echo "1) Generate SSL (Single or Multi)"
+        echo "2) Show SSL File Paths"
+        echo "3) Check SSL Status & Expiry"
+        echo "4) Backup / Restore SSL"
+        echo "5) Delete SSL (Remove Certs)"
+        echo "6) Back to Main Menu"
+        echo -e "${BLUE}===========================================${NC}"
+        read -p "Select Option [1-6]: " S_OPT
+
+        case $S_OPT in
+            1) generate_ssl ;;
+            2) show_location ;;
+            3) check_status ;;
+            4) backup_restore_menu ;;
+            5) delete_ssl ;;
+            6) return ;;
+            *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# Sub-Menu: Panel & Node Management
+panel_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}===========================================${NC}"
+        echo -e "${YELLOW}     PANEL & NODE MANAGEMENT MENU          ${NC}"
+        echo -e "${BLUE}===========================================${NC}"
+        echo "1) Edit Config (.env)"
+        echo "2) Restart Panel"
+        echo "3) View Node Configs (SSL & .env)"
+        echo "4) View Service Logs"
+        echo "5) Back to Main Menu"
+        echo -e "${BLUE}===========================================${NC}"
+        read -p "Select Option [1-5]: " P_OPT
+
+        case $P_OPT in
+            1) edit_env_config ;;
+            2) restart_panel ;;
+            3) view_node_files_simple ;;
+            4) view_logs ;;
+            5) return ;;
+            *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# Main Menu
 check_root
 install_deps
 
@@ -348,26 +462,16 @@ while true; do
     echo -e "${BLUE}===========================================${NC}"
     echo -e "${YELLOW}     $PROJECT_NAME $VERSION     ${NC}"
     echo -e "${BLUE}===========================================${NC}"
-    echo "1) Generate SSL (Single or Multi)"
-    echo "2) View Keys (Print content)"
-    echo "3) Show SSL File Paths"
-    echo "4) Check SSL Status & Expiry"
-    echo "5) Edit Config (.env)"
-    echo "6) Restart Panel"
-    echo "7) View Node Configs (SSL & .env)"
-    echo "8) Exit"
+    echo "1) SSL Management (Generate, View, Backup...)"
+    echo "2) Panel & Node Management (Edit, Restart...)"
+    echo "3) Exit"
     echo -e "${BLUE}===========================================${NC}"
-    read -p "Select Option [1-8]: " OPTION
+    read -p "Select Option [1-3]: " OPTION
 
     case $OPTION in
-        1) generate_ssl ;;
-        2) view_keys ;;
-        3) show_location ;;
-        4) check_status ;;
-        5) edit_env_config ;;
-        6) restart_panel ;;
-        7) view_node_files_simple ;;
-        8) exit 0 ;;
+        1) ssl_menu ;;
+        2) panel_menu ;;
+        3) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
 done
