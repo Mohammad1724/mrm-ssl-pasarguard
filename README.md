@@ -25,4 +25,4 @@
 برای اجرای اسکریپت کافیست دستور زیر را در ترمینال سرور خود (با دسترسی روت) وارد کنید:
 
 ```bash
-bash <(curl -Ls https://github.com/Mohammad1724/mrm-ssl-pasarguard/raw/main/install.sh)# mrm-ssl-pasarguard
+bash <(curl -Ls https://github.com/Mohammad1724/mrm-ssl-pasarguard/raw/main/install.sh)
