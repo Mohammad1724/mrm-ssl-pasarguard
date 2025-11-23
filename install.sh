@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.0
+# Version: v1.1
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.0"
+VERSION="v1.1"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 
 # --- Colors ---
@@ -30,7 +30,6 @@ check_root() {
 }
 
 install_deps() {
-    # Check if dependencies are installed, if not, install them silently
     if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
@@ -39,7 +38,6 @@ install_deps() {
 }
 
 check_port_80() {
-    # Check if Port 80 is occupied by Nginx/Apache
     if lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
         echo -e "${YELLOW}[WARN] Port 80 is busy. Temporarily stopping web services...${NC}"
         systemctl stop nginx 2>/dev/null
@@ -49,7 +47,6 @@ check_port_80() {
 }
 
 restore_services() {
-    # Restart web services after Certbot finishes
     systemctl start nginx 2>/dev/null
     systemctl start apache2 2>/dev/null
 }
@@ -62,10 +59,8 @@ generate_ssl() {
     echo -e "How many domains do you want to add? (Type '${YELLOW}b${NC}' to go back)"
     read -p ">> " DOMAIN_COUNT
 
-    # Back Check
     if [[ "$DOMAIN_COUNT" == "b" || "$DOMAIN_COUNT" == "back" ]]; then return; fi
 
-    # Validation
     if ! [[ "$DOMAIN_COUNT" =~ ^[0-9]+$ ]] || [ "$DOMAIN_COUNT" -lt 1 ]; then
         echo -e "${RED}Error: Please enter a valid number.${NC}"
         read -p "Press Enter..."
@@ -79,7 +74,6 @@ generate_ssl() {
     for (( i=1; i<=DOMAIN_COUNT; i++ ))
     do
         read -p "Enter Domain #$i: " SINGLE_DOMAIN
-        # Back Check inside loop
         if [[ "$SINGLE_DOMAIN" == "b" || "$SINGLE_DOMAIN" == "back" ]]; then return; fi
 
         if [ ! -z "$SINGLE_DOMAIN" ]; then
@@ -97,7 +91,6 @@ generate_ssl() {
     read -p "Enter Email (Type 'b' to go back): " EMAIL
     if [[ "$EMAIL" == "b" || "$EMAIL" == "back" ]]; then return; fi
 
-    # Start Processing
     check_port_80
     
     SUCCESS_LIST=()
@@ -107,14 +100,12 @@ generate_ssl() {
         echo ""
         echo -e "${BLUE}--- Processing: $DOMAIN ---${NC}"
         
-        # IP Check (Safety feature)
         SERVER_IP=$(curl -s https://api.ipify.org)
         DOMAIN_IP=$(dig +short $DOMAIN | head -n 1)
         if [ "$SERVER_IP" != "$DOMAIN_IP" ] && [ ! -z "$DOMAIN_IP" ]; then
             echo -e "${YELLOW}[WARN] IP Mismatch ($DOMAIN). Might fail.${NC}"
         fi
 
-        # Request SSL
         certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
         
         if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
@@ -139,9 +130,8 @@ generate_ssl() {
     echo -e "Where should folders be saved? (Default: $DEFAULT_PATH)"
     read -p ">> " USER_PATH
     
-    # Back Check
     if [[ "$USER_PATH" == "b" || "$USER_PATH" == "back" ]]; then 
-        echo -e "${YELLOW}Files are in /etc/letsencrypt but were NOT copied to custom path.${NC}"
+        echo -e "${YELLOW}Files kept in system path only.${NC}"
         read -p "Press Enter..."
         return
     fi
@@ -155,15 +145,11 @@ generate_ssl() {
         FINAL_DEST="$USER_PATH/$DOMAIN"
         mkdir -p "$FINAL_DEST"
 
-        # Copy Files
         cp -L "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" "$FINAL_DEST/fullchain.pem"
         cp -L "/etc/letsencrypt/live/$DOMAIN/privkey.pem" "$FINAL_DEST/privkey.pem"
-        
-        # Set Permissions
         chmod 644 "$FINAL_DEST/fullchain.pem"
         chmod 600 "$FINAL_DEST/privkey.pem"
 
-        # Setup Auto-Renewal Cronjob (Prevents duplicates)
         CRON_CMD="cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem $FINAL_DEST/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem $FINAL_DEST/privkey.pem"
         (crontab -l 2>/dev/null | grep -v "$DOMAIN"; echo "0 3 * * * $CRON_CMD") | crontab -
         
@@ -185,7 +171,6 @@ view_keys() {
     read -p "Enter Domain (Type 'b' to go back): " DOMAIN
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
-    # Try default path first, then letsencrypt path
     POSSIBLE_PATH="$DEFAULT_PATH/$DOMAIN"
     LE_PATH="/etc/letsencrypt/live/$DOMAIN"
 
@@ -194,7 +179,7 @@ view_keys() {
     elif [ -f "$LE_PATH/fullchain.pem" ]; then
         TARGET_PATH="$LE_PATH"
     else
-        echo -e "${RED}Certificate files not found for $DOMAIN.${NC}"
+        echo -e "${RED}Files not found for $DOMAIN.${NC}"
         read -p "Press Enter..."
         return
     fi
@@ -204,7 +189,41 @@ view_keys() {
     echo ""
     echo -e "${CYAN}--- PRIVATE KEY (privkey.pem) ---${NC}"
     cat "$TARGET_PATH/privkey.pem"
-    
+    echo ""
+    read -p "Press Enter..."
+}
+
+show_location() {
+    echo ""
+    echo -e "${CYAN}--- Show SSL Location ---${NC}"
+    read -p "Enter Domain (Type 'b' to go back): " DOMAIN
+    if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
+
+    # Paths to check
+    PASAR_PATH="$DEFAULT_PATH/$DOMAIN"
+    SYSTEM_PATH="/etc/letsencrypt/live/$DOMAIN"
+    FOUND=0
+
+    echo ""
+    # Check Pasarguard Path
+    if [ -d "$PASAR_PATH" ] && [ -f "$PASAR_PATH/fullchain.pem" ]; then
+        echo -e "${GREEN}✔ Found in Pasarguard Path:${NC}"
+        echo -e "${YELLOW}$PASAR_PATH${NC}"
+        FOUND=1
+    fi
+
+    # Check System Path
+    if [ -d "$SYSTEM_PATH" ] && [ -f "$SYSTEM_PATH/fullchain.pem" ]; then
+        if [ $FOUND -eq 1 ]; then echo ""; fi # Spacer
+        echo -e "${GREEN}✔ Found in System Path (Source):${NC}"
+        echo -e "${YELLOW}$SYSTEM_PATH${NC}"
+        FOUND=1
+    fi
+
+    if [ $FOUND -eq 0 ]; then
+        echo -e "${RED}✘ No SSL certificate folders found for '$DOMAIN'.${NC}"
+    fi
+
     echo ""
     read -p "Press Enter..."
 }
@@ -250,17 +269,19 @@ while true; do
     echo -e "${YELLOW}     $PROJECT_NAME $VERSION     ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) Generate SSL (Single or Multi)"
-    echo "2) View Keys (Print to console)"
-    echo "3) Check SSL Status & Expiry"
-    echo "4) Exit"
+    echo "2) View Keys (Print content)"
+    echo "3) Show SSL Location (Paths)"
+    echo "4) Check SSL Status & Expiry"
+    echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
-    read -p "Select Option [1-4]: " OPTION
+    read -p "Select Option [1-5]: " OPTION
 
     case $OPTION in
         1) generate_ssl ;;
         2) view_keys ;;
-        3) check_status ;;
-        4) exit 0 ;;
+        3) show_location ;;
+        4) check_status ;;
+        5) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
 done
