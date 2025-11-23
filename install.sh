@@ -2,14 +2,15 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.3
+# Version: v1.5
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.3"
+VERSION="v1.5"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
+ENV_FILE_PATH="/opt/pasarguard/.env"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -30,10 +31,10 @@ check_root() {
 }
 
 install_deps() {
-    if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null; then
+    if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl cron openssl -qq > /dev/null
+        apt-get install -y certbot lsof curl cron openssl nano -qq > /dev/null
     fi
 }
 
@@ -199,33 +200,26 @@ show_location() {
     read -p "Enter Domain (Type 'b' to go back): " DOMAIN
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
-    # Check if user used default path or custom
-    # We start with default path
     PASAR_DIR="$DEFAULT_PATH/$DOMAIN"
     
-    # If not found in default, ask user for path
     if [ ! -f "$PASAR_DIR/fullchain.pem" ]; then
         echo -e "${YELLOW}Not found in default path.${NC}"
         echo -e "Did you save it in a custom folder? (Leave empty to cancel)"
         read -p "Enter Path: " CUSTOM_USER_PATH
         
         if [ -z "$CUSTOM_USER_PATH" ]; then return; fi
-        
         CUSTOM_USER_PATH=${CUSTOM_USER_PATH%/}
         PASAR_DIR="$CUSTOM_USER_PATH/$DOMAIN"
     fi
 
     echo ""
-    
     if [ -f "$PASAR_DIR/fullchain.pem" ]; then
         echo -e "${GREEN}✔ Copy these paths to your panel:${NC}"
         echo -e "Public Key : ${YELLOW}$PASAR_DIR/fullchain.pem${NC}"
         echo -e "Private Key: ${YELLOW}$PASAR_DIR/privkey.pem${NC}"
     else
         echo -e "${RED}✘ Files not found in: $PASAR_DIR${NC}"
-        echo -e "Please make sure you have generated the SSL first."
     fi
-
     echo ""
     read -p "Press Enter..."
 }
@@ -260,6 +254,46 @@ check_status() {
     read -p "Press Enter..."
 }
 
+edit_env_config() {
+    echo ""
+    echo -e "${CYAN}--- Edit Panel Config (.env) ---${NC}"
+    
+    if [ -f "$ENV_FILE_PATH" ]; then
+        echo -e "${YELLOW}Opening $ENV_FILE_PATH with nano...${NC}"
+        echo -e "Press ${CYAN}Ctrl+X${NC}, then ${CYAN}Y${NC}, then ${CYAN}Enter${NC} to save and exit."
+        read -p "Press Enter to open editor..."
+        nano "$ENV_FILE_PATH"
+        echo -e "${GREEN}✔ Editing finished.${NC}"
+    else
+        echo -e "${RED}✘ Config file not found at: $ENV_FILE_PATH${NC}"
+    fi
+    echo ""
+    read -p "Press Enter..."
+}
+
+restart_panel() {
+    echo ""
+    echo -e "${CYAN}--- Restarting Pasarguard Panel ---${NC}"
+    echo -e "${YELLOW}Executing: pasarguard restart${NC}"
+    
+    # Execute the command
+    if command -v pasarguard &> /dev/null; then
+        pasarguard restart
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✔ Panel restarted successfully.${NC}"
+        else
+            echo -e "${RED}✘ Failed to restart panel.${NC}"
+        fi
+    else
+        echo -e "${RED}Error: 'pasarguard' command not found in PATH.${NC}"
+        echo -e "Attempting systemctl fallback..."
+        systemctl restart pasarguard 2>/dev/null
+    fi
+    
+    echo ""
+    read -p "Press Enter..."
+}
+
 # --- Menu Loop ---
 
 check_root
@@ -274,16 +308,20 @@ while true; do
     echo "2) View Keys (Print content)"
     echo "3) Show SSL File Paths"
     echo "4) Check SSL Status & Expiry"
-    echo "5) Exit"
+    echo "5) Edit Config (.env)"
+    echo "6) Restart Panel"
+    echo "7) Exit"
     echo -e "${BLUE}===========================================${NC}"
-    read -p "Select Option [1-5]: " OPTION
+    read -p "Select Option [1-7]: " OPTION
 
     case $OPTION in
         1) generate_ssl ;;
         2) view_keys ;;
         3) show_location ;;
         4) check_status ;;
-        5) exit 0 ;;
+        5) edit_env_config ;;
+        6) restart_panel ;;
+        7) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
 done
