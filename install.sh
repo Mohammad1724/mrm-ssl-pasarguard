@@ -2,15 +2,16 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.5
+# Version: v1.6
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.5"
+VERSION="v1.6"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
+NODE_CERTS_PATH="/var/lib/pg-node/certs"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -276,7 +277,6 @@ restart_panel() {
     echo -e "${CYAN}--- Restarting Pasarguard Panel ---${NC}"
     echo -e "${YELLOW}Executing: pasarguard restart${NC}"
     
-    # Execute the command
     if command -v pasarguard &> /dev/null; then
         pasarguard restart
         if [ $? -eq 0 ]; then
@@ -289,7 +289,47 @@ restart_panel() {
         echo -e "Attempting systemctl fallback..."
         systemctl restart pasarguard 2>/dev/null
     fi
+    echo ""
+    read -p "Press Enter..."
+}
+
+view_node_certs() {
+    echo ""
+    echo -e "${CYAN}--- View Node Certificates ---${NC}"
+    echo -e "${YELLOW}Directory: $NODE_CERTS_PATH${NC}"
     
+    if [ ! -d "$NODE_CERTS_PATH" ]; then
+        echo -e "${RED}✘ Directory not found: $NODE_CERTS_PATH${NC}"
+        read -p "Press Enter..."
+        return
+    fi
+
+    echo ""
+    echo -e "${BLUE}Available Files:${NC}"
+    
+    # Check if directory is empty
+    if [ -z "$(ls -A "$NODE_CERTS_PATH")" ]; then
+       echo -e "${YELLOW}(Directory is empty)${NC}"
+       read -p "Press Enter..."
+       return
+    else
+       ls -1 "$NODE_CERTS_PATH"
+    fi
+    echo ""
+
+    read -p "Enter filename to view (Type 'b' to back): " FILENAME
+    if [[ "$FILENAME" == "b" || "$FILENAME" == "back" ]]; then return; fi
+
+    FULL_FILE_PATH="$NODE_CERTS_PATH/$FILENAME"
+
+    if [ -f "$FULL_FILE_PATH" ]; then
+        echo ""
+        echo -e "${GREEN}--- CONTENT OF: $FILENAME ---${NC}"
+        cat "$FULL_FILE_PATH"
+        echo -e "\n${GREEN}-----------------------------${NC}"
+    else
+        echo -e "${RED}✘ File '$FILENAME' not found in that folder.${NC}"
+    fi
     echo ""
     read -p "Press Enter..."
 }
@@ -310,9 +350,10 @@ while true; do
     echo "4) Check SSL Status & Expiry"
     echo "5) Edit Config (.env)"
     echo "6) Restart Panel"
-    echo "7) Exit"
+    echo "7) View Node Certs (/var/lib/pg-node/certs)"
+    echo "8) Exit"
     echo -e "${BLUE}===========================================${NC}"
-    read -p "Select Option [1-7]: " OPTION
+    read -p "Select Option [1-8]: " OPTION
 
     case $OPTION in
         1) generate_ssl ;;
@@ -321,7 +362,8 @@ while true; do
         4) check_status ;;
         5) edit_env_config ;;
         6) restart_panel ;;
-        7) exit 0 ;;
+        7) view_node_certs ;;
+        8) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
 done
