@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.1
+# Version: v1.3
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.1"
+VERSION="v1.3"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 
 # --- Colors ---
@@ -195,33 +195,35 @@ view_keys() {
 
 show_location() {
     echo ""
-    echo -e "${CYAN}--- Show SSL Location ---${NC}"
+    echo -e "${CYAN}--- Show SSL File Paths ---${NC}"
     read -p "Enter Domain (Type 'b' to go back): " DOMAIN
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
-    # Paths to check
-    PASAR_PATH="$DEFAULT_PATH/$DOMAIN"
-    SYSTEM_PATH="/etc/letsencrypt/live/$DOMAIN"
-    FOUND=0
+    # Check if user used default path or custom
+    # We start with default path
+    PASAR_DIR="$DEFAULT_PATH/$DOMAIN"
+    
+    # If not found in default, ask user for path
+    if [ ! -f "$PASAR_DIR/fullchain.pem" ]; then
+        echo -e "${YELLOW}Not found in default path.${NC}"
+        echo -e "Did you save it in a custom folder? (Leave empty to cancel)"
+        read -p "Enter Path: " CUSTOM_USER_PATH
+        
+        if [ -z "$CUSTOM_USER_PATH" ]; then return; fi
+        
+        CUSTOM_USER_PATH=${CUSTOM_USER_PATH%/}
+        PASAR_DIR="$CUSTOM_USER_PATH/$DOMAIN"
+    fi
 
     echo ""
-    # Check Pasarguard Path
-    if [ -d "$PASAR_PATH" ] && [ -f "$PASAR_PATH/fullchain.pem" ]; then
-        echo -e "${GREEN}✔ Found in Pasarguard Path:${NC}"
-        echo -e "${YELLOW}$PASAR_PATH${NC}"
-        FOUND=1
-    fi
-
-    # Check System Path
-    if [ -d "$SYSTEM_PATH" ] && [ -f "$SYSTEM_PATH/fullchain.pem" ]; then
-        if [ $FOUND -eq 1 ]; then echo ""; fi # Spacer
-        echo -e "${GREEN}✔ Found in System Path (Source):${NC}"
-        echo -e "${YELLOW}$SYSTEM_PATH${NC}"
-        FOUND=1
-    fi
-
-    if [ $FOUND -eq 0 ]; then
-        echo -e "${RED}✘ No SSL certificate folders found for '$DOMAIN'.${NC}"
+    
+    if [ -f "$PASAR_DIR/fullchain.pem" ]; then
+        echo -e "${GREEN}✔ Copy these paths to your panel:${NC}"
+        echo -e "Public Key : ${YELLOW}$PASAR_DIR/fullchain.pem${NC}"
+        echo -e "Private Key: ${YELLOW}$PASAR_DIR/privkey.pem${NC}"
+    else
+        echo -e "${RED}✘ Files not found in: $PASAR_DIR${NC}"
+        echo -e "Please make sure you have generated the SSL first."
     fi
 
     echo ""
@@ -270,7 +272,7 @@ while true; do
     echo -e "${BLUE}===========================================${NC}"
     echo "1) Generate SSL (Single or Multi)"
     echo "2) View Keys (Print content)"
-    echo "3) Show SSL Location (Paths)"
+    echo "3) Show SSL File Paths"
     echo "4) Check SSL Status & Expiry"
     echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
