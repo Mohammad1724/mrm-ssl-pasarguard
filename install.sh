@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v3.0
+# Version: v3.2
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v3.0"
+VERSION="v3.2"
 
 # Paths
 DEFAULT_PATH="/var/lib/pasarguard/certs"
@@ -41,7 +41,7 @@ install_deps() {
     if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null || ! command -v tar &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl cron openssl nano tar -qq > /dev/null
+        apt-get install -y certbot lsof curl cron openssl nano tar bc -qq > /dev/null
     fi
 }
 
@@ -205,9 +205,73 @@ show_location() {
     read -p "Press Enter..."
 }
 
+list_all_certs() {
+    echo ""
+    echo -e "${CYAN}--- All Active Certificates (Dashboard) ---${NC}"
+    
+    # Check if letsencrypt directory exists
+    if [ ! -d "/etc/letsencrypt/live" ]; then
+        echo -e "${RED}No certificates found on this server.${NC}"
+        read -p "Press Enter..."
+        return
+    fi
+
+    echo -e "${BLUE}Scan in progress...${NC}"
+    echo ""
+    printf "%-30s %-25s %-15s\n" "DOMAIN" "EXPIRY DATE" "DAYS LEFT"
+    echo "------------------------------------------------------------------------"
+
+    FOUND_COUNT=0
+    
+    # Loop through directories
+    for d in /etc/letsencrypt/live/*; do
+        if [ -d "$d" ]; then
+            DOMAIN=$(basename "$d")
+            CERT_FILE="$d/fullchain.pem"
+            
+            # Skip README or other files
+            if [ ! -f "$CERT_FILE" ]; then continue; fi
+            
+            FOUND_COUNT=$((FOUND_COUNT+1))
+            
+            # Get End Date
+            END_DATE=$(openssl x509 -in "$CERT_FILE" -noout -enddate | cut -d= -f2)
+            
+            # Convert date to timestamp
+            EXP_TIMESTAMP=$(date -d "$END_DATE" +%s)
+            NOW_TIMESTAMP=$(date +%s)
+            
+            # Calculate Days
+            DIFF_SEC=$((EXP_TIMESTAMP - NOW_TIMESTAMP))
+            DAYS_LEFT=$((DIFF_SEC / 86400))
+            
+            # Color Logic
+            if [ "$DAYS_LEFT" -lt 10 ]; then
+                COLOR=$RED      # Critical
+            elif [ "$DAYS_LEFT" -lt 30 ]; then
+                COLOR=$YELLOW   # Warning
+            else
+                COLOR=$GREEN    # Good
+            fi
+            
+            # Format Date output
+            FORMATTED_DATE=$(date -d "$END_DATE" +"%Y-%m-%d")
+
+            printf "%-30s %-25s ${COLOR}%-15s${NC}\n" "$DOMAIN" "$FORMATTED_DATE" "$DAYS_LEFT Days"
+        fi
+    done
+
+    if [ $FOUND_COUNT -eq 0 ]; then
+        echo -e "${YELLOW}No active certificates found.${NC}"
+    fi
+    
+    echo ""
+    read -p "Press Enter..."
+}
+
 check_status() {
     echo ""
-    echo -e "${PURPLE}--- SSL Status Check ---${NC}"
+    echo -e "${PURPLE}--- SSL Status Check (Single) ---${NC}"
     read -p "Enter Domain (Type 'b' to go back): " DOMAIN
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
@@ -407,21 +471,23 @@ ssl_menu() {
         echo -e "${YELLOW}        SSL MANAGEMENT MENU                ${NC}"
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Generate SSL (Single or Multi)"
-        echo "2) Show SSL File Paths"
-        echo "3) Check SSL Status & Expiry"
-        echo "4) Backup / Restore SSL"
-        echo "5) Delete SSL (Remove Certs)"
-        echo "6) Back to Main Menu"
+        echo "2) List All Certificates (Dashboard)"
+        echo "3) Show SSL File Paths"
+        echo "4) Check SSL Status (Single)"
+        echo "5) Backup / Restore SSL"
+        echo "6) Delete SSL (Remove Certs)"
+        echo "7) Back to Main Menu"
         echo -e "${BLUE}===========================================${NC}"
-        read -p "Select Option [1-6]: " S_OPT
+        read -p "Select Option [1-7]: " S_OPT
 
         case $S_OPT in
             1) generate_ssl ;;
-            2) show_location ;;
-            3) check_status ;;
-            4) backup_restore_menu ;;
-            5) delete_ssl ;;
-            6) return ;;
+            2) list_all_certs ;;
+            3) show_location ;;
+            4) check_status ;;
+            5) backup_restore_menu ;;
+            6) delete_ssl ;;
+            7) return ;;
             *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
         esac
     done
@@ -462,7 +528,7 @@ while true; do
     echo -e "${BLUE}===========================================${NC}"
     echo -e "${YELLOW}     $PROJECT_NAME $VERSION     ${NC}"
     echo -e "${BLUE}===========================================${NC}"
-    echo "1) SSL Management (Generate, View, Backup...)"
+    echo "1) SSL Management (Generate, List, Backup...)"
     echo "2) Panel & Node Management (Edit, Restart...)"
     echo "3) Exit"
     echo -e "${BLUE}===========================================${NC}"
