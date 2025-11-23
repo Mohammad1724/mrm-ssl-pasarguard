@@ -2,16 +2,19 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.7
+# Version: v1.9
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.7"
+VERSION="v1.9"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
-NODE_CERTS_PATH="/var/lib/pg-node/certs"
+
+# Node Paths
+NODE_CERT_FILE="/var/lib/pg-node/certs/ssl_cert.pem"
+NODE_ENV_FILE="/opt/pg-node/.env"
 
 # --- Colors ---
 RED='\033[0;31m'
@@ -293,66 +296,30 @@ restart_panel() {
     read -p "Press Enter..."
 }
 
-view_node_certs() {
+view_node_details() {
     echo ""
-    echo -e "${CYAN}--- View Node Certificates ---${NC}"
-    echo -e "${YELLOW}Directory: $NODE_CERTS_PATH${NC}"
+    echo -e "${CYAN}--- View Node Configurations ---${NC}"
     
-    if [ ! -d "$NODE_CERTS_PATH" ]; then
-        echo -e "${RED}✘ Directory not found: $NODE_CERTS_PATH${NC}"
-        read -p "Press Enter..."
-        return
-    fi
-
-    # Create an array of files in the directory
-    # We use ls -1 to list one file per line and put into array
-    FILES=($(ls -1 "$NODE_CERTS_PATH"))
-
-    if [ ${#FILES[@]} -eq 0 ]; then
-       echo ""
-       echo -e "${YELLOW}(Directory is empty)${NC}"
-       read -p "Press Enter..."
-       return
-    fi
-
-    echo ""
-    echo -e "${BLUE}Available Files:${NC}"
-    echo -e "------------------------------"
-    
-    # Loop through array and display with numbers
-    i=1
-    for file in "${FILES[@]}"; do
-        echo -e " $i) $file"
-        ((i++))
-    done
-    echo -e "------------------------------"
-
-    echo -e "Type '${YELLOW}b${NC}' to go back."
-    read -p "Select file number (1-${#FILES[@]}): " SELECTION
-
-    if [[ "$SELECTION" == "b" || "$SELECTION" == "back" ]]; then return; fi
-
-    # Validation
-    if ! [[ "$SELECTION" =~ ^[0-9]+$ ]] || [ "$SELECTION" -lt 1 ] || [ "$SELECTION" -gt ${#FILES[@]} ]; then
-        echo -e "${RED}Invalid selection.${NC}"
-        read -p "Press Enter..."
-        return
-    fi
-
-    # Get filename from array index (selection - 1)
-    INDEX=$((SELECTION-1))
-    FILENAME=${FILES[$INDEX]}
-    FULL_FILE_PATH="$NODE_CERTS_PATH/$FILENAME"
-
-    if [ -f "$FULL_FILE_PATH" ]; then
-        echo ""
-        echo -e "${GREEN}--- CONTENT OF: $FILENAME ---${NC}"
-        echo ""
-        cat "$FULL_FILE_PATH"
-        echo ""
-        echo -e "${GREEN}-----------------------------${NC}"
+    # 1. SSL Cert
+    echo -e "${YELLOW}1. SSL Certificate ($NODE_CERT_FILE)${NC}"
+    if [ -f "$NODE_CERT_FILE" ]; then
+        echo -e "${GREEN}--- START ---${NC}"
+        cat "$NODE_CERT_FILE"
+        echo -e "\n${GREEN}--- END ---${NC}"
     else
-        echo -e "${RED}Error reading file.${NC}"
+        echo -e "${RED}✘ File not found.${NC}"
+    fi
+    
+    echo -e "\n-----------------------------------\n"
+
+    # 2. Env File
+    echo -e "${YELLOW}2. Node Config ($NODE_ENV_FILE)${NC}"
+    if [ -f "$NODE_ENV_FILE" ]; then
+        echo -e "${GREEN}--- START ---${NC}"
+        cat "$NODE_ENV_FILE"
+        echo -e "\n${GREEN}--- END ---${NC}"
+    else
+        echo -e "${RED}✘ File not found.${NC}"
     fi
     
     echo ""
@@ -375,7 +342,7 @@ while true; do
     echo "4) Check SSL Status & Expiry"
     echo "5) Edit Config (.env)"
     echo "6) Restart Panel"
-    echo "7) View Node Certs (/var/lib/pg-node/certs)"
+    echo "7) View Node Configs (SSL & .env)"
     echo "8) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select Option [1-8]: " OPTION
@@ -387,7 +354,7 @@ while true; do
         4) check_status ;;
         5) edit_env_config ;;
         6) restart_panel ;;
-        7) view_node_certs ;;
+        7) view_node_details ;;
         8) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
