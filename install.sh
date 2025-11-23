@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.9
+# Version: v2.1
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.9"
+VERSION="v2.1"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
 
@@ -296,32 +296,44 @@ restart_panel() {
     read -p "Press Enter..."
 }
 
-view_node_details() {
+# --- FIXED OPTION 7 LOGIC ---
+view_node_files_simple() {
     echo ""
-    echo -e "${CYAN}--- View Node Configurations ---${NC}"
-    
-    # 1. SSL Cert
-    echo -e "${YELLOW}1. SSL Certificate ($NODE_CERT_FILE)${NC}"
-    if [ -f "$NODE_CERT_FILE" ]; then
-        echo -e "${GREEN}--- START ---${NC}"
-        cat "$NODE_CERT_FILE"
-        echo -e "\n${GREEN}--- END ---${NC}"
-    else
-        echo -e "${RED}✘ File not found.${NC}"
-    fi
-    
-    echo -e "\n-----------------------------------\n"
+    echo -e "${CYAN}--- View Node Configuration ---${NC}"
+    echo -e "Which file do you want to see?"
+    echo -e "${YELLOW}1)${NC} SSL Certificate (ssl_cert.pem)"
+    echo -e "${YELLOW}2)${NC} Node Config (.env)"
+    echo -e "${YELLOW}3)${NC} Cancel"
+    echo ""
+    read -p "Select [1-3]: " N_OPT
 
-    # 2. Env File
-    echo -e "${YELLOW}2. Node Config ($NODE_ENV_FILE)${NC}"
-    if [ -f "$NODE_ENV_FILE" ]; then
-        echo -e "${GREEN}--- START ---${NC}"
-        cat "$NODE_ENV_FILE"
-        echo -e "\n${GREEN}--- END ---${NC}"
-    else
-        echo -e "${RED}✘ File not found.${NC}"
-    fi
-    
+    case $N_OPT in
+        1)
+            echo ""
+            echo -e "${YELLOW}Target: $NODE_CERT_FILE${NC}"
+            if [ -f "$NODE_CERT_FILE" ]; then
+                echo -e "${GREEN}--- CONTENT START ---${NC}"
+                cat "$NODE_CERT_FILE"
+                echo -e "\n${GREEN}--- CONTENT END ---${NC}"
+            else
+                echo -e "${RED}✘ File not found: $NODE_CERT_FILE${NC}"
+            fi
+            ;;
+        2)
+            echo ""
+            echo -e "${YELLOW}Target: $NODE_ENV_FILE${NC}"
+            if [ -f "$NODE_ENV_FILE" ]; then
+                echo -e "${GREEN}--- CONTENT START ---${NC}"
+                cat "$NODE_ENV_FILE"
+                echo -e "\n${GREEN}--- CONTENT END ---${NC}"
+            else
+                echo -e "${RED}✘ File not found: $NODE_ENV_FILE${NC}"
+            fi
+            ;;
+        *)
+            return
+            ;;
+    esac
     echo ""
     read -p "Press Enter..."
 }
@@ -354,7 +366,7 @@ while true; do
         4) check_status ;;
         5) edit_env_config ;;
         6) restart_panel ;;
-        7) view_node_details ;;
+        7) view_node_files_simple ;;
         8) exit 0 ;;
         *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
     esac
