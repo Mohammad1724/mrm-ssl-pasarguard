@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.6
+# Version: v1.7
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.6"
+VERSION="v1.7"
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
 NODE_CERTS_PATH="/var/lib/pg-node/certs"
@@ -304,32 +304,57 @@ view_node_certs() {
         return
     fi
 
-    echo ""
-    echo -e "${BLUE}Available Files:${NC}"
-    
-    # Check if directory is empty
-    if [ -z "$(ls -A "$NODE_CERTS_PATH")" ]; then
+    # Create an array of files in the directory
+    # We use ls -1 to list one file per line and put into array
+    FILES=($(ls -1 "$NODE_CERTS_PATH"))
+
+    if [ ${#FILES[@]} -eq 0 ]; then
+       echo ""
        echo -e "${YELLOW}(Directory is empty)${NC}"
        read -p "Press Enter..."
        return
-    else
-       ls -1 "$NODE_CERTS_PATH"
     fi
+
     echo ""
+    echo -e "${BLUE}Available Files:${NC}"
+    echo -e "------------------------------"
+    
+    # Loop through array and display with numbers
+    i=1
+    for file in "${FILES[@]}"; do
+        echo -e " $i) $file"
+        ((i++))
+    done
+    echo -e "------------------------------"
 
-    read -p "Enter filename to view (Type 'b' to back): " FILENAME
-    if [[ "$FILENAME" == "b" || "$FILENAME" == "back" ]]; then return; fi
+    echo -e "Type '${YELLOW}b${NC}' to go back."
+    read -p "Select file number (1-${#FILES[@]}): " SELECTION
 
+    if [[ "$SELECTION" == "b" || "$SELECTION" == "back" ]]; then return; fi
+
+    # Validation
+    if ! [[ "$SELECTION" =~ ^[0-9]+$ ]] || [ "$SELECTION" -lt 1 ] || [ "$SELECTION" -gt ${#FILES[@]} ]; then
+        echo -e "${RED}Invalid selection.${NC}"
+        read -p "Press Enter..."
+        return
+    fi
+
+    # Get filename from array index (selection - 1)
+    INDEX=$((SELECTION-1))
+    FILENAME=${FILES[$INDEX]}
     FULL_FILE_PATH="$NODE_CERTS_PATH/$FILENAME"
 
     if [ -f "$FULL_FILE_PATH" ]; then
         echo ""
         echo -e "${GREEN}--- CONTENT OF: $FILENAME ---${NC}"
+        echo ""
         cat "$FULL_FILE_PATH"
-        echo -e "\n${GREEN}-----------------------------${NC}"
+        echo ""
+        echo -e "${GREEN}-----------------------------${NC}"
     else
-        echo -e "${RED}✘ File '$FILENAME' not found in that folder.${NC}"
+        echo -e "${RED}Error reading file.${NC}"
     fi
+    
     echo ""
     read -p "Press Enter..."
 }
