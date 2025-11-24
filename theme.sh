@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP Pro (Interactive)
-# Features: Input Prompts, Renew Button, Bot ID, Editable Tutorial
+# Theme: FarsNetVIP MRM (Interactive)
+# 
 # ==========================================
 
 # Colors
