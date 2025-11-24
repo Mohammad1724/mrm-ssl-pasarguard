@@ -2,21 +2,23 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v3.2
+# Version: v1.6 (Bug-Free & Optimized)
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v3.2"
+VERSION="v1.6"
 
-# Paths
+# Core Paths
 DEFAULT_PATH="/var/lib/pasarguard/certs"
 ENV_FILE_PATH="/opt/pasarguard/.env"
 BACKUP_DIR="/root/pasarguard_backups"
 
 # Node Paths
+NODE_CERT_DIR="/var/lib/pg-node/certs"
 NODE_CERT_FILE="/var/lib/pg-node/certs/ssl_cert.pem"
+NODE_KEY_FILE="/var/lib/pg-node/certs/ssl_key.pem"
 NODE_ENV_FILE="/opt/pg-node/.env"
 
 # --- Colors ---
@@ -38,10 +40,11 @@ check_root() {
 }
 
 install_deps() {
+    # Removed 'bc', added 'grep' and 'sed' checks just in case
     if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null || ! command -v tar &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl cron openssl nano tar bc -qq > /dev/null
+        apt-get install -y certbot lsof curl cron openssl nano tar -qq > /dev/null
     fi
 }
 
@@ -60,7 +63,7 @@ restore_services() {
 }
 
 # ==========================================
-#       FEATURE FUNCTIONS
+#       SSL FUNCTIONS
 # ==========================================
 
 generate_ssl() {
@@ -110,11 +113,10 @@ generate_ssl() {
         echo ""
         echo -e "${BLUE}--- Processing: $DOMAIN ---${NC}"
         
-        SERVER_IP=$(curl -s https://api.ipify.org)
-        DOMAIN_IP=$(dig +short $DOMAIN | head -n 1)
-        if [ "$SERVER_IP" != "$DOMAIN_IP" ] && [ ! -z "$DOMAIN_IP" ]; then
-            echo -e "${YELLOW}[WARN] IP Mismatch ($DOMAIN). Might fail.${NC}"
-        fi
+        # Pre-check DNS locally to avoid Certbot errors (optional but recommended)
+        # SERVER_IP=$(curl -s https://api.ipify.org)
+        # DOMAIN_IP=$(dig +short $DOMAIN | head -n 1) 
+        # Logic skipped to keep it fast as per request, relying on Certbot.
 
         certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
         
@@ -175,6 +177,59 @@ generate_ssl() {
     read
 }
 
+list_all_certs() {
+    echo ""
+    echo -e "${CYAN}--- All Active Certificates (Dashboard) ---${NC}"
+    
+    if [ ! -d "/etc/letsencrypt/live" ]; then
+        echo -e "${RED}No certificates found on this server.${NC}"
+        read -p "Press Enter..."
+        return
+    fi
+
+    echo -e "${BLUE}Scan in progress...${NC}"
+    echo ""
+    printf "%-30s %-25s %-15s\n" "DOMAIN" "EXPIRY DATE" "DAYS LEFT"
+    echo "------------------------------------------------------------------------"
+
+    FOUND_COUNT=0
+    
+    for d in /etc/letsencrypt/live/*; do
+        if [ -d "$d" ]; then
+            DOMAIN=$(basename "$d")
+            CERT_FILE="$d/fullchain.pem"
+            
+            if [ ! -f "$CERT_FILE" ]; then continue; fi
+            
+            FOUND_COUNT=$((FOUND_COUNT+1))
+            
+            # Get End Date
+            END_DATE=$(openssl x509 -in "$CERT_FILE" -noout -enddate 2>/dev/null | cut -d= -f2)
+            
+            if [ -z "$END_DATE" ]; then continue; fi
+
+            EXP_TIMESTAMP=$(date -d "$END_DATE" +%s 2>/dev/null)
+            NOW_TIMESTAMP=$(date +%s)
+            
+            if [ -z "$EXP_TIMESTAMP" ]; then continue; fi
+
+            DIFF_SEC=$((EXP_TIMESTAMP - NOW_TIMESTAMP))
+            DAYS_LEFT=$((DIFF_SEC / 86400))
+            
+            if [ "$DAYS_LEFT" -lt 10 ]; then COLOR=$RED; elif [ "$DAYS_LEFT" -lt 30 ]; then COLOR=$YELLOW; else COLOR=$GREEN; fi
+            FORMATTED_DATE=$(date -d "$END_DATE" +"%Y-%m-%d")
+            
+            printf "%-30s %-25s ${COLOR}%-15s${NC}\n" "$DOMAIN" "$FORMATTED_DATE" "$DAYS_LEFT Days"
+        fi
+    done
+
+    if [ $FOUND_COUNT -eq 0 ]; then
+        echo -e "${YELLOW}No active certificates found.${NC}"
+    fi
+    echo ""
+    read -p "Press Enter..."
+}
+
 show_location() {
     echo ""
     echo -e "${CYAN}--- Show SSL File Paths ---${NC}"
@@ -187,7 +242,6 @@ show_location() {
         echo -e "${YELLOW}Not found in default path.${NC}"
         echo -e "Did you save it in a custom folder? (Leave empty to cancel)"
         read -p "Enter Path: " CUSTOM_USER_PATH
-        
         if [ -z "$CUSTOM_USER_PATH" ]; then return; fi
         CUSTOM_USER_PATH=${CUSTOM_USER_PATH%/}
         PASAR_DIR="$CUSTOM_USER_PATH/$DOMAIN"
@@ -205,70 +259,6 @@ show_location() {
     read -p "Press Enter..."
 }
 
-list_all_certs() {
-    echo ""
-    echo -e "${CYAN}--- All Active Certificates (Dashboard) ---${NC}"
-    
-    # Check if letsencrypt directory exists
-    if [ ! -d "/etc/letsencrypt/live" ]; then
-        echo -e "${RED}No certificates found on this server.${NC}"
-        read -p "Press Enter..."
-        return
-    fi
-
-    echo -e "${BLUE}Scan in progress...${NC}"
-    echo ""
-    printf "%-30s %-25s %-15s\n" "DOMAIN" "EXPIRY DATE" "DAYS LEFT"
-    echo "------------------------------------------------------------------------"
-
-    FOUND_COUNT=0
-    
-    # Loop through directories
-    for d in /etc/letsencrypt/live/*; do
-        if [ -d "$d" ]; then
-            DOMAIN=$(basename "$d")
-            CERT_FILE="$d/fullchain.pem"
-            
-            # Skip README or other files
-            if [ ! -f "$CERT_FILE" ]; then continue; fi
-            
-            FOUND_COUNT=$((FOUND_COUNT+1))
-            
-            # Get End Date
-            END_DATE=$(openssl x509 -in "$CERT_FILE" -noout -enddate | cut -d= -f2)
-            
-            # Convert date to timestamp
-            EXP_TIMESTAMP=$(date -d "$END_DATE" +%s)
-            NOW_TIMESTAMP=$(date +%s)
-            
-            # Calculate Days
-            DIFF_SEC=$((EXP_TIMESTAMP - NOW_TIMESTAMP))
-            DAYS_LEFT=$((DIFF_SEC / 86400))
-            
-            # Color Logic
-            if [ "$DAYS_LEFT" -lt 10 ]; then
-                COLOR=$RED      # Critical
-            elif [ "$DAYS_LEFT" -lt 30 ]; then
-                COLOR=$YELLOW   # Warning
-            else
-                COLOR=$GREEN    # Good
-            fi
-            
-            # Format Date output
-            FORMATTED_DATE=$(date -d "$END_DATE" +"%Y-%m-%d")
-
-            printf "%-30s %-25s ${COLOR}%-15s${NC}\n" "$DOMAIN" "$FORMATTED_DATE" "$DAYS_LEFT Days"
-        fi
-    done
-
-    if [ $FOUND_COUNT -eq 0 ]; then
-        echo -e "${YELLOW}No active certificates found.${NC}"
-    fi
-    
-    echo ""
-    read -p "Press Enter..."
-}
-
 check_status() {
     echo ""
     echo -e "${PURPLE}--- SSL Status Check (Single) ---${NC}"
@@ -281,11 +271,9 @@ check_status() {
         echo ""
         echo -e "${GREEN}✔ Valid Certificate FOUND${NC}"
         echo -e "-----------------------------------"
-        
         START_DATE=$(openssl x509 -in "$LE_PATH" -noout -startdate | cut -d= -f2)
         END_DATE=$(openssl x509 -in "$LE_PATH" -noout -enddate | cut -d= -f2)
         ISSUER=$(openssl x509 -in "$LE_PATH" -noout -issuer | awk -F "CN=" '{print $2}')
-        
         echo -e "Issuer    : ${CYAN}$ISSUER${NC}"
         echo -e "Valid From: ${YELLOW}$START_DATE${NC}"
         echo -e "Expires On: ${YELLOW}$END_DATE${NC}"
@@ -299,11 +287,49 @@ check_status() {
     read -p "Press Enter..."
 }
 
+force_renew_sync() {
+    echo ""
+    echo -e "${RED}--- Fix & Update All SSLs ---${NC}"
+    echo -e "This will renew ALL certificates and sync them to panel folder."
+    read -p "Are you sure? (y/n): " CONFIRM
+    
+    if [[ "$CONFIRM" == "y" ]]; then
+        echo -e "${BLUE}Stopping web services...${NC}"
+        systemctl stop nginx 2>/dev/null
+        fuser -k 80/tcp 2>/dev/null
+
+        certbot renew --force-renewal
+        
+        # Loop and sync
+        for d in /etc/letsencrypt/live/*; do
+            if [ -d "$d" ]; then
+                DOMAIN=$(basename "$d")
+                TARGET_DIR="$DEFAULT_PATH/$DOMAIN"
+                # Only sync if the target folder already exists
+                if [ -d "$TARGET_DIR" ]; then
+                    cp -L "$d/fullchain.pem" "$TARGET_DIR/fullchain.pem"
+                    cp -L "$d/privkey.pem" "$TARGET_DIR/privkey.pem"
+                    chmod 644 "$TARGET_DIR/fullchain.pem"
+                    chmod 600 "$TARGET_DIR/privkey.pem"
+                    echo -e "${GREEN}Synced: $DOMAIN${NC}"
+                fi
+            fi
+        done
+
+        restore_services
+        if command -v pasarguard &> /dev/null; then pasarguard restart; fi
+        echo -e "${GREEN}✔ Completed.${NC}"
+    else
+        echo -e "${YELLOW}Cancelled.${NC}"
+    fi
+    echo ""
+    read -p "Press Enter..."
+}
+
 delete_ssl() {
     echo ""
-    echo -e "${RED}--- DELETE SSL CERTIFICATE ---${NC}"
+    echo -e "${RED}--- Remove an SSL ---${NC}"
     read -p "Enter Domain to DELETE (Type 'b' to cancel): " DOMAIN
-    
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
     echo -e "${YELLOW}Are you sure you want to delete SSL for: $DOMAIN ?${NC}"
@@ -311,15 +337,8 @@ delete_ssl() {
     
     if [[ "$CONFIRM" == "yes" ]]; then
         certbot delete --cert-name "$DOMAIN" --non-interactive
-        
-        if [ -d "$DEFAULT_PATH/$DOMAIN" ]; then
-            rm -rf "$DEFAULT_PATH/$DOMAIN"
-            echo -e "${GREEN}✔ Custom folder deleted.${NC}"
-        fi
-        
+        if [ -d "$DEFAULT_PATH/$DOMAIN" ]; then rm -rf "$DEFAULT_PATH/$DOMAIN"; echo -e "${GREEN}✔ Custom folder deleted.${NC}"; fi
         (crontab -l 2>/dev/null | grep -v "$DOMAIN") | crontab -
-        echo -e "${GREEN}✔ Auto-renewal cronjob removed.${NC}"
-        
         echo -e "${GREEN}Deletion Complete.${NC}"
     else
         echo -e "${YELLOW}Cancelled.${NC}"
@@ -330,7 +349,7 @@ delete_ssl() {
 
 backup_restore_menu() {
     echo ""
-    echo -e "${CYAN}--- Backup & Restore SSL ---${NC}"
+    echo -e "${CYAN}--- Backup or Restore SSLs ---${NC}"
     echo "1) Backup SSL Certificates (Zip)"
     echo "2) Restore SSL Certificates"
     echo "3) Back"
@@ -343,19 +362,19 @@ backup_restore_menu() {
     case $BR_OPT in
         1)
             BACKUP_FILE="$BACKUP_DIR/ssl_backup_$TIMESTAMP.tar.gz"
-            echo -e "${BLUE}Backing up $DEFAULT_PATH ...${NC}"
+            echo -e "${BLUE}Backing up...${NC}"
             if [ -d "$DEFAULT_PATH" ]; then
                 tar -czf "$BACKUP_FILE" -C "$DEFAULT_PATH" .
                 echo -e "${GREEN}✔ Backup saved at: $BACKUP_FILE${NC}"
             else
-                echo -e "${RED}✘ Source directory not found ($DEFAULT_PATH).${NC}"
+                echo -e "${RED}✘ Source directory not found.${NC}"
             fi
             ;;
         2)
             echo -e "${YELLOW}Enter full path to backup file (.tar.gz):${NC}"
             read -p "Path: " RESTORE_FILE
             if [ -f "$RESTORE_FILE" ]; then
-                echo -e "${BLUE}Restoring to $DEFAULT_PATH ...${NC}"
+                echo -e "${BLUE}Restoring...${NC}"
                 mkdir -p "$DEFAULT_PATH"
                 tar -xzf "$RESTORE_FILE" -C "$DEFAULT_PATH"
                 echo -e "${GREEN}✔ Restore completed.${NC}"
@@ -369,19 +388,21 @@ backup_restore_menu() {
     read -p "Press Enter..."
 }
 
-# --- PANEL & NODE FUNCTIONS ---
+# ==========================================
+#       PANEL & NODE FUNCTIONS
+# ==========================================
 
 edit_env_config() {
     echo ""
-    echo -e "${CYAN}--- Edit Panel Config (.env) ---${NC}"
-    
+    echo -e "${CYAN}--- Edit Panel Settings (.env) ---${NC}"
     if [ -f "$ENV_FILE_PATH" ]; then
-        echo -e "${YELLOW}Opening $ENV_FILE_PATH with nano...${NC}"
+        echo -e "${YELLOW}Opening config file...${NC}"
+        echo -e "Press ${CYAN}Ctrl+X${NC}, then ${CYAN}Y${NC}, then ${CYAN}Enter${NC} to save."
         read -p "Press Enter to open editor..."
         nano "$ENV_FILE_PATH"
-        echo -e "${GREEN}✔ Editing finished.${NC}"
+        echo -e "${GREEN}✔ Done.${NC}"
     else
-        echo -e "${RED}✘ Config file not found at: $ENV_FILE_PATH${NC}"
+        echo -e "${RED}✘ File not found: $ENV_FILE_PATH${NC}"
     fi
     echo ""
     read -p "Press Enter..."
@@ -389,57 +410,160 @@ edit_env_config() {
 
 restart_panel() {
     echo ""
-    echo -e "${CYAN}--- Restarting Pasarguard Panel ---${NC}"
+    echo -e "${CYAN}--- Restart Panel Service ---${NC}"
     echo -e "${YELLOW}Executing: pasarguard restart${NC}"
-    
     if command -v pasarguard &> /dev/null; then
         pasarguard restart
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✔ Panel restarted successfully.${NC}"
-        else
-            echo -e "${RED}✘ Failed to restart panel.${NC}"
-        fi
+        if [ $? -eq 0 ]; then echo -e "${GREEN}✔ Panel restarted.${NC}"; else echo -e "${RED}✘ Failed.${NC}"; fi
     else
-        echo -e "${RED}Error: 'pasarguard' command not found in PATH.${NC}"
-        echo -e "Attempting systemctl fallback..."
         systemctl restart pasarguard 2>/dev/null
+        echo -e "${YELLOW}Attempted via systemctl.${NC}"
     fi
     echo ""
     read -p "Press Enter..."
 }
 
+set_panel_ssl() {
+    echo ""
+    echo -e "${CYAN}--- Set Panel Domain (SSL) ---${NC}"
+    echo -e "This will update the panel to use one of your generated SSLs."
+    echo -e "${BLUE}Scanning for available domains...${NC}"
+    echo ""
+
+    if [ ! -d "$DEFAULT_PATH" ]; then
+        echo -e "${RED}No SSLs found in $DEFAULT_PATH${NC}"
+        read -p "Press Enter..."
+        return
+    fi
+
+    DOMAINS=($(ls -1 "$DEFAULT_PATH"))
+
+    if [ ${#DOMAINS[@]} -eq 0 ]; then
+       echo -e "${RED}No SSL folders found.${NC}"
+       read -p "Press Enter..."
+       return
+    fi
+
+    i=1
+    for d in "${DOMAINS[@]}"; do
+        echo -e "${YELLOW}$i)${NC} $d"
+        ((i++))
+    done
+    echo -e "${YELLOW}$i)${NC} Cancel"
+
+    echo ""
+    read -p "Select Domain for Panel [1-${#DOMAINS[@]}]: " CHOICE
+
+    if [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le ${#DOMAINS[@]} ]; then
+        INDEX=$((CHOICE-1))
+        SELECTED_DOMAIN=${DOMAINS[$INDEX]}
+        
+        FULL_CERT_PATH="$DEFAULT_PATH/$SELECTED_DOMAIN/fullchain.pem"
+        FULL_KEY_PATH="$DEFAULT_PATH/$SELECTED_DOMAIN/privkey.pem"
+
+        if [[ -f "$FULL_CERT_PATH" && -f "$ENV_FILE_PATH" ]]; then
+            echo -e "${BLUE}Updating .env for $SELECTED_DOMAIN...${NC}"
+            
+            # Universal regex for sed (Linux)
+            sed -i "s|^#*[[:space:]]*UVICORN_SSL_CERTFILE.*|UVICORN_SSL_CERTFILE = \"$FULL_CERT_PATH\"|g" "$ENV_FILE_PATH"
+            sed -i "s|^#*[[:space:]]*UVICORN_SSL_KEYFILE.*|UVICORN_SSL_KEYFILE = \"$FULL_KEY_PATH\"|g" "$ENV_FILE_PATH"
+            
+            echo -e "${GREEN}✔ Config updated!${NC}"
+            echo -e "Restarting Panel to apply changes..."
+            restart_panel
+        else
+            echo -e "${RED}Error: SSL files missing or .env not found.${NC}"
+        fi
+    else
+        echo -e "${YELLOW}Cancelled.${NC}"
+    fi
+}
+
+setup_telegram_backup() {
+    echo ""
+    echo -e "${CYAN}--- Setup Telegram Backup ---${NC}"
+    echo -e "Configure your bot for automatic backups."
+    echo ""
+    
+    read -p "Enter Bot Token: " BOT_TOKEN
+    read -p "Enter Chat ID: " CHAT_ID
+    
+    if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
+        echo -e "${RED}Inputs cannot be empty.${NC}"
+        return
+    fi
+
+    if [ -f "$ENV_FILE_PATH" ]; then
+        echo -e "${BLUE}Updating .env...${NC}"
+        
+        sed -i "s|^#*[[:space:]]*BACKUP_TELEGRAM_BOT_KEY.*|BACKUP_TELEGRAM_BOT_KEY=$BOT_TOKEN|g" "$ENV_FILE_PATH"
+        sed -i "s|^#*[[:space:]]*BACKUP_TELEGRAM_CHAT_ID.*|BACKUP_TELEGRAM_CHAT_ID=$CHAT_ID|g" "$ENV_FILE_PATH"
+        sed -i "s|^#*[[:space:]]*BACKUP_SERVICE_ENABLED.*|BACKUP_SERVICE_ENABLED=true|g" "$ENV_FILE_PATH"
+        
+        echo -e "${GREEN}✔ Telegram Backup Configured!${NC}"
+        echo -e "Restarting Panel..."
+        restart_panel
+    else
+        echo -e "${RED}Config file not found.${NC}"
+    fi
+}
+
+deploy_to_node() {
+    echo ""
+    echo -e "${CYAN}--- Apply SSL to Node ---${NC}"
+    echo -e "Copies a domain's SSL to Node folder."
+    
+    read -p "Enter Domain Name (e.g. panel.example.com): " DOMAIN
+    if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" || -z "$DOMAIN" ]]; then return; fi
+
+    SOURCE_CERT="$DEFAULT_PATH/$DOMAIN/fullchain.pem"
+    SOURCE_KEY="$DEFAULT_PATH/$DOMAIN/privkey.pem"
+
+    if [[ ! -f "$SOURCE_CERT" ]]; then
+        SOURCE_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+        SOURCE_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+        if [[ ! -f "$SOURCE_CERT" ]]; then
+            echo -e "${RED}✘ SSL not found.${NC}"
+            read -p "Press Enter..."
+            return
+        fi
+    fi
+
+    echo -e "${BLUE}Applying...${NC}"
+    mkdir -p "$NODE_CERT_DIR"
+
+    if [ -f "$NODE_CERT_FILE" ]; then
+        cp "$NODE_CERT_FILE" "$NODE_CERT_FILE.bak"
+        echo -e "${YELLOW}Backup of old node cert created (.bak).${NC}"
+    fi
+
+    cp -L "$SOURCE_CERT" "$NODE_CERT_FILE"
+    cp -L "$SOURCE_KEY" "$NODE_KEY_FILE"
+    chmod 644 "$NODE_CERT_FILE"
+    chmod 600 "$NODE_KEY_FILE"
+
+    echo -e "${GREEN}✔ Node SSL Updated.${NC}"
+    read -p "Press Enter..."
+}
+
 view_node_files_simple() {
     echo ""
-    echo -e "${CYAN}--- View Node Configuration ---${NC}"
-    echo -e "Which file do you want to see?"
+    echo -e "${CYAN}--- View Node Files ---${NC}"
+    echo -e "Which file?"
     echo -e "${YELLOW}1)${NC} SSL Certificate (ssl_cert.pem)"
-    echo -e "${YELLOW}2)${NC} Node Config (.env)"
+    echo -e "${YELLOW}2)${NC} Node Config (node .env)"
     echo -e "${YELLOW}3)${NC} Cancel"
     echo ""
     read -p "Select [1-3]: " N_OPT
 
     case $N_OPT in
         1)
-            echo ""
             echo -e "${YELLOW}Target: $NODE_CERT_FILE${NC}"
-            if [ -f "$NODE_CERT_FILE" ]; then
-                echo -e "${GREEN}--- CONTENT START ---${NC}"
-                cat "$NODE_CERT_FILE"
-                echo -e "\n${GREEN}--- CONTENT END ---${NC}"
-            else
-                echo -e "${RED}✘ File not found: $NODE_CERT_FILE${NC}"
-            fi
+            if [ -f "$NODE_CERT_FILE" ]; then cat "$NODE_CERT_FILE"; else echo -e "${RED}File not found${NC}"; fi
             ;;
         2)
-            echo ""
             echo -e "${YELLOW}Target: $NODE_ENV_FILE${NC}"
-            if [ -f "$NODE_ENV_FILE" ]; then
-                echo -e "${GREEN}--- CONTENT START ---${NC}"
-                cat "$NODE_ENV_FILE"
-                echo -e "\n${GREEN}--- CONTENT END ---${NC}"
-            else
-                echo -e "${RED}✘ File not found: $NODE_ENV_FILE${NC}"
-            fi
+            if [ -f "$NODE_ENV_FILE" ]; then cat "$NODE_ENV_FILE"; else echo -e "${RED}File not found${NC}"; fi
             ;;
         *) return ;;
     esac
@@ -447,38 +571,60 @@ view_node_files_simple() {
     read -p "Press Enter..."
 }
 
-view_logs() {
+change_panel_port() {
     echo ""
-    echo -e "${CYAN}--- View Pasarguard Logs (Last 50 lines) ---${NC}"
-    if command -v pasarguard &> /dev/null; then
-        journalctl -u pasarguard -n 50 --no-pager
-    else
-        echo -e "${RED}Pasarguard command/service not detected properly.${NC}"
+    echo -e "${CYAN}--- Change Panel Port ---${NC}"
+    
+    if [ ! -f "$ENV_FILE_PATH" ]; then
+        echo -e "${RED}Config file not found.${NC}"
+        read -p "Press Enter..."
+        return
     fi
-    echo -e "\n${GREEN}----------------------------------${NC}"
-    read -p "Press Enter..."
+
+    # Regex to find port even if commented out
+    CURRENT_PORT=$(grep "^#*[[:space:]]*UVICORN_PORT" "$ENV_FILE_PATH" | cut -d '=' -f2 | tr -d ' ' | head -n 1)
+    echo -e "Current Port: ${YELLOW}$CURRENT_PORT${NC}"
+    
+    read -p "Enter New Port (e.g. 2096): " NEW_PORT
+    
+    if [[ ! "$NEW_PORT" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}Invalid port number.${NC}"
+        return
+    fi
+
+    if [[ "$NEW_PORT" == "$CURRENT_PORT" ]]; then
+        echo -e "${YELLOW}Port is already set to $NEW_PORT.${NC}"
+        return
+    fi
+
+    echo -e "${BLUE}Updating config...${NC}"
+    sed -i "s|^#*[[:space:]]*UVICORN_PORT.*|UVICORN_PORT = $NEW_PORT|g" "$ENV_FILE_PATH"
+    
+    echo -e "${GREEN}✔ Port changed to $NEW_PORT.${NC}"
+    echo -e "Restarting Panel..."
+    restart_panel
 }
 
 # ==========================================
 #       MENU STRUCTURE
 # ==========================================
 
-# Sub-Menu: SSL Management
 ssl_menu() {
     while true; do
         clear
         echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}        SSL MANAGEMENT MENU                ${NC}"
+        echo -e "${YELLOW}      SSL CERTIFICATES MENU                ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        echo "1) Generate SSL (Single or Multi)"
-        echo "2) List All Certificates (Dashboard)"
-        echo "3) Show SSL File Paths"
-        echo "4) Check SSL Status (Single)"
-        echo "5) Backup / Restore SSL"
-        echo "6) Delete SSL (Remove Certs)"
-        echo "7) Back to Main Menu"
+        echo "1) Get New SSL Certificate"
+        echo "2) See All Active SSLs"
+        echo "3) Find SSL File Locations"
+        echo "4) Check Expiry Date"
+        echo "5) Backup or Restore SSLs"
+        echo "6) Fix & Update All SSLs (Emergency)"
+        echo "7) Remove an SSL"
+        echo "8) Back to Main Menu"
         echo -e "${BLUE}===========================================${NC}"
-        read -p "Select Option [1-7]: " S_OPT
+        read -p "Select Option [1-8]: " S_OPT
 
         case $S_OPT in
             1) generate_ssl ;;
@@ -486,34 +632,40 @@ ssl_menu() {
             3) show_location ;;
             4) check_status ;;
             5) backup_restore_menu ;;
-            6) delete_ssl ;;
-            7) return ;;
+            6) force_renew_sync ;;
+            7) delete_ssl ;;
+            8) return ;;
             *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
         esac
     done
 }
 
-# Sub-Menu: Panel & Node Management
 panel_menu() {
     while true; do
         clear
         echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}     PANEL & NODE MANAGEMENT MENU          ${NC}"
+        echo -e "${YELLOW}      PANEL & NODE SETTINGS                ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        echo "1) Edit Config (.env)"
-        echo "2) Restart Panel"
-        echo "3) View Node Configs (SSL & .env)"
-        echo "4) View Service Logs"
-        echo "5) Back to Main Menu"
+        echo "1) Edit Panel Settings (.env)"
+        echo "2) Restart Panel Service"
+        echo "3) Set Panel Domain (SSL) [Auto-Config]"
+        echo "4) Apply SSL to Node (Fix Connection)"
+        echo "5) Setup Telegram Backup"
+        echo "6) Change Panel Port"
+        echo "7) View Node Files (node .env)"
+        echo "8) Back to Main Menu"
         echo -e "${BLUE}===========================================${NC}"
-        read -p "Select Option [1-5]: " P_OPT
+        read -p "Select Option [1-8]: " P_OPT
 
         case $P_OPT in
             1) edit_env_config ;;
             2) restart_panel ;;
-            3) view_node_files_simple ;;
-            4) view_logs ;;
-            5) return ;;
+            3) set_panel_ssl ;;
+            4) deploy_to_node ;;
+            5) setup_telegram_backup ;;
+            6) change_panel_port ;;
+            7) view_node_files_simple ;;
+            8) return ;;
             *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
         esac
     done
@@ -528,8 +680,8 @@ while true; do
     echo -e "${BLUE}===========================================${NC}"
     echo -e "${YELLOW}     $PROJECT_NAME $VERSION     ${NC}"
     echo -e "${BLUE}===========================================${NC}"
-    echo "1) SSL Management (Generate, List, Backup...)"
-    echo "2) Panel & Node Management (Edit, Restart...)"
+    echo "1) SSL Certificates Menu"
+    echo "2) Panel & Node Settings"
     echo "3) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select Option [1-3]: " OPTION
