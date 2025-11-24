@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP MRM (Interactive)
-# 
+# Theme: FarsNetVIP Ultimate (Fixed Version)
+# Fixes: Desktop Mode, Copy Bug, Connect Link, Support UI
 # ==========================================
 
 # Colors
@@ -30,31 +30,19 @@ read -p "Enter Brand Name (e.g. FarsNetVIP): " IN_BRAND
 if [ -z "$IN_BRAND" ]; then IN_BRAND="FarsNetVIP"; fi
 
 echo -e "\n${BLUE}[2] Telegram Info:${NC}"
-read -p "Enter Bot Username (without @, e.g. MyShopBot): " IN_BOT_USER
+read -p "Enter Bot Username (without @): " IN_BOT_USER
 if [ -z "$IN_BOT_USER" ]; then IN_BOT_USER="YourBot"; fi
 
-read -p "Enter Admin/Support ID (without @, e.g. Admin): " IN_ADMIN_ID
+read -p "Enter Admin/Support ID (without @): " IN_ADMIN_ID
 if [ -z "$IN_ADMIN_ID" ]; then IN_ADMIN_ID="Support"; fi
 
-read -p "Enter Channel ID (optional, without @): " IN_CHANNEL_ID
-
-echo -e "\n${BLUE}[3] Tutorial Text (Leave empty for default):${NC}"
-read -p "Step 1 (Android/iOS App): " TUT_1
-if [ -z "$TUT_1" ]; then TUT_1="1. نرم افزار v2rayNG (اندروید) یا V2Box (آیفون) را دانلود کنید."; fi
-
-read -p "Step 2 (Copy Link): " TUT_2
+echo -e "\n${BLUE}[3] Tutorial Text:${NC}"
+read -p "Step 1 (App): " TUT_1
+if [ -z "$TUT_1" ]; then TUT_1="1. نرم‌افزار مورد نیاز را از پایین صفحه دانلود کنید."; fi
+read -p "Step 2 (Copy): " TUT_2
 if [ -z "$TUT_2" ]; then TUT_2="2. لینک اشتراک را کپی کنید."; fi
-
 read -p "Step 3 (Connect): " TUT_3
 if [ -z "$TUT_3" ]; then TUT_3="3. وارد برنامه شوید و دکمه اتصال را بزنید."; fi
-
-# --- CONFIRMATION ---
-echo -e "\n${YELLOW}Summary:${NC}"
-echo "Brand: $IN_BRAND"
-echo "Bot: @$IN_BOT_USER"
-echo "Support: @$IN_ADMIN_ID"
-echo ""
-read -p "Press Enter to install..."
 
 # --- INSTALLATION ---
 echo -e "\n${BLUE}Creating directories...${NC}"
@@ -69,286 +57,354 @@ cat << EOF > "$TEMPLATE_FILE"
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>$IN_BRAND | {{ user.username }}</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@200;500;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@200;400;700;900&display=swap');
 
         :root {
-            /* --- NIGHT MODE --- */
+            /* Night Mode Colors */
             --bg-grad-1: #0f0c29; --bg-grad-2: #302b63; --bg-grad-3: #24243e;
-            --text-main: #ffffff; --text-sub: rgba(255, 255, 255, 0.65);
-            --panel-bg: rgba(15, 15, 25, 0.55); --panel-border: rgba(255, 255, 255, 0.12);
-            --panel-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-            --btn-bg: rgba(255, 255, 255, 0.06); --btn-border: rgba(255, 255, 255, 0.15);
-            --btn-inner-glow: inset 0 0 15px rgba(255, 255, 255, 0.07), inset 0 0 3px rgba(255, 255, 255, 0.15);
+            --text-main: #ffffff; --text-sub: rgba(255, 255, 255, 0.7);
+            --panel-bg: rgba(15, 15, 25, 0.65); 
+            --panel-border: rgba(255, 255, 255, 0.15);
+            --panel-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+            
+            --btn-bg: rgba(255, 255, 255, 0.08); 
+            --btn-border: rgba(255, 255, 255, 0.2);
+            --btn-inner: inset 0 0 15px rgba(255,255,255,0.05);
+            
             --brand-grad: linear-gradient(135deg, #ffffff 0%, #00C6FF 100%);
-            --badge-bg: rgba(0, 255, 136, 0.15); --badge-text: #00ff88;
+            --accent: #00C6FF;
         }
 
         [data-theme="light"] {
-            /* --- DAY MODE --- */
-            --bg-grad-1: #a1c4fd; --bg-grad-2: #c2e9fb; --bg-grad-3: #f0f2f5;
-            --text-main: #1d1d1f; --text-sub: rgba(0, 0, 0, 0.65);
-            --panel-bg: rgba(255, 255, 255, 0.45); --panel-border: rgba(255, 255, 255, 0.7);
-            --panel-shadow: 0 25px 50px -12px rgba(50, 100, 150, 0.25);
-            --btn-bg: rgba(255, 255, 255, 0.5); --btn-border: rgba(255, 255, 255, 0.9);
-            --btn-inner-glow: inset 0 0 20px rgba(255, 255, 255, 0.7), inset 0 0 2px rgba(255, 255, 255, 1);
+            /* Day Mode Colors */
+            --bg-grad-1: #89f7fe; --bg-grad-2: #66a6ff; --bg-grad-3: #f0f2f5;
+            --text-main: #1a1a1a; --text-sub: rgba(0, 0, 0, 0.7);
+            --panel-bg: rgba(255, 255, 255, 0.6);
+            --panel-border: rgba(255, 255, 255, 0.8);
+            --panel-shadow: 0 25px 60px rgba(0, 100, 200, 0.3);
+            
+            --btn-bg: rgba(255, 255, 255, 0.5); 
+            --btn-border: rgba(255, 255, 255, 0.9);
+            --btn-inner: inset 0 0 20px rgba(255,255,255,0.8);
+            
             --brand-grad: linear-gradient(135deg, #005bea 0%, #00c6fb 100%);
-            --badge-bg: rgba(0, 255, 136, 0.5); --badge-text: #004d26;
+            --accent: #005bea;
         }
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        
         body {
             margin: 0; padding: 20px; font-family: 'Vazirmatn', sans-serif;
             background: linear-gradient(45deg, var(--bg-grad-1), var(--bg-grad-2), var(--bg-grad-3));
             background-size: 400% 400%; animation: gradientBG 15s ease infinite;
-            color: var(--text-main); display: flex; justify-content: center; align-items: center;
-            min-height: 100vh; overflow: hidden; transition: all 0.5s ease;
+            color: var(--text-main); min-height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            overflow-x: hidden; transition: 0.5s;
         }
         @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        
-        .orb { position: absolute; border-radius: 50%; filter: blur(80px); z-index: -1; animation: float 10s infinite alternate; }
-        .orb-1 { width: 300px; height: 300px; background: #ff0055; top: -50px; left: -50px; opacity: 0.5; }
-        .orb-2 { width: 300px; height: 300px; background: #00f2ff; bottom: -50px; right: -50px; opacity: 0.5; animation-delay: -5s; }
 
-        .dashboard { width: 100%; max-width: 420px; position: relative; z-index: 1; display: flex; flex-direction: column; gap: 15px; height: 95vh; justify-content: center; }
+        /* Desktop & Mobile Layout Container */
+        .dashboard-container {
+            width: 100%;
+            max-width: 450px; /* Default Mobile Width */
+            transition: max-width 0.5s ease;
+        }
 
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 0 5px; margin-bottom: 10px;}
+        /* --- DESKTOP MODE STYLES --- */
+        @media (min-width: 850px) {
+            .dashboard-container {
+                max-width: 950px; /* Wider for Desktop */
+            }
+            .glass-card-content {
+                display: grid;
+                grid-template-columns: 1fr 1.2fr; /* Two Columns */
+                gap: 40px;
+                align-items: start;
+                text-align: right;
+            }
+            .desktop-left { order: 2; } /* Actions on right/left depending on RTL */
+            .desktop-right { order: 1; border-left: 1px solid var(--panel-border); padding-left: 40px; }
+            
+            .brand-text { font-size: 40px !important; }
+        }
+
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 10px; }
         .brand-text {
-            font-size: 32px; font-weight: 900; letter-spacing: 0.5px;
+            font-size: 30px; font-weight: 900;
             background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 2px 10px rgba(0, 198, 255, 0.4)); line-height: 1.1;
+            filter: drop-shadow(0 2px 10px rgba(0, 198, 255, 0.4));
         }
-        
-        /* Bot Badge */
         .bot-badge {
-            font-size: 12px; display: flex; align-items: center; gap: 5px; text-decoration: none;
-            background: var(--btn-bg); padding: 6px 12px; border-radius: 15px; 
-            border: 1px solid var(--btn-border); color: var(--text-main); font-weight: bold;
-            transition: 0.3s; box-shadow: var(--btn-inner-glow);
+            font-size: 12px; background: var(--btn-bg); padding: 5px 12px; border-radius: 20px;
+            border: 1px solid var(--btn-border); color: var(--text-main); text-decoration: none;
+            display: inline-block; margin-top: 5px;
         }
-        .bot-badge:hover { transform: scale(1.05); background: rgba(255,255,255,0.1); }
 
-        .header-actions { display: flex; gap: 10px; }
         .icon-btn {
-            width: 42px; height: 42px; border-radius: 50%; background: var(--btn-bg); border: 1px solid var(--btn-border);
-            box-shadow: var(--btn-inner-glow); backdrop-filter: blur(10px);
-            display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 18px; transition: 0.3s; color: var(--text-main);
+            width: 40px; height: 40px; border-radius: 50%; background: var(--btn-bg); border: 1px solid var(--btn-border);
+            display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 18px;
+            box-shadow: var(--btn-inner); transition: 0.3s;
         }
-        .icon-btn:active { transform: scale(0.9); }
+        .icon-btn:hover { transform: scale(1.1); }
 
         /* Main Card */
         .glass-card {
-            background: var(--panel-bg); backdrop-filter: blur(30px) saturate(160%); -webkit-backdrop-filter: blur(30px) saturate(160%);
-            border: 1px solid var(--panel-border); border-radius: 40px; padding: 25px;
-            box-shadow: var(--panel-shadow); text-align: center; position: relative; overflow: hidden;
+            background: var(--panel-bg);
+            backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid var(--panel-border); border-radius: 40px; padding: 30px;
+            box-shadow: var(--panel-shadow); position: relative; overflow: hidden;
         }
-        .glass-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 50%; background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%); pointer-events: none; }
 
-        .user-info { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; position: relative; z-index: 2; text-align: right; }
+        /* User Info */
+        .user-header { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; }
         .avatar {
-            width: 65px; height: 65px; background: linear-gradient(135deg, #00C6FF, #0072FF); border-radius: 22px;
-            display: flex; align-items: center; justify-content: center; font-size: 30px; color: white;
-            box-shadow: 0 10px 25px rgba(0, 114, 255, 0.4); border: 2px solid rgba(255,255,255,0.3);
+            width: 70px; height: 70px; background: linear-gradient(135deg, #00C6FF, #0072FF);
+            border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 32px;
+            box-shadow: 0 10px 30px rgba(0, 114, 255, 0.4); border: 2px solid rgba(255,255,255,0.3);
         }
-        .user-details h1 { margin: 0; font-size: 20px; font-weight: 800; }
+        .user-text h1 { margin: 0; font-size: 22px; font-weight: 800; }
         .status-badge {
-            font-size: 10px; padding: 4px 10px; border-radius: 10px; margin-top: 4px;
-            background: var(--badge-bg); color: var(--badge-text); border: 1px solid rgba(0,255,136,0.3);
-            font-weight: 700; display: inline-block;
+            font-size: 11px; padding: 4px 12px; border-radius: 8px; background: rgba(0, 255, 136, 0.2); 
+            color: #00ff88; border: 1px solid rgba(0, 255, 136, 0.3); font-weight: 700; margin-top: 5px; display: inline-block;
         }
-        .status-expired { background: rgba(255,0,0,0.15); color: #ff4444; border-color: rgba(255,0,0,0.3); }
-        [data-theme="light"] .status-expired { background: rgba(255,0,0,0.25); color: #8a0000; }
+        [data-theme="light"] .status-badge { color: #006e3b; background: rgba(0, 255, 136, 0.5); }
+        .status-expired { background: rgba(255, 50, 50, 0.2) !important; color: #ff4444 !important; border-color: #ff4444 !important; }
 
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px; position: relative; z-index: 2; }
+        /* Data Grid */
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
         .info-box {
-            background: var(--btn-bg); border: 1px solid var(--btn-border); box-shadow: var(--btn-inner-glow);
-            padding: 12px; border-radius: 18px; display: flex; flex-direction: column; gap: 4px;
+            background: var(--btn-bg); border: 1px solid var(--btn-border); padding: 15px;
+            border-radius: 18px; display: flex; flex-direction: column; box-shadow: var(--btn-inner);
         }
-        .lbl { font-size: 10px; opacity: 0.7; }
-        .val { font-size: 14px; font-weight: 800; direction: ltr; }
+        .lbl { font-size: 11px; opacity: 0.7; margin-bottom: 3px; }
+        .val { font-size: 16px; font-weight: 800; direction: ltr; text-align: right; }
 
-        .progress-con { margin: 15px 0; position: relative; z-index: 2; text-align: left;}
-        .track { height: 12px; background: rgba(0,0,0,0.15); border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden; }
-        .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00C6FF, #0072FF); border-radius: 10px; position: relative; box-shadow: 0 0 15px rgba(0, 198, 255, 0.5); }
-        .prog-txt { display: flex; justify-content: space-between; font-size: 11px; margin-top: 6px; font-weight: 600; opacity: 0.9;}
+        /* Progress Bar */
+        .progress-wrapper { margin-bottom: 25px; }
+        .progress-track { height: 14px; background: rgba(0,0,0,0.2); border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00C6FF, #0072FF); width: 0%; transition: width 1s; box-shadow: 0 0 15px #00C6FF; }
+        .progress-text { display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px; font-weight: bold; }
 
-        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; position: relative; z-index: 2; }
-        .glass-btn {
-            background: var(--btn-bg); border: 1px solid var(--btn-border); box-shadow: var(--btn-inner-glow);
-            backdrop-filter: blur(5px); border-radius: 18px; padding: 12px 5px; color: var(--text-main);
-            text-decoration: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
-            transition: 0.2s; cursor: pointer;
+        /* Action Buttons */
+        .actions-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .action-btn {
+            background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-main);
+            padding: 15px 5px; border-radius: 20px; text-decoration: none; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer;
+            transition: 0.2s; box-shadow: var(--btn-inner);
         }
-        .glass-btn:active { transform: scale(0.95); }
-        .glass-btn i { font-size: 20px; font-style: normal; }
-        .btn-txt { font-size: 10px; font-weight: 700; }
-        .btn-renew i { color: #ff4757; }
+        .action-btn:active { transform: scale(0.95); }
+        .action-btn i { font-size: 22px; font-style: normal; }
+        .btn-title { font-size: 11px; font-weight: 700; }
 
-        /* Apps Section */
-        .apps-section {
-            background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 25px; padding: 12px;
-            box-shadow: var(--btn-inner-glow); backdrop-filter: blur(20px); display: flex; justify-content: space-around; align-items: center;
+        /* Support Button (Revised) */
+        .support-btn {
+            width: 100%; padding: 15px; margin-top: 10px;
+            background: linear-gradient(90deg, rgba(0, 198, 255, 0.2), rgba(0, 114, 255, 0.2));
+            border: 1px solid var(--btn-border); border-radius: 20px; color: var(--text-main);
+            text-decoration: none; display: flex; justify-content: center; align-items: center; gap: 10px;
+            font-weight: bold; font-size: 14px; transition: 0.3s; box-shadow: var(--btn-inner);
         }
-        .app-item { text-decoration: none; color: var(--text-main); display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 9px; opacity: 0.8; transition: 0.3s; }
-        .app-item:hover { opacity: 1; transform: translateY(-3px); }
-        .app-icon { font-size: 20px; background: rgba(255,255,255,0.1); width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); }
+        .support-btn:hover { background: linear-gradient(90deg, rgba(0, 198, 255, 0.4), rgba(0, 114, 255, 0.4)); }
 
-        /* Floating Support Button */
-        .support-fab {
-            position: fixed; bottom: 25px; right: 25px; width: 55px; height: 55px;
-            background: linear-gradient(135deg, #00C6FF, #0072FF); border-radius: 50%;
-            display: flex; justify-content: center; align-items: center; font-size: 28px; color: white;
-            box-shadow: 0 10px 30px rgba(0, 114, 255, 0.5); border: 2px solid rgba(255,255,255,0.3);
-            cursor: pointer; z-index: 100; transition: 0.3s; text-decoration: none;
+        /* App Links */
+        .apps-row {
+            margin-top: 20px; background: var(--btn-bg); padding: 15px; border-radius: 25px;
+            display: flex; justify-content: space-around; border: 1px solid var(--btn-border);
         }
-        .support-fab:hover { transform: scale(1.1) rotate(10deg); }
+        .app-link { text-decoration: none; color: var(--text-main); display: flex; flex-direction: column; align-items: center; font-size: 10px; gap: 5px; opacity: 0.8; transition: 0.3s; }
+        .app-link:hover { opacity: 1; transform: translateY(-3px); }
+        .app-icon { font-size: 22px; width: 40px; height: 40px; background: rgba(255,255,255,0.1); border-radius: 12px; display: flex; justify-content: center; align-items: center; border: 1px solid rgba(255,255,255,0.2); }
 
         /* Modals */
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(15px);
-            z-index: 200; display: none; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s;
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px); z-index: 1000; display: none; justify-content: center; align-items: center; opacity: 0; transition: 0.3s;
         }
-        .modal-overlay.active { display: flex; opacity: 1; }
-        .modal-card {
-            background: var(--panel-bg); border: 1px solid var(--panel-border); padding: 25px; border-radius: 30px;
-            text-align: center; width: 90%; max-width: 350px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-        .modal-title { margin-top: 0; font-weight: 800; }
-        .tutorial-step { text-align: right; font-size: 12px; margin-bottom: 10px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 15px; }
-        .close-btn {
-            background: #ff4444; color: white; border: none; padding: 10px 30px; border-radius: 15px; font-weight: bold; cursor: pointer; margin-top: 10px;
-        }
+        .modal.show { opacity: 1; display: flex; }
+        .modal-box { background: var(--panel-bg); padding: 30px; border-radius: 30px; border: 1px solid var(--panel-border); text-align: center; width: 90%; max-width: 350px; }
+        .close-modal { background: #ff4757; color: white; border: none; padding: 8px 25px; border-radius: 10px; margin-top: 15px; cursor: pointer; font-weight: bold;}
+        .step-row { background: rgba(255,255,255,0.05); padding: 10px; margin: 5px 0; border-radius: 10px; text-align: right; font-size: 12px; }
+
+        /* Hidden input for copy */
+        #subLinkHolder { position: absolute; left: -9999px; }
 
     </style>
 </head>
 <body>
 
-    <div class="orb orb-1"></div><div class="orb orb-2"></div>
+    <!-- Hidden Copy Target -->
+    <input type="text" id="subLinkHolder" value="{{ subscription_url }}">
 
-    <div class="dashboard">
+    <div class="dashboard-container">
         <div class="header">
             <div>
                 <div class="brand-text">$IN_BRAND</div>
-                <div style="margin-top: 5px;">
-                    <a href="https://t.me/$IN_BOT_USER" class="bot-badge">🤖 @$IN_BOT_USER</a>
-                </div>
+                <a href="https://t.me/$IN_BOT_USER" class="bot-badge">🤖 @$IN_BOT_USER</a>
             </div>
-            
-            <div class="header-actions">
-                <div class="icon-btn" onclick="showTutorial()">?</div>
+            <div style="display:flex; gap:10px">
+                <div class="icon-btn" onclick="openModal('tutModal')">?</div>
                 <div class="icon-btn" onclick="toggleTheme()">🌙</div>
             </div>
         </div>
 
-        <!-- Main Card -->
         <div class="glass-card">
-            <div class="user-info">
-                <div class="avatar">👤</div>
-                <div class="user-details">
-                    <h1>{{ user.username }}</h1>
-                    {% if user.status == 'active' %}
-                        <span class="status-badge">● سرویس فعال</span>
-                    {% else %}
-                        <span class="status-badge status-expired">● غیرفعال</span>
-                    {% endif %}
-                </div>
-            </div>
+            <div class="glass-card-content">
+                
+                <!-- Left Column (Desktop) / Top (Mobile) -->
+                <div class="desktop-left">
+                    <div class="user-header">
+                        <div class="avatar">👤</div>
+                        <div class="user-text">
+                            <h1>{{ user.username }}</h1>
+                            {% if user.status == 'active' %}
+                                <span class="status-badge">● سرویس فعال</span>
+                            {% else %}
+                                <span class="status-badge status-expired">● غیرفعال</span>
+                            {% endif %}
+                        </div>
+                    </div>
 
-            <div class="info-grid">
-                <div class="info-box">
-                    <span class="lbl">انقضا</span>
-                    <span class="val">{{ user.expire_date }}</span>
-                </div>
-                <div class="info-box">
-                    <span class="lbl">حجم کل</span>
-                    <span class="val">{{ user.data_limit | filesizeformat }}</span>
-                </div>
-                <div class="info-box">
-                    <span class="lbl">مصرف شده</span>
-                    <span class="val">{{ user.used_traffic | filesizeformat }}</span>
-                </div>
-                <div class="info-box">
-                    <span class="lbl">باقی‌مانده</span>
-                    <!-- JS Calculated -->
-                    <span class="val" id="remData" style="color: #00ff88">---</span>
-                </div>
-            </div>
+                    <div class="progress-wrapper">
+                        <div class="progress-track"><div class="progress-fill" id="trafficBar"></div></div>
+                        <div class="progress-text">
+                            <span>مصرف شده</span>
+                            <span id="percentText">0%</span>
+                        </div>
+                    </div>
 
-            <div class="progress-con">
-                <div class="track"><div class="fill" id="trafficBar"></div></div>
-                <div class="prog-txt"><span>مصرف</span><span id="percentText">0%</span></div>
-            </div>
+                    <div class="actions-grid">
+                        <!-- Connect Button: Tries to open link, copies on click as fallback -->
+                        <a href="{{ subscription_url }}" class="action-btn" onclick="copyLinkFallback()">
+                            <i>🚀</i><span class="btn-title">اتصال</span>
+                        </a>
+                        <div class="action-btn" onclick="openModal('qrModal')">
+                            <i>🔳</i><span class="btn-title">کیوآر</span>
+                        </div>
+                        <div class="action-btn" onclick="copyLinkFallback()">
+                            <i>📋</i><span class="btn-title" id="copyBtnText">کپی</span>
+                        </div>
+                    </div>
 
-            <div class="actions">
-                <a href="{{ subscription_url }}" class="glass-btn"><i>🚀</i><span class="btn-txt">اتصال</span></a>
-                <a href="https://t.me/$IN_BOT_USER" class="glass-btn btn-renew"><i>🔄</i><span class="btn-txt">تمدید</span></a>
-                <div class="glass-btn" onclick="showQR()"><i>🔳</i><span class="btn-txt">کیو‌آر</span></div>
-                <div class="glass-btn" onclick="copyToClipboard()"><i>📋</i><span class="btn-txt" id="copyBtnTxt">کپی</span></div>
-            </div>
-        </div>
+                    <!-- Visible Support Button -->
+                    <a href="https://t.me/$IN_ADMIN_ID" class="support-btn">
+                        💬 پشتیبانی و تمدید سرویس
+                    </a>
+                </div>
 
-        <div class="apps-section">
-            <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" class="app-item"><div class="app-icon">🤖</div><span>And</span></a>
-            <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" class="app-item"><div class="app-icon">🍏</div><span>iOS</span></a>
-            <a href="https://github.com/2dust/v2rayN/releases" class="app-item"><div class="app-icon">💻</div><span>Win</span></a>
+                <!-- Right Column (Desktop) / Bottom (Mobile) -->
+                <div class="desktop-right">
+                    <div class="info-grid">
+                        <div class="info-box">
+                            <span class="lbl">تاریخ انقضا</span>
+                            <span class="val">{{ user.expire_date }}</span>
+                        </div>
+                        <div class="info-box">
+                            <span class="lbl">حجم کل</span>
+                            <span class="val">{{ user.data_limit | filesizeformat }}</span>
+                        </div>
+                        <div class="info-box">
+                            <span class="lbl">مصرف شده</span>
+                            <span class="val">{{ user.used_traffic | filesizeformat }}</span>
+                        </div>
+                        <div class="info-box">
+                            <span class="lbl">باقی‌مانده</span>
+                            <span class="val" id="remData" style="color: var(--accent)">---</span>
+                        </div>
+                    </div>
+
+                    <div class="apps-row">
+                        <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" class="app-link"><div class="app-icon">🤖</div><span>Android</span></a>
+                        <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" class="app-link"><div class="app-icon">🍏</div><span>iOS</span></a>
+                        <a href="https://github.com/2dust/v2rayN/releases" class="app-link"><div class="app-icon">💻</div><span>Windows</span></a>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
-    <!-- Floating Support -->
-    <a href="https://t.me/$IN_ADMIN_ID" target="_blank" class="support-fab">💬</a>
-
-    <!-- QR Modal -->
-    <div class="modal-overlay" id="qrModal">
-        <div class="modal-card">
-            <h3 class="modal-title">اسکن کد اتصال</h3>
-            <div style="background: white; padding: 10px; border-radius: 20px; display: inline-block;">
-                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ subscription_url }}" width="150">
+    <!-- Modals -->
+    <div id="qrModal" class="modal">
+        <div class="modal-box">
+            <h3>اسکن کد اتصال</h3>
+            <div style="background:white; padding:10px; border-radius:20px; display:inline-block">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data={{ subscription_url }}" width="180">
             </div>
-            <br><button class="close-btn" onclick="closeModals()">بستن</button>
+            <br><button class="close-modal" onclick="closeModal('qrModal')">بستن</button>
         </div>
     </div>
 
-    <!-- Tutorial Modal -->
-    <div class="modal-overlay" id="tutorialModal">
-        <div class="modal-card">
-            <h3 class="modal-title">راهنمای اتصال</h3>
-            <div class="tutorial-step">$TUT_1</div>
-            <div class="tutorial-step">$TUT_2</div>
-            <div class="tutorial-step">$TUT_3</div>
-            <button class="close-btn" onclick="closeModals()">متوجه شدم</button>
+    <div id="tutModal" class="modal">
+        <div class="modal-box">
+            <h3>راهنمای اتصال</h3>
+            <div class="step-row">$TUT_1</div>
+            <div class="step-row">$TUT_2</div>
+            <div class="step-row">$TUT_3</div>
+            <button class="close-modal" onclick="closeModal('tutModal')">متوجه شدم</button>
         </div>
     </div>
 
     <script>
-        const totalBytes = {{ user.data_limit }};
-        const usedBytes = {{ user.used_traffic }};
-        
-        let percent = 0;
-        if (totalBytes > 0) { percent = (usedBytes / totalBytes) * 100; if (percent > 100) percent = 100; }
-        document.getElementById('trafficBar').style.width = percent + '%';
-        document.getElementById('percentText').innerText = Math.round(percent) + '%';
+        // --- Logic ---
+        const total = {{ user.data_limit }};
+        const used = {{ user.used_traffic }};
+        const subLink = document.getElementById('subLinkHolder').value;
 
-        const remainingBytes = totalBytes - usedBytes;
-        function formatBytes(bytes, decimals = 2) {
-            if (bytes <= 0) return '0 B';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        // Calc Percent
+        let p = 0;
+        if(total > 0) p = (used / total) * 100;
+        if(p>100) p=100;
+        document.getElementById('trafficBar').style.width = p + '%';
+        document.getElementById('percentText').innerText = Math.round(p) + '%';
+
+        // Calc Remaining
+        function fmt(b) {
+            if(b<=0) return '0 MB';
+            const s = ['B','KB','MB','GB','TB'];
+            const i = Math.floor(Math.log(b)/Math.log(1024));
+            return (b/Math.pow(1024,i)).toFixed(2)+' '+s[i];
         }
-        document.getElementById('remData').innerText = formatBytes(remainingBytes);
+        document.getElementById('remData').innerText = fmt(total - used);
 
+        // --- Robust Copy Function (Works on http) ---
+        function copyLinkFallback() {
+            const input = document.getElementById('subLinkHolder');
+            input.style.display = 'block';
+            input.select();
+            try {
+                document.execCommand('copy');
+                showCopySuccess();
+            } catch (err) {
+                alert('لینک کپی نشد. لطفا دستی کپی کنید.');
+            }
+            input.style.display = 'none';
+        }
+
+        function showCopySuccess() {
+            const btn = document.getElementById('copyBtnText');
+            const old = btn.innerText;
+            btn.innerText = 'کپی شد!';
+            btn.style.color = '#00ff88';
+            setTimeout(() => {
+                btn.innerText = old;
+                btn.style.color = 'inherit';
+            }, 2000);
+        }
+
+        // --- UI Functions ---
         function toggleTheme() {
-            const body = document.body;
-            const btn = document.querySelector('.icon-btn:last-child');
-            if (body.getAttribute('data-theme') === 'light') {
-                body.removeAttribute('data-theme');
+            const b = document.body;
+            const icn = document.querySelector('.icon-btn:last-child');
+            if(b.getAttribute('data-theme') === 'light') {
+                b.removeAttribute('data-theme');
                 localStorage.setItem('theme', 'dark');
-                btn.innerText = '🌙';
+                icn.innerText = '🌙';
             } else {
-                body.setAttribute('data-theme', 'light');
+                b.setAttribute('data-theme', 'light');
                 localStorage.setItem('theme', 'light');
-                btn.innerText = '☀️';
+                icn.innerText = '☀️';
             }
         }
         if(localStorage.getItem('theme') === 'light') {
@@ -356,39 +412,37 @@ cat << EOF > "$TEMPLATE_FILE"
             document.querySelector('.icon-btn:last-child').innerText = '☀️';
         }
 
-        function showQR() { document.getElementById('qrModal').classList.add('active'); }
-        function showTutorial() { document.getElementById('tutorialModal').classList.add('active'); }
-        function closeModals() { document.querySelectorAll('.modal-overlay').forEach(el => el.classList.remove('active')); }
-
-        function copyToClipboard() {
-            const link = "{{ subscription_url }}";
-            navigator.clipboard.writeText(link).then(() => {
-                const t = document.getElementById('copyBtnTxt');
-                const original = t.innerText;
-                t.innerText = "OK!";
-                t.style.color = "#00ff88";
-                setTimeout(() => { t.innerText = original; t.style.color = "inherit"; }, 2000);
-            });
+        function openModal(id) {
+            document.getElementById(id).classList.add('show');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+        
+        // Close modal on outside click
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.classList.remove('show');
+            }
         }
     </script>
 </body>
 </html>
 EOF
 
-echo -e "${BLUE}Updating panel configuration (.env)...${NC}"
-# Clean up old configs if any
+echo -e "${BLUE}Updating .env configuration...${NC}"
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE_PATH"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE_PATH"
-
-# Add new config
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE_PATH"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE_PATH"
 
-echo -e "${GREEN}✔ Theme Installed Successfully.${NC}"
-echo -e "Restarting Panel..."
+echo -e "${GREEN}✔ FarsNetVIP Theme Installed Successfully.${NC}"
+echo -e "${YELLOW}Please wait while panel restarts...${NC}"
+
 if command -v pasarguard &> /dev/null; then
     pasarguard restart
 else
     systemctl restart pasarguard 2>/dev/null
 fi
-echo -e "${GREEN}Done!${NC}"
+
+echo -e "${GREEN}Done! Check your subscription link now.${NC}"
