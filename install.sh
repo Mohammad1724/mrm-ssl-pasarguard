@@ -2,7 +2,7 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.7 (Updated Menu)
+# Version: v1.1 (Updated Menu)
 # Created for: Pasarguard Panel Management
 # ==========================================
 
