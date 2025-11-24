@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Theme Name: MRM FARSNETVIP (Apple Liquid Glass)
+# Theme Name: FarsNetVIP (Apple Liquid Glass)
 # Created for: Pasarguard Panel
 # ==========================================
 
@@ -57,6 +57,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --btn-shadow: 0 10px 20px rgba(0,0,0,0.3);
             --brand-grad-start: #fff;
             --brand-grad-end: #00C6FF;
+            
+            /* Status Badge Colors (Night) */
+            --badge-bg: rgba(0, 255, 136, 0.15);
+            --badge-text: #00ff88;
+            --badge-border: rgba(0, 255, 136, 0.25);
         }
 
         [data-theme="light"] {
@@ -75,6 +80,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --btn-shadow: 0 10px 25px rgba(161, 196, 253, 0.5);
             --brand-grad-start: #005bea;
             --brand-grad-end: #00c6fb;
+
+            /* Status Badge Colors (Day - Darker for visibility) */
+            --badge-bg: rgba(0, 255, 136, 0.5);     /* تیره تر */
+            --badge-text: #004d26;                  /* سبز تیره برای خوانایی */
+            --badge-border: rgba(0, 128, 64, 0.5);
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; }
@@ -165,15 +175,33 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 
         h1 { margin: 5px 0; font-size: 26px; font-weight: 800; position: relative; z-index: 2; }
         
+        /* استایل دکمه وضعیت اصلاح شده */
         .status-badge {
-            font-size: 12px; padding: 6px 16px; border-radius: 20px;
-            background: rgba(0, 255, 136, 0.15); color: #00ff88;
-            border: 1px solid rgba(0, 255, 136, 0.25);
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
+            font-size: 13px; 
+            padding: 6px 18px; 
+            border-radius: 20px;
+            background: var(--badge-bg); 
+            color: var(--badge-text);
+            border: 1px solid var(--badge-border);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.2);
             display: inline-block; margin-bottom: 30px; margin-top: 5px;
             position: relative; z-index: 2;
+            font-weight: 800;
+            transition: 0.3s;
         }
-        .status-expired { color: #ff4444; background: rgba(255, 0, 0, 0.15); border-color: rgba(255, 0, 0, 0.25); box-shadow: none; }
+        
+        .status-expired { 
+            color: #ff4444; 
+            background: rgba(255, 0, 0, 0.15); 
+            border-color: rgba(255, 0, 0, 0.25); 
+            box-shadow: none; 
+        }
+        
+        [data-theme="light"] .status-expired {
+            color: #8a0000; /* قرمز تیره برای روز */
+            background: rgba(255, 0, 0, 0.3);
+            border-color: rgba(200, 0, 0, 0.5);
+        }
 
         .info-row {
             display: flex; justify-content: space-between; align-items: center;
@@ -244,7 +272,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 
     <div class="dashboard">
         <div class="header">
-            <!-- HERE IS YOUR BRANDING -->
             <div class="brand-box">
                 <span class="brand-text">FarsNetVIP</span>
                 <span class="brand-sub">ULTIMATE CONNECTION</span>
