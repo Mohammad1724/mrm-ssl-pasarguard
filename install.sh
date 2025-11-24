@@ -8,7 +8,7 @@
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.7"
+VERSION="v1.1"
 
 # >>> IMPORTANT: UPDATE THIS URL TO YOUR THEME FILE LOCATION <<<
 THEME_SCRIPT_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/theme.sh"
