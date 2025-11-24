@@ -2,13 +2,16 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.6 (Bug-Free & Optimized)
+# Version: v1.7 (Updated Menu)
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.6"
+VERSION="v1.7"
+
+# >>> IMPORTANT: UPDATE THIS URL TO YOUR THEME FILE LOCATION <<<
+THEME_SCRIPT_URL="https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/theme.sh"
 
 # Core Paths
 DEFAULT_PATH="/var/lib/pasarguard/certs"
@@ -40,7 +43,7 @@ check_root() {
 }
 
 install_deps() {
-    # Removed 'bc', added 'grep' and 'sed' checks just in case
+    # Install essentials quietly
     if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null || ! command -v tar &> /dev/null; then
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
         apt-get update -qq > /dev/null
@@ -113,11 +116,6 @@ generate_ssl() {
         echo ""
         echo -e "${BLUE}--- Processing: $DOMAIN ---${NC}"
         
-        # Pre-check DNS locally to avoid Certbot errors (optional but recommended)
-        # SERVER_IP=$(curl -s https://api.ipify.org)
-        # DOMAIN_IP=$(dig +short $DOMAIN | head -n 1) 
-        # Logic skipped to keep it fast as per request, relying on Certbot.
-
         certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
         
         if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
@@ -202,8 +200,6 @@ list_all_certs() {
             if [ ! -f "$CERT_FILE" ]; then continue; fi
             
             FOUND_COUNT=$((FOUND_COUNT+1))
-            
-            # Get End Date
             END_DATE=$(openssl x509 -in "$CERT_FILE" -noout -enddate 2>/dev/null | cut -d= -f2)
             
             if [ -z "$END_DATE" ]; then continue; fi
@@ -300,12 +296,11 @@ force_renew_sync() {
 
         certbot renew --force-renewal
         
-        # Loop and sync
         for d in /etc/letsencrypt/live/*; do
             if [ -d "$d" ]; then
                 DOMAIN=$(basename "$d")
                 TARGET_DIR="$DEFAULT_PATH/$DOMAIN"
-                # Only sync if the target folder already exists
+                # Only sync if destination folder exists (to be safe)
                 if [ -d "$TARGET_DIR" ]; then
                     cp -L "$d/fullchain.pem" "$TARGET_DIR/fullchain.pem"
                     cp -L "$d/privkey.pem" "$TARGET_DIR/privkey.pem"
@@ -464,7 +459,7 @@ set_panel_ssl() {
         if [[ -f "$FULL_CERT_PATH" && -f "$ENV_FILE_PATH" ]]; then
             echo -e "${BLUE}Updating .env for $SELECTED_DOMAIN...${NC}"
             
-            # Universal regex for sed (Linux)
+            # Improved Regex: handles #, spaces, tabs at start of line
             sed -i "s|^#*[[:space:]]*UVICORN_SSL_CERTFILE.*|UVICORN_SSL_CERTFILE = \"$FULL_CERT_PATH\"|g" "$ENV_FILE_PATH"
             sed -i "s|^#*[[:space:]]*UVICORN_SSL_KEYFILE.*|UVICORN_SSL_KEYFILE = \"$FULL_KEY_PATH\"|g" "$ENV_FILE_PATH"
             
@@ -508,6 +503,24 @@ setup_telegram_backup() {
     fi
 }
 
+install_theme_wrapper() {
+    echo ""
+    echo -e "${BLUE}Downloading FarsNetVIP Theme...${NC}"
+    echo -e "URL: ${YELLOW}$THEME_SCRIPT_URL${NC}"
+    
+    # Check if url is placeholder
+    if [[ "$THEME_SCRIPT_URL" == *"YOUR_USERNAME"* ]]; then
+         echo -e "${RED}Error: You haven't updated the Theme URL in this script yet!${NC}"
+         echo -e "Please open this script with nano and edit line 14."
+         read -p "Press Enter..."
+         return
+    fi
+
+    bash <(curl -Ls "$THEME_SCRIPT_URL")
+    echo ""
+    read -p "Press Enter to return..."
+}
+
 deploy_to_node() {
     echo ""
     echo -e "${CYAN}--- Apply SSL to Node ---${NC}"
@@ -520,6 +533,7 @@ deploy_to_node() {
     SOURCE_KEY="$DEFAULT_PATH/$DOMAIN/privkey.pem"
 
     if [[ ! -f "$SOURCE_CERT" ]]; then
+        # Try fallback system path
         SOURCE_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
         SOURCE_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
         if [[ ! -f "$SOURCE_CERT" ]]; then
@@ -581,7 +595,7 @@ change_panel_port() {
         return
     fi
 
-    # Regex to find port even if commented out
+    # Regex matches even if commented out (# UVICORN_PORT)
     CURRENT_PORT=$(grep "^#*[[:space:]]*UVICORN_PORT" "$ENV_FILE_PATH" | cut -d '=' -f2 | tr -d ' ' | head -n 1)
     echo -e "Current Port: ${YELLOW}$CURRENT_PORT${NC}"
     
@@ -653,9 +667,10 @@ panel_menu() {
         echo "5) Setup Telegram Backup"
         echo "6) Change Panel Port"
         echo "7) View Node Files (node .env)"
-        echo "8) Back to Main Menu"
+        echo "8) Install FarsNetVIP Theme"
+        echo "9) Back to Main Menu"
         echo -e "${BLUE}===========================================${NC}"
-        read -p "Select Option [1-8]: " P_OPT
+        read -p "Select Option [1-9]: " P_OPT
 
         case $P_OPT in
             1) edit_env_config ;;
@@ -665,7 +680,8 @@ panel_menu() {
             5) setup_telegram_backup ;;
             6) change_panel_port ;;
             7) view_node_files_simple ;;
-            8) return ;;
+            8) install_theme_wrapper ;;
+            9) return ;;
             *) echo -e "${RED}Invalid option.${NC}"; sleep 1 ;;
         esac
     done
