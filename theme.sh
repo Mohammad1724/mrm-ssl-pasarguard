@@ -12,7 +12,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Fix 500 Error) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -204,7 +204,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-primary" onclick="handleCopy('{{ subscription_url }}')">کپی لینک</button>
+                        <button class="btn btn-primary" onclick="handleCopy()">کپی لینک</button>
                         <button class="btn btn-secondary" onclick="openModal('qrModal')">QR Code</button>
                     </div>
                     <a href="{{ subscription_url }}" class="btn btn-secondary" style="width:100%; margin-bottom:10px">🚀 اتصال مستقیم</a>
@@ -247,7 +247,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         <div class="modal-box">
             <h3>اسکن کنید</h3><br>
             <div style="background:white; padding:10px; border-radius:10px; display:inline-block">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ subscription_url }}" width="180">
+                <img id="qrImage" src="" width="180">
             </div>
             <br><br>
             <button class="btn btn-secondary" style="background:#333; color:white" onclick="closeModal('qrModal')">بستن</button>
@@ -276,18 +276,24 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     </div>
 
     <script>
-        // --- LINK RECOVERY ---
-        // If 'subscription_url' is empty or undefined, get it from current URL
+        // 1. Define Variables OUTSIDE Raw Block
         var subUrl = '{{ subscription_url }}';
-        if(!subUrl || subUrl === '' || subUrl.indexOf('{{') !== -1) {
+        var totalStr = '{{ user.data_limit }}';
+        var usedStr = '{{ user.used_traffic }}';
+        
+        {% raw %}
+        // 2. Start RAW block for the logic to avoid Jinja Syntax Errors
+        
+        // Recover URL if empty or template literal
+        if (!subUrl || subUrl === '' || subUrl.indexOf('{{') !== -1) {
             subUrl = window.location.href;
         }
 
-        // Update QR Code Image source if needed
-        var qrImg = document.querySelector('#qrModal img');
-        if(qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        // Setup QR
+        var qrImg = document.getElementById('qrImage');
+        if (qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        // --- THEME ---
+        // Theme
         var themeBtn = document.getElementById('themeBtn');
         var root = document.documentElement;
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); themeBtn.textContent = '☀️'; }
@@ -296,13 +302,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             else { root.classList.add('light'); themeBtn.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
-        // --- DATA ---
-        var total = 0, used = 0;
-        try { total = parseInt('{{ user.data_limit }}') || 0; } catch(e) {}
-        try { used = parseInt('{{ user.used_traffic }}') || 0; } catch(e) {}
+        // Data
+        var total = parseInt(totalStr) || 0;
+        var used = parseInt(usedStr) || 0;
         var percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
-        var pBar = document.getElementById('progressBar'); var pText = document.getElementById('progressText');
-        if (pBar) pBar.style.width = percent + '%'; if (pText) pText.textContent = Math.round(percent) + '%';
+        var pBar = document.getElementById('progressBar'); 
+        var pText = document.getElementById('progressText');
+        if (pBar) pBar.style.width = percent + '%'; 
+        if (pText) pText.textContent = Math.round(percent) + '%';
         if (percent > 85 && pBar) pBar.style.background = '#ef4444';
 
         function formatBytes(b) {
@@ -310,20 +317,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             var units = ['B', 'KB', 'MB', 'GB', 'TB']; var i = Math.floor(Math.log(b) / Math.log(1024));
             return (b / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
         }
-        var remEl = document.getElementById('remaining'); if (remEl) remEl.textContent = formatBytes(total - used);
+        var remEl = document.getElementById('remaining'); 
+        if (remEl) remEl.textContent = formatBytes(total - used);
 
-        var expEl = document.getElementById('expDate');
-        if (expEl) {
-            var rawDate = expEl.textContent.trim();
-            if (rawDate && rawDate !== 'None' && rawDate !== 'null' && rawDate !== 'نامحدود') {
-                try { var d = new Date(rawDate); if (!isNaN(d.getTime())) expEl.textContent = d.toLocaleDateString('fa-IR'); } catch(e) {}
-            }
-        }
-
-        // --- COPY LOGIC ---
+        // COPY LOGIC
         function handleCopy(text) {
-            // If text is template placeholder, use the fixed subUrl
-            if (!text || text.indexOf('{{') !== -1) text = subUrl;
+            if (!text) text = subUrl;
             
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(showToast).catch(function() { fallbackCopy(text); });
@@ -334,14 +333,20 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 
         function fallbackCopy(text) {
             var helper = document.getElementById('clipboard-helper');
-            helper.style.display = 'block'; helper.style.left = '0'; helper.style.top = '0'; helper.style.opacity = '1';
+            helper.style.display = 'block'; 
+            helper.style.left = '0'; 
+            helper.style.top = '0'; 
+            helper.style.opacity = '1';
             helper.value = text;
-            helper.focus(); helper.select(); helper.setSelectionRange(0, 99999);
+            helper.focus(); 
+            helper.select(); 
+            helper.setSelectionRange(0, 99999);
             try {
                 var result = document.execCommand('copy');
                 if (result) showToast(); else openManualCopy(text);
             } catch (err) { openManualCopy(text); }
-            helper.style.left = '-9999px'; helper.style.opacity = '0';
+            helper.style.left = '-9999px'; 
+            helper.style.opacity = '0';
         }
 
         function openManualCopy(text) {
@@ -353,7 +358,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         }
 
         function showToast() {
-            var t = document.getElementById('toast'); t.classList.add('show');
+            var t = document.getElementById('toast'); 
+            t.classList.add('show');
             setTimeout(function() { t.classList.remove('show'); }, 2000);
         }
 
@@ -382,6 +388,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         if (ua.indexOf('android') > -1) document.getElementById('dlAndroid').classList.add('recommended');
         else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('dlIos').classList.add('recommended');
         else if (ua.indexOf('win') > -1) document.getElementById('dlWin').classList.add('recommended');
+        
+        {% endraw %}
     </script>
 </body>
 </html>
