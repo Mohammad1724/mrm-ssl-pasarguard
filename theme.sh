@@ -2,7 +2,7 @@
 
 # ==========================================
 # Theme: FarsNetVIP Subscription Template
-# Status: Stable, Simple, Fully Working
+# Status: Stable & Simple
 # ==========================================
 
 # Colors
@@ -16,57 +16,55 @@ TEMPLATE_DIR="/var/lib/pasarguard/templates/subscription"
 TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
 ENV_FILE="/opt/pasarguard/.env"
 
-# Try to read previous values from old HTML (برای ری‌اینستال راحت‌تر)
+# Try to read previous values (for reinstall convenience)
 get_prev() {
     if [ -f "$TEMPLATE_FILE" ]; then
-        grep "$1" "$TEMPLATE_FILE" | head -n1 | sed -E "s/.*$1[^A-Za-z0-9@]*([A-Za-z0-9_@.]+).*/\1/"
+        grep "$1" "$TEMPLATE_FILE" | head -n1 | sed -E "s/.*$1[^A-Za-z0-9_@]*([A-Za-z0-9_@.]+).*/\1/"
     fi
 }
 
 clear
 echo -e "${CYAN}=== FarsNetVIP Theme Installer ===${NC}"
 
-# Defaults
-PREV_BRAND=$(get_prev "brandTxt")
+PREV_BRAND=$(get_prev "brand\"")
 PREV_BOT=$(get_prev "t.me/")
-PREV_SUP=$(get_prev "پشتیبانی و تمدید")
 [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 [ -z "$PREV_BOT" ] && PREV_BOT="MyBot"
-[ -z "$PREV_SUP" ] && PREV_SUP="Support"
-DEF_NEWS="🔥 به جمع کاربران ویژه خوش آمدید! برای تمدید به پشتیبانی پیام دهید."
+PREV_SUP="Support"   # cannot easily detect, set default
+DEF_NEWS="🔥 Welcome to FarsNetVIP! Contact support to renew your service."
 
-echo -e "${GREEN}Tip: Enter برای نگه‌داشتن مقدار قبلی.${NC}\n"
+echo -e "${GREEN}Tip: Press Enter to keep the current value.${NC}\n"
 
-read -p "نام برند [$PREV_BRAND]: " IN_BRAND
-read -p "آیدی ربات (بدون @) [$PREV_BOT]: " IN_BOT
-read -p "آیدی پشتیبانی/ادمین (بدون @) [$PREV_SUP]: " IN_SUP
-read -p "متن نوار خبر (News Ticker) [$DEF_NEWS]: " IN_NEWS
+read -p "Brand Name [$PREV_BRAND]: " IN_BRAND
+read -p "Bot Username (without @) [$PREV_BOT]: " IN_BOT
+read -p "Support ID (without @) [$PREV_SUP]: " IN_SUP
+read -p "News Ticker Text [$DEF_NEWS]: " IN_NEWS
 
 [ -z "$IN_BRAND" ] && IN_BRAND="$PREV_BRAND"
 [ -z "$IN_BOT" ] && IN_BOT="$PREV_BOT"
 [ -z "$IN_SUP" ] && IN_SUP="$PREV_SUP"
 [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
 
-echo -e "\n${BLUE}نصب تم...${NC}"
+echo -e "\n${BLUE}Installing theme...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# لینک‌های دانلود ثابت (در صورت نیاز بعداً می‌توان با manager جدا اصلاح کرد)
 LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
 LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
 LNK_WIN="https://github.com/2dust/v2rayN/releases"
 
-cat << EOF > "$TEMPLATE_FILE"
+# Write HTML with placeholders
+cat << 'HTML' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>$IN_BRAND | {{ user.username }}</title>
+    <title>__BRAND__ | {{ user.username }}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;500;700;900&display=swap');
         :root {
             --bg-body: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
-            --card-bg: rgba(20, 20, 30, 0.8); --card-border: rgba(255, 255, 255, 0.1);
+            --card-bg: rgba(20, 20, 30, 0.8); --card-border: rgba(255, 255, 255, 0.12);
             --text-main: #ffffff; --text-sub: rgba(255, 255, 255, 0.6);
             --btn-bg: rgba(255, 255, 255, 0.08); --btn-border: rgba(255, 255, 255, 0.15);
             --accent: #00C6FF; --brand-grad: linear-gradient(90deg, #fff, #00C6FF);
@@ -75,9 +73,9 @@ cat << EOF > "$TEMPLATE_FILE"
         }
         [data-theme="light"] {
             --bg-body: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
-            --card-bg: rgba(255, 255, 255, 0.85); --card-border: rgba(255, 255, 255, 0.9);
+            --card-bg: rgba(255, 255, 255, 0.9); --card-border: rgba(255, 255, 255, 0.9);
             --text-main: #333; --text-sub: rgba(0, 0, 0, 0.6);
-            --btn-bg: rgba(255, 255, 255, 0.6); --btn-border: rgba(255, 255, 255, 0.9);
+            --btn-bg: rgba(255, 255, 255, 0.7); --btn-border: rgba(255, 255, 255, 0.9);
             --accent: #005bea; --brand-grad: linear-gradient(90deg, #005bea, #00c6fb);
             --shadow: 0 20px 40px rgba(0,0,0,0.15);
         }
@@ -89,6 +87,7 @@ cat << EOF > "$TEMPLATE_FILE"
             display: flex; flex-direction: column; align-items: center;
             padding: 15px; padding-top: 60px; padding-bottom: 40px;
         }
+
         .ticker-wrap { position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(8px); height: 40px; overflow: hidden; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .ticker { display: inline-block; white-space: nowrap; padding-right: 100%; animation: ticker 25s linear infinite; line-height: 40px; font-size: 12px; color: #fff; font-weight: 500; }
         @keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(100%, 0, 0); } }
@@ -153,13 +152,13 @@ cat << EOF > "$TEMPLATE_FILE"
     </style>
 </head>
 <body>
-    <div class="ticker-wrap"><div class="ticker" id="newsTxt">$IN_NEWS</div></div>
+    <div class="ticker-wrap"><div class="ticker" id="newsTxt">__NEWS__</div></div>
 
     <div class="container">
         <div class="header">
             <div>
-                <div class="brand">$IN_BRAND</div>
-                <a href="https://t.me/$IN_BOT" class="bot-link">🤖 @$IN_BOT</a>
+                <div class="brand">__BRAND__</div>
+                <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
             <div class="header-btns">
                 <div class="circle-btn" onclick="openModal('tutModal')">?</div>
@@ -176,40 +175,70 @@ cat << EOF > "$TEMPLATE_FILE"
                         <div class="avatar">👤</div>
                         <div class="user-text">
                             <h2>{{ user.username }}</h2>
-                            {% if user.status == 'active' %}<span class="badge active">● فعال</span>{% else %}<span class="badge inactive">● غیرفعال</span>{% endif %}
+                            {% if user.status == 'active' %}
+                                <span class="badge active">● فعال</span>
+                            {% else %}
+                                <span class="badge inactive">● غیرفعال</span>
+                            {% endif %}
                         </div>
                     </div>
+
                     <div class="progress-box">
                         <div class="bar-bg"><div class="bar-fill" id="pBar"></div></div>
                         <div class="bar-txt"><span>مصرف شده</span><span id="pText">0%</span></div>
                     </div>
+
                     <div class="btn-grid">
-                        <a href="{{ subscription_url }}" target="_blank" class="action-btn" onclick="forceCopy('{{ subscription_url }}', false)"><i>🚀</i><span class="btn-title">اتصال</span></a>
-                        <div class="action-btn" onclick="openModal('qrModal')"><i>🔳</i><span class="btn-title">کیو‌آر</span></div>
-                        <div class="action-btn" onclick="forceCopy('{{ subscription_url }}', true)"><i>📋</i><span class="btn-title" id="cpBtn">کپی</span></div>
+                        <a href="{{ subscription_url }}" target="_blank" class="action-btn" onclick="forceCopy('{{ subscription_url }}', false)">
+                            <i>🚀</i><span class="btn-title">اتصال</span>
+                        </a>
+                        <div class="action-btn" onclick="openModal('qrModal')">
+                            <i>🔳</i><span class="btn-title">کیو‌آر</span>
+                        </div>
+                        <div class="action-btn" onclick="forceCopy('{{ subscription_url }}', true)">
+                            <i>📋</i><span class="btn-title" id="cpBtn">کپی</span>
+                        </div>
                     </div>
+
                     <div class="config-btn" onclick="showConfigs()">📂 لیست کانفیگ‌ها</div>
-                    <a href="https://t.me/$IN_SUP" class="support-btn">💬 پشتیبانی و تمدید</a>
+                    <a href="https://t.me/__SUP__" class="support-btn">💬 پشتیبانی و تمدید</a>
                 </div>
+
                 <div class="col-left">
                     <div class="data-grid">
                         <div class="data-item">
                             <span class="d-label">تاریخ انقضا</span>
-                            <span class="d-value">{{ user.expire_date }}</span>
+                            <span class="d-value">
+                                {{ user.expire_date or user.expire or user.expired_at or 'نامشخص' }}
+                            </span>
                         </div>
-                        <div class="data-item"><span class="d-label">حجم کل</span><span class="d-value">{{ user.data_limit | filesizeformat }}</span></div>
-                        <div class="data-item"><span class="d-label">مصرف شده</span><span class="d-value">{{ user.used_traffic | filesizeformat }}</span></div>
-                        <div class="data-item"><span class="d-label">باقی‌مانده</span><span class="d-value" id="remText" style="color: var(--accent)">...</span></div>
+                        <div class="data-item">
+                            <span class="d-label">حجم کل</span>
+                            <span class="d-value">{{ user.data_limit | filesizeformat }}</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="d-label">مصرف شده</span>
+                            <span class="d-value">{{ user.used_traffic | filesizeformat }}</span>
+                        </div>
+                        <div class="data-item">
+                            <span class="d-label">باقی‌مانده</span>
+                            <span class="d-value" id="remText" style="color: var(--accent)">...</span>
+                        </div>
                     </div>
-                    
+
+                    <!-- Smart OS download -->
                     <div id="smartDL" class="smart-dl">
                         <a id="smartBtn" href="#" class="dl-main-btn">⬇️ دانلود برنامه</a>
-                        <div class="dl-sub-links"><a href="#" id="alt1">Link 1</a> | <a href="#" id="alt2">Link 2</a></div>
+                        <div class="dl-sub-links">
+                            <a href="#" id="alt1">Link 1</a> | <a href="#" id="alt2">Link 2</a>
+                        </div>
                     </div>
+
+                    <!-- Fallback simple app icons -->
                     <div id="normalDL" class="app-row">
-                        <a href="$LNK_AND" id="lnkAnd" class="app-icon"><div class="app-img">🤖</div>Android</a>
-                        <a href="$LNK_IOS" id="lnkIos" class="app-icon"><div class="app-img">🍏</div>iOS</a>
-                        <a href="$LNK_WIN" id="lnkWin" class="app-icon"><div class="app-img">💻</div>Win</a>
+                        <a href="__ANDROID__" id="lnkAnd" class="app-icon"><div class="app-img">🤖</div>Android</a>
+                        <a href="__IOS__" id="lnkIos" class="app-icon"><div class="app-img">🍏</div>iOS</a>
+                        <a href="__WIN__" id="lnkWin" class="app-icon"><div class="app-img">💻</div>Win</a>
                     </div>
                 </div>
             </div>
@@ -217,23 +246,48 @@ cat << EOF > "$TEMPLATE_FILE"
     </div>
 
     <!-- Modals -->
-    <div id="confModal" class="modal-overlay"><div class="modal-box"><h3>لیست کانفیگ‌ها</h3><br><div id="confList" style="max-height:300px; overflow-y:auto"></div><button class="close-btn" onclick="closeModal('confModal')">بستن</button></div></div>
-    <div id="qrModal" class="modal-overlay"><div class="modal-box"><h3>اسکن کنید</h3><br><div style="background:white; padding:10px; border-radius:15px; display:inline-block"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ subscription_url }}" width="150"></div><br><button class="close-btn" onclick="closeModal('qrModal')">بستن</button></div></div>
-    <div id="tutModal" class="modal-overlay"><div class="modal-box"><h3>راهنما</h3><br><div class="tut-row">1. نرم‌افزار را از پایین صفحه دانلود کنید.</div><div class="tut-row">2. دکمه کپی لینک را بزنید.</div><div class="tut-row">3. در برنامه Paste کرده و متصل شوید.</div><button class="close-btn" onclick="closeModal('tutModal')">باشه</button></div></div>
-    
+    <div id="confModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>لیست کانفیگ‌ها</h3><br>
+            <div id="confList" style="max-height:300px; overflow-y:auto"></div>
+            <button class="close-btn" onclick="closeModal('confModal')">بستن</button>
+        </div>
+    </div>
+
+    <div id="qrModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>اسکن کنید</h3><br>
+            <div style="background:white; padding:10px; border-radius:15px; display:inline-block">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ subscription_url }}" width="150">
+            </div>
+            <br>
+            <button class="close-btn" onclick="closeModal('qrModal')">بستن</button>
+        </div>
+    </div>
+
+    <div id="tutModal" class="modal-overlay">
+        <div class="modal-box">
+            <h3>راهنما</h3><br>
+            <div class="tut-row">1. نرم‌افزار مناسب سیستم‌عامل خود را از پایین صفحه دانلود کنید.</div>
+            <div class="tut-row">2. دکمه کپی لینک را بزنید.</div>
+            <div class="tut-row">3. در برنامه Paste کرده و متصل شوید.</div>
+            <button class="close-btn" onclick="closeModal('tutModal')">باشه</button>
+        </div>
+    </div>
+
     <script>
         const total = {{ user.data_limit }};
         const used = {{ user.used_traffic }};
         const subUrl = "{{ subscription_url }}";
 
-        // درصد مصرف
+        // progress
         let p = 0;
         if (total > 0) p = (used/total)*100;
         if (p > 100) p = 100;
         document.getElementById('pBar').style.width = p + '%';
         document.getElementById('pText').innerText = Math.round(p) + '%';
 
-        // حجم باقیمانده
+        // remaining
         const rem = total - used;
         function fmt(b) {
             if (total === 0) return 'نامحدود';
@@ -244,7 +298,7 @@ cat << EOF > "$TEMPLATE_FILE"
         }
         document.getElementById('remText').innerText = fmt(rem);
 
-        // هشدار حجم (کمتر از ۲۰٪)
+        // low quota alert
         if (total > 0 && (rem / total) < 0.2) {
             const al = document.getElementById('renewAlert');
             al.style.display = 'block';
@@ -253,7 +307,7 @@ cat << EOF > "$TEMPLATE_FILE"
             bar.style.boxShadow = '0 0 10px #ff4757';
         }
 
-        // کپی لینک (کاملاً سازگار با http و موبایل)
+        // copy
         function forceCopy(text, alertMode) {
             var textArea = document.createElement("textarea");
             textArea.value = text;
@@ -275,7 +329,7 @@ cat << EOF > "$TEMPLATE_FILE"
             document.body.removeChild(textArea);
         }
 
-        // لیست کانفیگ‌ها (فعلاً فقط لینک ساب)
+        // config list
         function showConfigs() {
             openModal('confModal');
             document.getElementById('confList').innerHTML =
@@ -285,16 +339,16 @@ cat << EOF > "$TEMPLATE_FILE"
                 'onclick="forceCopy(\\''+subUrl+'\\', false); this.innerText=\\'✓\\'">کپی</button></div>';
         }
 
-        // Smart OS download
+        // Smart OS DL
         const ua = navigator.userAgent.toLowerCase();
         const sDiv = document.getElementById('smartDL');
         const nDiv = document.getElementById('normalDL');
         const sBtn = document.getElementById('smartBtn');
         const alt1 = document.getElementById('alt1');
         const alt2 = document.getElementById('alt2');
-        const aUrl = "$LNK_AND";
-        const iUrl = "$LNK_IOS";
-        const wUrl = "$LNK_WIN";
+        const aUrl = "__ANDROID__";
+        const iUrl = "__IOS__";
+        const wUrl = "__WIN__";
 
         if (ua.indexOf("android") > -1) {
             sDiv.style.display = "block"; nDiv.style.display = "none";
@@ -313,7 +367,7 @@ cat << EOF > "$TEMPLATE_FILE"
             alt2.innerHTML = "iOS"; alt2.href = iUrl;
         }
 
-        // Theme toggle & modals
+        // theme + modals
         function toggleTheme() {
             const b = document.body;
             const btn = document.querySelector('.circle-btn:last-child');
@@ -338,7 +392,18 @@ cat << EOF > "$TEMPLATE_FILE"
     </script>
 </body>
 </html>
-EOF
+HTML
+
+# Replace placeholders with user input
+sed -i "s|__BRAND__|$IN_BRAND|g" "$TEMPLATE_FILE"
+sed -i "s|__BOT__|$IN_BOT|g" "$TEMPLATE_FILE"
+sed -i "s|__SUP__|$IN_SUP|g" "$TEMPLATE_FILE"
+# Escape / in news text to keep sed safe
+NEWS_ESCAPED=$(printf '%s\n' "$IN_NEWS" | sed 's|/|\\/|g')
+sed -i "s|__NEWS__|$NEWS_ESCAPED|g" "$TEMPLATE_FILE"
+sed -i "s|__ANDROID__|$LNK_AND|g" "$TEMPLATE_FILE"
+sed -i "s|__IOS__|$LNK_IOS|g" "$TEMPLATE_FILE"
+sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
 
 # Update env to use this template
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE" 2>/dev/null
@@ -353,4 +418,4 @@ else
     systemctl restart pasarguard 2>/dev/null
 fi
 
-echo -e "${GREEN}✔ تم با موفقیت نصب شد. تاریخ انقضا مستقیماً از {{ user.expire_date }} نمایش داده می‌شود.${NC}"
+echo -e "${GREEN}✔ Theme Installed!${NC}"
