@@ -2,7 +2,7 @@
 
 # ==========================================
 # Theme: FarsNetVIP Ultimate (Glass / Liquid UI)
-# Status: FIXED GLASS VERSION
+# Status: FIXED GLASS VERSION + WORKING THEME TOGGLE
 # ==========================================
 
 # Colors
@@ -21,7 +21,6 @@ fi
 
 # Helper: Extract previous Brand value from existing HTML (Smart Default)
 get_prev() {
-    # فعلاً فقط برای brandTxt استفاده می‌شود
     if [ -f "$TEMPLATE_FILE" ]; then
         grep 'id="brandTxt"' "$TEMPLATE_FILE" | head -n1 | sed -E 's/.*id="brandTxt">([^<]+)<.*/\1/'
     fi
@@ -243,14 +242,13 @@ body::after {
     display: flex;
     justify-content: center;
     align-items: center;
-    cursor: pointer;
     font-size: 18px;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
     box-shadow:
         0 0 0 1px rgba(148, 163, 184, 0.5),
         0 18px 35px rgba(15, 23, 42, 0.9);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .theme-btn:hover {
     transform: translateY(-1px);
@@ -487,7 +485,7 @@ body::after {
 .dl-sec {
     margin-top: 24px;
     border-top: 1px solid var(--border);
-    padding-top: 16px;   /* قبلاً pt: 16px (اشتباه) بود */
+    padding-top: 16px;
 }
 .dl-title {
     font-size: 13px;
@@ -633,7 +631,8 @@ body::after {
                 <div class="brand" id="brandTxt">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-badge">🤖 @__BOT__</a>
             </div>
-            <div class="theme-btn" onclick="toggleTheme()">
+            <!-- دکمه تم بدون onclick، فقط با id -->
+            <div class="theme-btn" id="themeToggle">
                 <span id="themeIcon">🌙</span>
             </div>
         </div>
@@ -841,12 +840,10 @@ body::after {
             const icon = document.getElementById('themeIcon');
 
             if (root.getAttribute('data-theme') === 'light') {
-                // سوئیچ به حالت تیره
                 root.removeAttribute('data-theme');
                 localStorage.setItem('theme', 'dark');
                 if (icon) icon.innerText = '🌙';
             } else {
-                // سوئیچ به حالت روشن
                 root.setAttribute('data-theme', 'light');
                 localStorage.setItem('theme', 'light');
                 if (icon) icon.innerText = '☀️';
@@ -865,6 +862,18 @@ body::after {
             } else {
                 root.removeAttribute('data-theme');
                 if (icon) icon.innerText = '🌙';
+            }
+        })();
+
+        // اتصال دکمه تم بدون استفاده از onclick
+        (function bindThemeButton() {
+            var btn = document.getElementById('themeToggle');
+            if (btn) {
+                btn.style.cursor = 'pointer';
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    toggleTheme();
+                });
             }
         })();
 
@@ -889,7 +898,7 @@ sed -i "s|__ANDROID__|$LNK_AND|g" "$TEMPLATE_FILE"
 sed -i "s|__IOS__|$LNK_IOS|g" "$TEMPLATE_FILE"
 sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
 
-# Update Panel Config (.env) – امن‌تر
+# Update Panel Config (.env)
 if [ ! -f "$ENV_FILE" ]; then
     touch "$ENV_FILE"
 fi
