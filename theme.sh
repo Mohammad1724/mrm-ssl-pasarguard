@@ -12,7 +12,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Fix Calc) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -276,24 +276,20 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     </div>
 
     <script>
-        // Define Python variables first
         var subUrl = '{{ subscription_url }}';
         var totalStr = '{{ user.data_limit }}';
         var usedStr = '{{ user.used_traffic }}';
         var expireStr = '{{ user.expire }}';
         
         {% raw %}
-        // --- SAFE JS LOGIC ---
         
         if (!subUrl || subUrl === '' || subUrl.indexOf('{{') !== -1) {
             subUrl = window.location.href;
         }
 
-        // Update QR
         var qrImg = document.getElementById('qrImage');
         if (qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        // Theme
         var themeBtn = document.getElementById('themeBtn');
         var root = document.documentElement;
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); themeBtn.textContent = '☀️'; }
@@ -302,7 +298,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             else { root.classList.add('light'); themeBtn.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
-        // Data Calc
         var total = parseInt(totalStr) || 0;
         var used = parseInt(usedStr) || 0;
         var percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
@@ -312,7 +307,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         if (pText) pText.textContent = Math.round(percent) + '%';
         if (percent > 85 && pBar) pBar.style.background = '#ef4444';
 
-        // Format Bytes
         function formatBytes(b) {
             if (total === 0) return 'نامحدود'; if (b <= 0) return '0 MB';
             var units = ['B', 'KB', 'MB', 'GB', 'TB']; var i = Math.floor(Math.log(b) / Math.log(1024));
@@ -321,7 +315,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         var remEl = document.getElementById('remaining'); 
         if (remEl) remEl.textContent = formatBytes(total - used);
 
-        // DATE CONVERSION (SHAMSI)
         var expEl = document.getElementById('expDate');
         if (expEl) {
             var raw = expireStr.trim();
@@ -332,10 +325,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     var d = new Date(raw);
                     if (!isNaN(d.getTime())) {
                         var shamsi = d.toLocaleDateString('fa-IR');
-                        
-                        // Calculate Days Left
                         var now = new Date();
-                        var diff = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+                        var diff = Math.floor((d - now) / (1000 * 60 * 60 * 24)); // Fixed Calculation
                         var daysTxt = '';
                         
                         if (diff < 0) {
@@ -357,9 +348,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             }
         }
 
-        // Copy Logic
         function handleCopy(text) {
-            if (!text) text = subUrl;
+            if (!text || text.indexOf('{{') !== -1) text = subUrl;
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(showToast).catch(function() { fallbackCopy(text); });
             } else {
