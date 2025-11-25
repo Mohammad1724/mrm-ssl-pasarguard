@@ -240,215 +240,265 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         }
 
         /* ========== GLASS JELLY BUTTONS ========== */
-        .btn {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 50px;
-            border-radius: 16px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            overflow: hidden;
-            
-            /* Glass Effect */
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.15) 0%,
-                rgba(255, 255, 255, 0.05) 50%,
-                rgba(255, 255, 255, 0.02) 100%
-            );
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            
-            /* Jelly Border */
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-top: 1px solid rgba(255, 255, 255, 0.4);
-            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-            
-            /* Shadow for depth */
-            box-shadow: 
-                0 8px 32px rgba(0, 0, 0, 0.2),
-                inset 0 2px 4px rgba(255, 255, 255, 0.2),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-            
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+.btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 50px;
+    border-radius: 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    overflow: hidden;
+    
+    /* Glass Effect */
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(255, 255, 255, 0.02) 100%
+    );
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    
+    /* Jelly Border */
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    
+    /* Shadow for depth */
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 2px rgba(255, 255, 255, 0.15),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+    
+    color: var(--color-text);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
-        /* Inner Lamp Glow */
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: 25%;
-            width: 50%;
-            height: 100%;
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.4) 0%,
-                rgba(255, 255, 255, 0.1) 40%,
-                transparent 70%
-            );
-            opacity: 0.8;
-            transition: all 0.4s ease;
-            pointer-events: none;
-        }
+/* Inner Lamp Glow - ORANGE/PINK */
+.btn::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    left: 20%;
+    width: 60%;
+    height: 120%;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(249, 115, 22, 0.5) 0%,
+        rgba(236, 72, 153, 0.3) 30%,
+        transparent 70%
+    );
+    opacity: 0.6;
+    transition: all 0.4s ease;
+    pointer-events: none;
+}
 
-        /* Ripple/Shine Effect Layer */
-        .btn::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(
-                90deg,
-                transparent,
-                rgba(255, 255, 255, 0.3),
-                transparent
-            );
-            transition: left 0.5s ease;
-            pointer-events: none;
-        }
+/* Shine sweep */
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.25),
+        transparent
+    );
+    transition: left 0.5s ease;
+    pointer-events: none;
+}
 
-        /* Hover State */
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 
-                0 12px 40px rgba(0, 0, 0, 0.25),
-                inset 0 2px 6px rgba(255, 255, 255, 0.3),
-                inset 0 -2px 6px rgba(0, 0, 0, 0.1);
-        }
+/* Hover */
+.btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 
+        0 15px 40px rgba(0, 0, 0, 0.35),
+        inset 0 1px 3px rgba(255, 255, 255, 0.2),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.2);
+}
 
-        .btn:hover::before {
-            opacity: 1;
-            top: -30%;
-        }
+.btn:hover::before {
+    opacity: 0.9;
+    top: -40%;
+}
 
-        .btn:hover::after {
-            left: 100%;
-        }
+.btn:hover::after {
+    left: 100%;
+}
 
-        /* Active/Click State - Lamp Pulse */
-        .btn:active {
-            transform: scale(0.97) translateY(0);
-            box-shadow: 
-                0 4px 20px rgba(0, 0, 0, 0.2),
-                inset 0 3px 8px rgba(255, 255, 255, 0.4),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.15);
-        }
+/* Active - Lamp Flash */
+.btn:active {
+    transform: scale(0.97);
+    box-shadow: 
+        0 5px 20px rgba(0, 0, 0, 0.3),
+        inset 0 2px 8px rgba(255, 255, 255, 0.3),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+}
 
-        .btn:active::before {
-            opacity: 1;
-            top: -20%;
-            width: 80%;
-            left: 10%;
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.7) 0%,
-                rgba(255, 255, 255, 0.2) 50%,
-                transparent 80%
-            );
-        }
+.btn:active::before {
+    opacity: 1;
+    top: -30%;
+    width: 80%;
+    left: 10%;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 255, 255, 0.6) 0%,
+        rgba(249, 115, 22, 0.5) 40%,
+        rgba(236, 72, 153, 0.3) 60%,
+        transparent 80%
+    );
+}
 
-        /* PRIMARY BUTTON (Purple Glass) */
-        .btn-primary {
-            background: linear-gradient(
-                135deg,
-                rgba(124, 58, 237, 0.6) 0%,
-                rgba(124, 58, 237, 0.4) 50%,
-                rgba(79, 70, 229, 0.3) 100%
-            );
-            color: white;
-            border: 1px solid rgba(167, 139, 250, 0.3);
-            border-top: 1px solid rgba(167, 139, 250, 0.5);
-            box-shadow: 
-                0 8px 32px rgba(124, 58, 237, 0.3),
-                inset 0 2px 4px rgba(255, 255, 255, 0.2),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-        }
+/* PRIMARY BUTTON */
+.btn-primary {
+    background: linear-gradient(
+        135deg,
+        rgba(124, 58, 237, 0.5) 0%,
+        rgba(124, 58, 237, 0.3) 50%,
+        rgba(79, 70, 229, 0.2) 100%
+    );
+    color: white;
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    border-top: 1px solid rgba(167, 139, 250, 0.4);
+    box-shadow: 
+        0 8px 32px rgba(124, 58, 237, 0.25),
+        inset 0 1px 2px rgba(255, 255, 255, 0.2),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.15);
+}
 
-        .btn-primary:hover {
-            box-shadow: 
-                0 12px 40px rgba(124, 58, 237, 0.4),
-                inset 0 2px 6px rgba(255, 255, 255, 0.3),
-                inset 0 -2px 6px rgba(0, 0, 0, 0.1);
-        }
+.btn-primary::before {
+    background: radial-gradient(
+        ellipse at center,
+        rgba(167, 139, 250, 0.6) 0%,
+        rgba(249, 115, 22, 0.4) 40%,
+        transparent 70%
+    );
+}
 
-        .btn-primary:active {
-            box-shadow: 
-                0 4px 20px rgba(124, 58, 237, 0.35),
-                inset 0 3px 10px rgba(255, 255, 255, 0.5),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.15);
-        }
+.btn-primary:hover {
+    box-shadow: 
+        0 15px 45px rgba(124, 58, 237, 0.35),
+        inset 0 1px 3px rgba(255, 255, 255, 0.25),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.15);
+}
 
-        .btn-primary::before {
-            background: radial-gradient(
-                ellipse at center,
-                rgba(167, 139, 250, 0.6) 0%,
-                rgba(167, 139, 250, 0.2) 40%,
-                transparent 70%
-            );
-        }
+.btn-primary:active::before {
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 255, 255, 0.7) 0%,
+        rgba(167, 139, 250, 0.5) 40%,
+        rgba(249, 115, 22, 0.4) 60%,
+        transparent 80%
+    );
+}
 
-        .btn-primary:active::before {
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.8) 0%,
-                rgba(167, 139, 250, 0.4) 50%,
-                transparent 80%
-            );
-        }
+/* SECONDARY BUTTON */
+.btn-secondary {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        rgba(255, 255, 255, 0.02) 100%
+    );
+    color: var(--color-text);
+}
 
-        /* SECONDARY BUTTON (Clear Glass) */
-        .btn-secondary {
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.12) 0%,
-                rgba(255, 255, 255, 0.06) 50%,
-                rgba(255, 255, 255, 0.02) 100%
-            );
-            color: var(--color-text);
-        }
+/* ========== LIGHT MODE BUTTONS ========== */
+:root.light .btn {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(255, 255, 255, 0.7) 40%,
+        rgba(240, 240, 245, 0.5) 100%
+    );
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-top: 2px solid rgba(255, 255, 255, 1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.12),
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        inset 0 2px 4px rgba(255, 255, 255, 1),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.04);
+    color: var(--color-text);
+}
 
-        /* Light Mode Button Adjustments */
-        :root.light .btn {
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.7) 0%,
-                rgba(255, 255, 255, 0.4) 50%,
-                rgba(255, 255, 255, 0.2) 100%
-            );
-            border: 1px solid rgba(0, 0, 0, 0.08);
-            border-top: 1px solid rgba(255, 255, 255, 0.9);
-            box-shadow: 
-                0 8px 32px rgba(0, 0, 0, 0.1),
-                inset 0 2px 4px rgba(255, 255, 255, 0.8),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.05);
-        }
+:root.light .btn::before {
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 255, 255, 0.9) 0%,
+        rgba(249, 115, 22, 0.25) 40%,
+        transparent 70%
+    );
+    opacity: 0.7;
+}
 
-        :root.light .btn-primary {
-            background: linear-gradient(
-                135deg,
-                rgba(124, 58, 237, 0.8) 0%,
-                rgba(124, 58, 237, 0.6) 50%,
-                rgba(79, 70, 229, 0.5) 100%
-            );
-            border: 1px solid rgba(124, 58, 237, 0.3);
-            border-top: 1px solid rgba(167, 139, 250, 0.6);
-        }
+:root.light .btn:hover {
+    box-shadow: 
+        0 15px 40px rgba(0, 0, 0, 0.15),
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        inset 0 2px 6px rgba(255, 255, 255, 1),
+        inset 0 -2px 6px rgba(0, 0, 0, 0.05);
+}
 
-        :root.light .btn-secondary {
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.8) 0%,
-                rgba(255, 255, 255, 0.5) 50%,
-                rgba(255, 255, 255, 0.3) 100%
-            );
-            color: var(--color-text);
+:root.light .btn:active {
+    box-shadow: 
+        0 4px 16px rgba(0, 0, 0, 0.12),
+        inset 0 3px 10px rgba(255, 255, 255, 1),
+        inset 0 -1px 4px rgba(0, 0, 0, 0.06);
+}
+
+:root.light .btn:active::before {
+    opacity: 1;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 255, 255, 1) 0%,
+        rgba(249, 115, 22, 0.4) 50%,
+        transparent 80%
+    );
+}
+
+:root.light .btn-primary {
+    background: linear-gradient(
+        135deg,
+        rgba(124, 58, 237, 0.9) 0%,
+        rgba(124, 58, 237, 0.75) 50%,
+        rgba(79, 70, 229, 0.6) 100%
+    );
+    border: 1px solid rgba(124, 58, 237, 0.3);
+    border-top: 2px solid rgba(167, 139, 250, 0.7);
+    box-shadow: 
+        0 8px 32px rgba(124, 58, 237, 0.3),
+        0 2px 8px rgba(124, 58, 237, 0.2),
+        inset 0 2px 4px rgba(255, 255, 255, 0.3),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+    color: white;
+}
+
+:root.light .btn-primary::before {
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 255, 255, 0.6) 0%,
+        rgba(167, 139, 250, 0.4) 40%,
+        transparent 70%
+    );
+}
+
+:root.light .btn-secondary {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(255, 255, 255, 0.8) 40%,
+        rgba(245, 245, 250, 0.6) 100%
+    );
+    color: var(--color-text);
+}
         }
 
         .btn-grid {
