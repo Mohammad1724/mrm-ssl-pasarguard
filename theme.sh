@@ -16,7 +16,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme (Multi-App Support) ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Buttons Restored) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -109,7 +109,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         :root.light .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border-color: rgba(255,255,255,0.8); color: var(--txt); }
         :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); color: white; }
 
-        .btn-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+        /* TWO COLUMNS FOR COPY & QR (RESTORED) */
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
@@ -127,14 +128,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .cin { width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; }
         #cph { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
 
-        /* APP SELECTOR LIST */
         .app-list { display: grid; gap: 8px; margin-top: 10px; }
-        .app-btn {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 16px; background: rgba(255,255,255,0.08);
-            border-radius: 12px; color: white; text-decoration: none;
-            border: 1px solid var(--brd); transition: 0.2s;
-        }
+        .app-btn { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.08); border-radius: 12px; color: white; text-decoration: none; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
         .app-btn:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
         .app-icon { font-size: 18px; margin-left: 10px; }
     </style>
@@ -163,11 +158,13 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     </div>
                     <div class="pw"><div class="pf" id="pb"></div></div>
                     <div class="pt"><span>مصرف شده</span><span id="pt">0%</span></div>
-                    <div class="bg">
+                    
+                    <!-- Two columns for Copy & QR -->
+                    <div class="btn-grid">
                         <button class="btn btn-p" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
-                    <!-- OPEN APP SELECTOR MODAL -->
+                    
                     <button class="btn btn-s" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
                     <a href="https://t.me/__SUP__" style="display:block; text-align:center; margin-top:15px; color:var(--mute); font-size:13px; text-decoration:none">💬 پشتیبانی</a>
@@ -189,7 +186,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         </div>
     </div>
 
-    <!-- APP SELECTION MODAL -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
             <h3>انتخاب برنامه</h3>
@@ -295,31 +291,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         function om(i) { document.getElementById(i).style.display='flex'; }
         function cm(i) { document.getElementById(i).style.display='none'; }
 
-        // --- MULTI-APP OPENER LOGIC ---
         function openApp(app) {
-            var t = subUrl;
-            var name = document.title;
-            var link = '';
-
-            if(app === 'v2rayng') {
-                link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
-            } else if(app === 'hiddify') {
-                link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
-            } else if(app === 'v2raytun') {
-                link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
-            } else if(app === 'happ') {
-                link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
-            } else {
-                // iOS / Universal (Base64 Sub)
-                try {
-                    var b64 = btoa(t);
-                    link = 'sub://' + b64 + '#' + encodeURIComponent(name);
-                } catch(e) { link = t; }
-            }
-            
-            window.location.href = link;
-            // Close modal after click
-            setTimeout(function(){ cm('appMod'); }, 500);
+            var t = subUrl; var n = document.title; var l = '';
+            if(app === 'v2rayng') l = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'hiddify') l = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'v2raytun') l = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'happ') l = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else { try { var b = btoa(t); l = 'sub://' + b + '#' + encodeURIComponent(n); } catch(e) { l = t; } }
+            window.location.href = l; setTimeout(function(){ cm('appMod'); }, 500);
         }
 
         function sc() {
