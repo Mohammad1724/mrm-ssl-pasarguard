@@ -2,7 +2,7 @@
 
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
 
-# Force UTF-8 for terminal
+# Force UTF-8
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
@@ -16,7 +16,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme (Anti-Crash Version) ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Precision Fix) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -37,7 +37,6 @@ LNK_WIN="https://github.com/2dust/v2rayN/releases"
 echo -e "\n${BLUE}Installing...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# Generate HTML
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -48,6 +47,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800&display=swap');
         
+        /* DARK MODE */
         :root {
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.8); --brd: rgba(255, 255, 255, 0.1);
@@ -55,10 +55,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --sec: rgba(255, 255, 255, 0.1);
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.3);
         }
+        /* LIGHT MODE */
         :root.light {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.9); --brd: rgba(0, 0, 0, 0.1);
-            --pri: rgba(14, 165, 233, 0.9); /* Sky Blue */
+            --pri: rgba(14, 165, 233, 0.9);
             --sec: rgba(0, 0, 0, 0.08);
             --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.2);
         }
@@ -66,7 +67,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 60px 20px 20px; transition: 0.3s; }
         
-        .orb { position: fixed; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); z-index: -1; pointer-events: none; }
+        .orb { position: fixed; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -100px; right: -50px; background: var(--g1); } .o2 { bottom: -100px; left: -50px; background: var(--g2); }
 
         .ticker { position: fixed; top: 0; left: 0; width: 100%; height: 40px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); display: flex; align-items: center; overflow: hidden; z-index: 100; }
@@ -78,9 +79,10 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .br { font-size: 24px; font-weight: 800; }
         .bl { display: inline-block; margin-top: 5px; font-size: 12px; color: var(--mute); text-decoration: none; background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 20px; }
         
-        .tb { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .tb { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .tb:active { transform: scale(0.9); }
 
-        .card { background: var(--card); border: 1px solid var(--brd); border-radius: 20px; padding: 24px; backdrop-filter: blur(20px); }
+        .card { background: var(--card); border: 1px solid var(--brd); border-radius: 20px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
         .grid { display: grid; gap: 24px; } @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
         .prof { display: flex; gap: 15px; align-items: center; margin-bottom: 20px; }
@@ -94,10 +96,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .pf { height: 100%; background: linear-gradient(90deg, #10b981, #f59e0b); width: 0%; transition: width 1s; }
         .pt { display: flex; justify-content: space-between; font-size: 12px; color: var(--mute); margin-bottom: 20px; }
 
-        /* BTNS */
+        /* GLASS BUTTONS */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 16px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02)); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.15); border-top: 1px solid rgba(255,255,255,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.3); color: var(--txt); transition: 0.3s; }
         .btn::before { content: ''; position: absolute; top: -60%; left: 20%; width: 60%; height: 120%; background: radial-gradient(ellipse, rgba(249,115,22,0.5), transparent 70%); opacity: 0.6; pointer-events: none; }
         .btn:active { transform: scale(0.97); }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
         
         .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.6), rgba(2,132,199,0.3)); color: white; border-color: rgba(56,189,248,0.3); }
         .btn-p::before { background: radial-gradient(ellipse, rgba(56,189,248,0.6), transparent 70%); }
@@ -159,8 +162,9 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 <div>
                     <div class="stats">
                         <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
-                        <div class="sb"><div class="sl">حجم کل</div><div class="sv">{{ user.data_limit | filesizeformat }}</div></div>
-                        <div class="sb"><div class="sl">مصرف شده</div><div class="sv">{{ user.used_traffic | filesizeformat }}</div></div>
+                        <!-- We use IDs to overwrite these values with JS for precision -->
+                        <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
+                        <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
                         <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
                     </div>
                     <div class="dls">
@@ -218,7 +222,18 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         document.getElementById('pb').style.width = per+'%'; document.getElementById('pt').textContent = Math.round(per)+'%';
         if(per>85) document.getElementById('pb').style.background = '#ef4444';
 
-        function fb(b) { if(tot===0) return 'نامحدود'; if(b<=0) return '0 MB'; var u=['B','KB','MB','GB','TB']; var i=Math.floor(Math.log(b)/Math.log(1024)); return (b/Math.pow(1024,i)).toFixed(2)+' '+u[i]; }
+        // Standard 1024 (GiB) Formatter
+        function fb(b) { 
+            if(tot===0) return 'نامحدود'; 
+            if(b<=0) return '0 B'; 
+            var u=['B','KB','MB','GB','TB']; 
+            var i=Math.floor(Math.log(b)/Math.log(1024)); 
+            return parseFloat((b/Math.pow(1024,i)).toFixed(2))+' '+u[i]; 
+        }
+        
+        // OVERWRITE ALL STATS WITH JS PRECISION
+        document.getElementById('totDisp').textContent = fb(tot);
+        document.getElementById('useDisp').textContent = fb(use);
         document.getElementById('rem').textContent = fb(tot-use);
 
         var ed = document.getElementById('ed');
@@ -242,7 +257,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         function hc(t) {
             if(!t || t.indexOf('{{') !== -1) t = subUrl;
             if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(st).catch(function(){fbc(t)});
-            else fb(t);
+            else fbc(t);
         }
         function fbc(t) {
             var h = document.getElementById('cph');
@@ -250,10 +265,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             try { if(document.execCommand('copy')) st(); else omc(t); } catch(e){ omc(t); }
             h.style.display='none';
         }
-        function omc(t) {
-            document.getElementById('cpi').value = t;
-            om('cpm');
-        }
+        function omc(t) { document.getElementById('cpi').value = t; om('cpm'); }
         function st() { var t=document.getElementById('toast'); t.classList.add('sh'); setTimeout(function(){t.classList.remove('sh')},2000); }
         function om(i) { document.getElementById(i).style.display='flex'; }
         function cm(i) { document.getElementById(i).style.display='none'; }
@@ -284,7 +296,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 </html>
 EOF
 
-# Fix Encoding (The Magic Fix)
+# Fix Encoding (Important for 500 Error)
 python3 -c "import sys; f='$TEMPLATE_FILE'; d=open(f,'rb').read(); open(f,'w',encoding='utf-8').write(d.decode('utf-8','ignore'))"
 
 # Replacements
@@ -303,4 +315,4 @@ echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}✔ Done! (Anti-Crash Mode)${NC}"
+echo -e "${GREEN}✔ Done!${NC}"
