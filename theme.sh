@@ -50,10 +50,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #888888;
             --color-card: rgba(25, 25, 30, 0.8);
             --color-border: rgba(255, 255, 255, 0.1);
-            
-            /* Sky Blue Primary Button */
             --color-btn-primary: rgba(56, 189, 248, 0.8);
-            
             --color-btn-secondary: rgba(255, 255, 255, 0.1);
             --color-glow-1: rgba(249, 115, 22, 0.4);
             --color-glow-2: rgba(59, 130, 246, 0.3);
@@ -66,10 +63,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #666666;
             --color-card: rgba(255, 255, 255, 0.9);
             --color-border: rgba(0, 0, 0, 0.1);
-            
-            /* Sky Blue Primary Button */
             --color-btn-primary: rgba(14, 165, 233, 0.9);
-            
             --color-btn-secondary: rgba(0, 0, 0, 0.08);
             --color-glow-1: rgba(249, 115, 22, 0.2);
             --color-glow-2: rgba(59, 130, 246, 0.2);
@@ -198,9 +192,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            /* Light Orange Gradient */
             background: linear-gradient(135deg, #fbbf24, #f97316);
-            /* Dark Brown Icon Color */
             color: #7c2d12;
             display: flex;
             align-items: center;
@@ -473,6 +465,18 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             background: #1a1a1a; padding: 24px; border-radius: 20px; text-align: center;
             width: 90%; max-width: 350px; color: white;
         }
+        /* Manual Copy Input Style */
+        .copy-input {
+            width: 100%;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -518,7 +522,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-primary" onclick="doCopy('{{ subscription_url }}')">کپی لینک</button>
+                        <button class="btn btn-primary" onclick="handleCopy('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-secondary" onclick="openModal('qrModal')">QR Code</button>
                     </div>
                     <a href="{{ subscription_url }}" class="btn btn-secondary" style="width:100%; margin-bottom:10px">🚀 اتصال مستقیم</a>
@@ -578,6 +582,17 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         </div>
     </div>
 
+    <!-- Fallback Copy Modal -->
+    <div class="modal" id="copyModal" onclick="if(event.target===this)closeModal('copyModal')">
+        <div class="modal-box">
+            <h3>کپی دستی</h3>
+            <p style="font-size:12px; color:#aaa">کپی خودکار انجام نشد. لطفاً لینک زیر را کپی کنید:</p>
+            <input type="text" class="copy-input" id="manualCopyInput" readonly>
+            <br><br>
+            <button class="btn btn-secondary" style="background:#333; color:white" onclick="closeModal('copyModal')">بستن</button>
+        </div>
+    </div>
+
     <script>
         var themeBtn = document.getElementById('themeBtn');
         var root = document.documentElement;
@@ -631,17 +646,17 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             }
         }
 
-        // === ULTIMATE COPY FUNCTION (SAFE & ROBUST) ===
-        function doCopy(text) {
-            if(!text) return;
+        // === ROBUST COPY LOGIC ===
+        function handleCopy(text) {
+            if (!text) return;
             
-            // 1. Try Standard API (HTTPS)
+            // 1. Modern API (Secure Context)
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text)
                     .then(showToast)
                     .catch(function() { fallbackCopy(text); });
             } else {
-                // 2. Fallback (HTTP / Older Browsers)
+                // 2. Legacy API
                 fallbackCopy(text);
             }
         }
@@ -650,36 +665,42 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             var ta = document.createElement('textarea');
             ta.value = text;
             
-            // Ensure element is part of DOM but invisible (Correct way for iOS)
+            // Make it invisible but part of layout
             ta.style.position = 'fixed';
             ta.style.left = '0';
             ta.style.top = '0';
             ta.style.opacity = '0';
-            ta.setAttribute('readonly', ''); // Prevents keyboard from showing
+            ta.setAttribute('readonly', '');
             
             document.body.appendChild(ta);
             
-            // iOS-Specific Selection
             var range = document.createRange();
             range.selectNodeContents(ta);
             var sel = window.getSelection();
             sel.removeAllRanges();
             sel.addRange(range);
-            ta.setSelectionRange(0, 999999); // Big range for mobile
+            ta.setSelectionRange(0, 999999);
 
             try {
                 var successful = document.execCommand('copy');
                 if (successful) {
                     showToast();
                 } else {
-                    throw new Error('Copy command failed');
+                    openManualCopy(text); // Failed? Open Modal
                 }
             } catch (err) {
-                // 3. Nuclear Option: Prompt User
-                prompt('لینک زیر را کپی کنید:', text);
+                openManualCopy(text); // Error? Open Modal
             }
             
             document.body.removeChild(ta);
+        }
+
+        function openManualCopy(text) {
+            var modal = document.getElementById('copyModal');
+            var input = document.getElementById('manualCopyInput');
+            input.value = text;
+            modal.style.display = 'flex';
+            input.select();
         }
 
         function showToast() {
@@ -699,14 +720,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 .then(function(r) { return r.text(); })
                 .then(function(text) {
                     if (text) {
-                        list.innerHTML = '<button class="btn btn-primary" style="height:32px; font-size:12px; margin-bottom:10px; width:100%" onclick="doCopy(\'' + text.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
+                        list.innerHTML = '<button class="btn btn-primary" style="height:32px; font-size:12px; margin-bottom:10px; width:100%" onclick="handleCopy(\'' + text.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
                         var lines = text.split('\n');
                         lines.forEach(function(line) {
                             var l = line.trim();
                             if (l && (l.indexOf('vmess') === 0 || l.indexOf('vless') === 0 || l.indexOf('trojan') === 0 || l.indexOf('ss://') === 0)) {
                                 var name = 'Config';
                                 if (l.indexOf('#') > -1) name = decodeURIComponent(l.split('#')[1]);
-                                list.innerHTML += '<div style="background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center"><span>' + name + '</span><button class="btn btn-secondary" style="width:auto; height:28px; padding:0 12px; font-size:11px" onclick="doCopy(\'' + l + '\')">کپی</button></div>';
+                                list.innerHTML += '<div style="background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center"><span>' + name + '</span><button class="btn btn-secondary" style="width:auto; height:28px; padding:0 12px; font-size:11px" onclick="handleCopy(\'' + l + '\')">کپی</button></div>';
                             }
                         });
                     }
