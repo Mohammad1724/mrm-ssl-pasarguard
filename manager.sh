@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # ==========================================
-# FarsNetVIP Theme Manager (Direct HTML Edit)
+# FarsNetVIP Theme Manager (for new Glass UI)
 # ==========================================
 
-# Target File (Now editing index.html directly to avoid 404 errors)
 TARGET_FILE="/var/lib/pasarguard/templates/subscription/index.html"
 
 # Colors
@@ -15,31 +14,109 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# ---- Safety: root check ----
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Error: Please run this script as root (sudo).${NC}"
+    exit 1
+fi
+
 # Check if theme is installed
 if [ ! -f "$TARGET_FILE" ]; then
     echo -e "${RED}Error: Theme not found! Please run theme.sh first.${NC}"
     exit 1
 fi
 
-# --- FUNCTIONS ---
+# ---- Helpers ----
 
-# Get current value from JS object inside HTML
-get_current_val() {
-    # Grep finds the line, Sed extracts content between quotes
-    grep "$1:" "$TARGET_FILE" | sed -n 's/.*: "\(.*\)",/\1/p'
+sed_escape() {
+    # Escape & / \ برای استفاده در sed
+    printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
 }
 
-# Update value in HTML
-update_config() {
-    KEY=$1
-    NEW_VAL=$2
-    
-    # We use | as delimiter for sed to allow slashes / in URLs
-    # This regex looks for:  key: "anything",   and replaces it
-    sed -i "s|$KEY: \".*\"|$KEY: \"$NEW_VAL\"|g" "$TARGET_FILE"
-    
-    echo -e "${GREEN}✔ Updated Successfully!${NC}"
-    sleep 1
+# خواندن مقادیر فعلی از HTML
+
+get_brand() {
+    sed -n 's/.*id="brandTxt">\([^<]*\).*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_news() {
+    sed -n 's/.*id="newsTxt">\([^<]*\).*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_bot_user() {
+    # از href لینک با کلاس bot-badge
+    sed -n '/class="bot-badge"/ s/.*href="https:\/\/t.me\/\([^"]*\)".*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_support_user() {
+    # از href لینکی که پشتیبانی است (دارای رنگ muted-fg)
+    sed -n '/color:var(--muted-fg)/ s/.*href="https:\/\/t.me\/\([^"]*\)".*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_android_url() {
+    sed -n '/id="dlAnd"/ s/.*href="\([^"]*\)".*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_ios_url() {
+    sed -n '/id="dlIos"/ s/.*href="\([^"]*\)".*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+get_win_url() {
+    sed -n '/id="dlWin"/ s/.*href="\([^"]*\)".*/\1/p' "$TARGET_FILE" | head -n1
+}
+
+# آپدیت مقادیر
+
+update_brand() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "s|\(id=\"brandTxt\">\)[^<]*\(<\)|\1$ESC\2|" "$TARGET_FILE"
+}
+
+update_news() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "s|\(id=\"newsTxt\">\)[^<]*\(<\)|\1$ESC\2|" "$TARGET_FILE"
+}
+
+update_bot_user() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    # href
+    sed -i "/class=\"bot-badge\"/ s|\(href=\"https://t.me/\)[^\"]*|\1$ESC|" "$TARGET_FILE"
+    # متن @username
+    sed -i "/class=\"bot-badge\"/ s|@[^<]*|@$ESC|" "$TARGET_FILE"
+}
+
+update_support_user() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "/color:var(--muted-fg)/ s|\(href=\"https://t.me/\)[^\"]*|\1$ESC|" "$TARGET_FILE"
+}
+
+update_android_url() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "/id=\"dlAnd\"/ s|\(href=\"\)[^\"]*|\1$ESC|" "$TARGET_FILE"
+}
+
+update_ios_url() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "/id=\"dlIos\"/ s|\(href=\"\)[^\"]*|\1$ESC|" "$TARGET_FILE"
+}
+
+update_win_url() {
+    local NEW_VAL="$1"
+    local ESC
+    ESC=$(sed_escape "$NEW_VAL")
+    sed -i "/id=\"dlWin\"/ s|\(href=\"\)[^\"]*|\1$ESC|" "$TARGET_FILE"
 }
 
 # --- MENU ---
@@ -49,89 +126,94 @@ while true; do
     echo -e "${CYAN}========================================${NC}"
     echo -e "${YELLOW}      FarsNetVIP Theme Manager          ${NC}"
     echo -e "${CYAN}========================================${NC}"
-    
+
     echo -e "${BLUE}--- General ---${NC}"
     echo "1) Edit Brand Name"
     echo "2) Edit News Ticker"
-    
+
     echo -e "\n${BLUE}--- Contact ---${NC}"
     echo "3) Edit Bot Username"
     echo "4) Edit Support ID"
-    
+
     echo -e "\n${BLUE}--- App Links ---${NC}"
     echo "5) Edit Android URL"
     echo "6) Edit iOS URL"
     echo "7) Edit Windows URL"
-    
-    echo -e "\n${BLUE}--- Tutorial ---${NC}"
-    echo "8) Edit Step 1 Text"
-    echo "9) Edit Step 2 Text"
-    echo "10) Edit Step 3 Text"
-    
+
     echo -e "\n${RED}0) Exit${NC}"
     echo -e "${CYAN}========================================${NC}"
     read -p "Select Option: " OPT
 
     case $OPT in
         1)
-            CUR=$(get_current_val "brandName")
+            CUR=$(get_brand)
             echo -e "Current: ${YELLOW}$CUR${NC}"
             read -p "New Brand Name: " VAL
-            if [ ! -z "$VAL" ]; then update_config "brandName" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_brand "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         2)
-            CUR=$(get_current_val "newsText")
+            CUR=$(get_news)
             echo -e "Current: ${YELLOW}$CUR${NC}"
             read -p "New News Text: " VAL
-            if [ ! -z "$VAL" ]; then update_config "newsText" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_news "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         3)
-            CUR=$(get_current_val "botUsername")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
+            CUR=$(get_bot_user)
+            echo -e "Current Bot Username: ${YELLOW}$CUR${NC}"
             read -p "New Bot User (no @): " VAL
-            if [ ! -z "$VAL" ]; then update_config "botUsername" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_bot_user "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         4)
-            CUR=$(get_current_val "supportID")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
+            CUR=$(get_support_user)
+            echo -e "Current Support ID: ${YELLOW}$CUR${NC}"
             read -p "New Support ID (no @): " VAL
-            if [ ! -z "$VAL" ]; then update_config "supportID" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_support_user "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         5)
-            CUR=$(get_current_val "androidUrl")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
+            CUR=$(get_android_url)
+            echo -e "Current Android URL: ${YELLOW}$CUR${NC}"
             read -p "New Android URL: " VAL
-            if [ ! -z "$VAL" ]; then update_config "androidUrl" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_android_url "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         6)
-            CUR=$(get_current_val "iosUrl")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
+            CUR=$(get_ios_url)
+            echo -e "Current iOS URL: ${YELLOW}$CUR${NC}"
             read -p "New iOS URL: " VAL
-            if [ ! -z "$VAL" ]; then update_config "iosUrl" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_ios_url "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         7)
-            CUR=$(get_current_val "winUrl")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
+            CUR=$(get_win_url)
+            echo -e "Current Windows URL: ${YELLOW}$CUR${NC}"
             read -p "New Windows URL: " VAL
-            if [ ! -z "$VAL" ]; then update_config "winUrl" "$VAL"; fi
-            ;;
-        8)
-            CUR=$(get_current_val "tut1")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
-            read -p "New Step 1: " VAL
-            if [ ! -z "$VAL" ]; then update_config "tut1" "$VAL"; fi
-            ;;
-        9)
-            CUR=$(get_current_val "tut2")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
-            read -p "New Step 2: " VAL
-            if [ ! -z "$VAL" ]; then update_config "tut2" "$VAL"; fi
-            ;;
-        10)
-            CUR=$(get_current_val "tut3")
-            echo -e "Current: ${YELLOW}$CUR${NC}"
-            read -p "New Step 3: " VAL
-            if [ ! -z "$VAL" ]; then update_config "tut3" "$VAL"; fi
+            if [ -n "$VAL" ]; then
+                update_win_url "$VAL"
+                echo -e "${GREEN}✔ Updated Successfully!${NC}"
+                sleep 1
+            fi
             ;;
         0)
             echo -e "${GREEN}Exiting...${NC}"
