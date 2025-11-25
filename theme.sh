@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP Ultimate (Certified Gold)
-# Status: Bug Free | Responsive | Smart OS
+# Theme: FarsNetVIP Ultimate (FIXED 404)
+# Status: NO External JS Files
 # ==========================================
 
 # Colors
@@ -11,14 +11,13 @@ CYAN='\033[0;36m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; NC='\033[0m'
 # Paths
 TEMPLATE_DIR="/var/lib/pasarguard/templates/subscription"
 TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
-CONFIG_FILE="$TEMPLATE_DIR/theme_config.js"
 ENV_FILE="/opt/pasarguard/.env"
 
-# Helper
-get_val() { if [ -f "$CONFIG_FILE" ]; then grep "$1:" "$CONFIG_FILE" | sed -n 's/.*: "\(.*\)",/\1/p'; fi; }
+# Helper to get old value
+get_val() { if [ -f "$TEMPLATE_FILE" ]; then grep "$1:" "$TEMPLATE_FILE" | sed -n 's/.*: "\(.*\)",/\1/p'; fi; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Final Installer ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Installer (Final Fix) ===${NC}"
 
 # --- LOAD DEFAULTS ---
 DEF_BRAND=${1:-$(get_val "brandName")}; DEF_BRAND=${DEF_BRAND:-"FarsNetVIP"}
@@ -40,25 +39,7 @@ read -p "Support ID (no @) [$DEF_SUPPORT]: " IN_SUP; IN_SUP=${IN_SUP:-$DEF_SUPPO
 echo -e "\n${BLUE}Installing...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# 1. Generate Config JS
-cat << EOF > "$CONFIG_FILE"
-const THEME_CONFIG = {
-    brandName: "$IN_BRAND",
-    botUsername: "$IN_BOT",
-    supportID: "$IN_SUP",
-    newsText: "$IN_NEWS",
-    
-    tut1: "1. نرم‌افزار را دانلود کنید.",
-    tut2: "2. لینک را کپی کنید.",
-    tut3: "3. در برنامه Paste و متصل شوید.",
-    
-    androidUrl: "https://play.google.com/store/apps/details?id=com.v2ray.ang",
-    iosUrl: "https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690",
-    winUrl: "https://github.com/2dust/v2rayN/releases"
-};
-EOF
-
-# 2. Generate HTML
+# Generate HTML (NO external script calls)
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -91,15 +72,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             font-family: 'Vazirmatn', sans-serif; background: var(--bg-body); 
             background-attachment: fixed; color: var(--text-main); min-height: 100vh; 
             display: flex; flex-direction: column; align-items: center; 
-            padding: 15px; padding-top: 60px; padding-bottom: 40px; /* Safety padding */
+            padding: 15px; padding-top: 60px; padding-bottom: 40px;
         }
         
-        /* Ticker */
         .ticker-wrap { position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); height: 40px; overflow: hidden; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .ticker { display: inline-block; white-space: nowrap; padding-right: 100%; animation: ticker 25s linear infinite; line-height: 40px; font-size: 12px; color: #fff; font-weight: 500; }
         @keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(100%, 0, 0); } }
 
-        .container { width: 100%; max-width: 900px; }
+        .container { width: 100%; max-width: 900px; margin-top: 15px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 0 5px; }
         .brand { font-size: 28px; font-weight: 900; background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .bot-link { font-size: 12px; background: var(--btn-bg); padding: 4px 12px; border-radius: 15px; text-decoration: none; color: var(--text-main); border: 1px solid var(--btn-border); display: inline-block; margin-top: 5px; font-weight: bold; }
@@ -107,14 +87,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .circle-btn { width: 42px; height: 42px; border-radius: 50%; background: var(--btn-bg); border: 1px solid var(--btn-border); display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 18px; backdrop-filter: blur(5px); transition: 0.2s; }
         .circle-btn:active { transform: scale(0.9); }
         
-        /* Alert */
         .alert-box { display: none; background: var(--alert-bg); border: 1px solid var(--alert-txt); color: var(--alert-txt); padding: 10px; border-radius: 15px; text-align: center; font-weight: bold; font-size: 12px; margin-bottom: 15px; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
-        /* Card */
         .main-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 35px; padding: 30px; backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: var(--shadow); }
         
-        /* Responsive Layout */
         .layout-row { display: flex; flex-direction: column; gap: 30px; }
         @media (min-width: 768px) { 
             .layout-row { flex-direction: row; align-items: stretch; } 
@@ -236,55 +213,62 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <div id="tutModal" class="modal-overlay"><div class="modal-box"><h3>راهنما</h3><br><div class="tut-row" id="t1"></div><div class="tut-row" id="t2"></div><div class="tut-row" id="t3"></div><button class="close-btn" onclick="closeModal('tutModal')">باشه</button></div></div>
     
     <script>
-        // Cache Buster for config
-        var s = document.createElement("script");
-        s.src = "theme_config.js?v=" + Date.now();
-        s.onload = function() { applyConfig(); };
-        document.body.appendChild(s);
+        // --- INLINE CONFIG (No external file) ---
+        const THEME_CONFIG = {
+            brandName: "$IN_BRAND",
+            botUsername: "$IN_BOT",
+            supportID: "$IN_SUP",
+            newsText: "$IN_NEWS",
+            tut1: "$TUT_1",
+            tut2: "$TUT_2",
+            tut3: "$TUT_3",
+            androidUrl: "https://play.google.com/store/apps/details?id=com.v2ray.ang",
+            iosUrl: "https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690",
+            winUrl: "https://github.com/2dust/v2rayN/releases"
+        };
 
-        function applyConfig() {
-            if(typeof THEME_CONFIG !== 'undefined') {
-                document.title = THEME_CONFIG.brandName;
-                document.getElementById('brandTxt').innerText = THEME_CONFIG.brandName;
-                document.getElementById('newsTxt').innerText = THEME_CONFIG.newsText;
-                document.getElementById('botLink').innerText = '🤖 @' + THEME_CONFIG.botUsername;
-                document.getElementById('botLink').href = 'https://t.me/' + THEME_CONFIG.botUsername;
-                document.getElementById('supportLink').href = 'https://t.me/' + THEME_CONFIG.supportID;
-                document.getElementById('t1').innerText = THEME_CONFIG.tut1;
-                document.getElementById('t2').innerText = THEME_CONFIG.tut2;
-                document.getElementById('t3').innerText = THEME_CONFIG.tut3;
-                document.getElementById('lnkAnd').href = THEME_CONFIG.androidUrl;
-                document.getElementById('lnkIos').href = THEME_CONFIG.iosUrl;
-                document.getElementById('lnkWin').href = THEME_CONFIG.winUrl;
-                
-                // Smart OS Logic using Config URLs
-                const ua = navigator.userAgent.toLowerCase();
-                const sDiv = document.getElementById('smartDL');
-                const nDiv = document.getElementById('normalDL');
-                const sBtn = document.getElementById('smartBtn');
-                const alt1 = document.getElementById('alt1');
-                const alt2 = document.getElementById('alt2');
+        // Apply Settings
+        if(typeof THEME_CONFIG !== 'undefined') {
+            document.title = THEME_CONFIG.brandName;
+            document.getElementById('brandTxt').innerText = THEME_CONFIG.brandName;
+            document.getElementById('newsTxt').innerText = THEME_CONFIG.newsText;
+            document.getElementById('botLink').innerText = '🤖 @' + THEME_CONFIG.botUsername;
+            document.getElementById('botLink').href = 'https://t.me/' + THEME_CONFIG.botUsername;
+            document.getElementById('supportLink').href = 'https://t.me/' + THEME_CONFIG.supportID;
+            document.getElementById('t1').innerText = THEME_CONFIG.tut1;
+            document.getElementById('t2').innerText = THEME_CONFIG.tut2;
+            document.getElementById('t3').innerText = THEME_CONFIG.tut3;
+            document.getElementById('lnkAnd').href = THEME_CONFIG.androidUrl;
+            document.getElementById('lnkIos').href = THEME_CONFIG.iosUrl;
+            document.getElementById('lnkWin').href = THEME_CONFIG.winUrl;
+            
+            // Smart OS Logic
+            const ua = navigator.userAgent.toLowerCase();
+            const sDiv = document.getElementById('smartDL');
+            const nDiv = document.getElementById('normalDL');
+            const sBtn = document.getElementById('smartBtn');
+            const alt1 = document.getElementById('alt1');
+            const alt2 = document.getElementById('alt2');
 
-                if (ua.indexOf("android") > -1) {
-                    sDiv.style.display = "block"; nDiv.style.display = "none";
-                    sBtn.innerHTML = "🤖 دانلود برنامه اندروید"; sBtn.href = THEME_CONFIG.androidUrl;
-                    alt1.innerHTML = "iOS"; alt1.href = THEME_CONFIG.iosUrl;
-                    alt2.innerHTML = "Windows"; alt2.href = THEME_CONFIG.winUrl;
-                } else if (ua.indexOf("iphone") > -1 || ua.indexOf("ipad") > -1) {
-                    sDiv.style.display = "block"; nDiv.style.display = "none";
-                    sBtn.innerHTML = "🍏 دانلود برنامه آیفون"; sBtn.href = THEME_CONFIG.iosUrl;
-                    alt1.innerHTML = "Android"; alt1.href = THEME_CONFIG.androidUrl;
-                    alt2.innerHTML = "Windows"; alt2.href = THEME_CONFIG.winUrl;
-                } else if (ua.indexOf("win") > -1) {
-                    sDiv.style.display = "block"; nDiv.style.display = "none";
-                    sBtn.innerHTML = "💻 دانلود برنامه ویندوز"; sBtn.href = THEME_CONFIG.winUrl;
-                    alt1.innerHTML = "Android"; alt1.href = THEME_CONFIG.androidUrl;
-                    alt2.innerHTML = "iOS"; alt2.href = THEME_CONFIG.iosUrl;
-                }
+            if (ua.indexOf("android") > -1) {
+                sDiv.style.display = "block"; nDiv.style.display = "none";
+                sBtn.innerHTML = "🤖 دانلود برنامه اندروید"; sBtn.href = THEME_CONFIG.androidUrl;
+                alt1.innerHTML = "iOS"; alt1.href = THEME_CONFIG.iosUrl;
+                alt2.innerHTML = "Windows"; alt2.href = THEME_CONFIG.winUrl;
+            } else if (ua.indexOf("iphone") > -1 || ua.indexOf("ipad") > -1) {
+                sDiv.style.display = "block"; nDiv.style.display = "none";
+                sBtn.innerHTML = "🍏 دانلود برنامه آیفون"; sBtn.href = THEME_CONFIG.iosUrl;
+                alt1.innerHTML = "Android"; alt1.href = THEME_CONFIG.androidUrl;
+                alt2.innerHTML = "Windows"; alt2.href = THEME_CONFIG.winUrl;
+            } else if (ua.indexOf("win") > -1) {
+                sDiv.style.display = "block"; nDiv.style.display = "none";
+                sBtn.innerHTML = "💻 دانلود برنامه ویندوز"; sBtn.href = THEME_CONFIG.winUrl;
+                alt1.innerHTML = "Android"; alt1.href = THEME_CONFIG.androidUrl;
+                alt2.innerHTML = "iOS"; alt2.href = THEME_CONFIG.iosUrl;
             }
         }
         
-        // Stats
+        // Stats Logic
         const total = {{ user.data_limit }};
         const used = {{ user.used_traffic }};
         const subUrl = "{{ subscription_url }}";
@@ -318,11 +302,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 </html>
 EOF
 
-# Update Panel
+# Update Panel Config
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}✔ Success! Theme installed.${NC}"
+echo -e "${GREEN}✔ Theme Installed! Please clear your browser cache if you see old version.${NC}"
