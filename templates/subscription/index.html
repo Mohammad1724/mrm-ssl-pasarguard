@@ -11,7 +11,7 @@
         :root {
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.8); --brd: rgba(255, 255, 255, 0.1);
-            --pri: rgba(56, 189, 248, 0.8);
+            --pri: rgba(56, 189, 248, 0.8); /* Sky Blue */
             --sec: rgba(255, 255, 255, 0.1);
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.3);
             --brand-grad: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
@@ -37,27 +37,17 @@
         @keyframes s { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
         .con { max-width: 800px; margin: 0 auto; }
+        
+        /* Header Fixed */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
+        .brand { font-size: 32px; font-weight: 900; background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.15); letter-spacing: -1px; line-height: 1.1; }
         
-        /* LUXURY BRAND */
-        .brand {
-            font-size: 32px; font-weight: 900;
-            background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-shadow: 0 10px 20px rgba(0,0,0,0.15); letter-spacing: -1px; line-height: 1.1;
-        }
-
-        /* 3D BOT BUTTON */
-        .bot-link {
-            display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none;
-            background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            padding: 8px 16px; border-radius: 50px;
-            border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); border-bottom: 1px solid rgba(0, 0, 0, 0.3);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: all 0.3s ease;
-        }
+        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); border-bottom: 1px solid rgba(0, 0, 0, 0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: all 0.3s ease; }
         :root.light .bot-link { color: #333; border-top: 1px solid white; border-bottom: 1px solid rgba(0,0,0,0.1); }
-        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); box-shadow: 0 8px 20px rgba(0,0,0,0.25); }
+        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
 
+        /* Theme Button */
         .theme-btn { width: 46px; height: 46px; border-radius: 14px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
         .theme-btn:active { transform: scale(0.9); }
 
@@ -124,6 +114,7 @@
                 <div class="brand" id="brandTxt">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
+            <!-- Button ID and JS ID are now MATCHED: 'themeBtn' -->
             <button class="theme-btn" id="themeBtn">🌙</button>
         </div>
 
@@ -206,22 +197,41 @@
     </div>
 
     <script>
+        // VARS
         var subUrl = '{{ subscription_url }}';
         var totStr = '{{ user.data_limit }}';
         var useStr = '{{ user.used_traffic }}';
         var expStr = '{{ user.expire }}';
         
         {% raw %}
+        // RECOVER URL
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        var root = document.documentElement; var tb = document.getElementById('tBtn');
-        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
-        tb.onclick = function() {
-            if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
-            else { root.classList.add('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
+        // === THEME TOGGLE LOGIC (FIXED) ===
+        var toggleBtn = document.getElementById('themeBtn');
+        var htmlTag = document.documentElement;
+
+        // 1. Load saved theme
+        if (localStorage.getItem('theme') === 'light') {
+            htmlTag.classList.add('light');
+            toggleBtn.innerText = '☀️';
+        }
+
+        // 2. Click Handler (Robust)
+        toggleBtn.onclick = function() {
+            if (htmlTag.classList.contains('light')) {
+                htmlTag.classList.remove('light');
+                localStorage.setItem('theme', 'dark');
+                toggleBtn.innerText = '🌙';
+            } else {
+                htmlTag.classList.add('light');
+                localStorage.setItem('theme', 'light');
+                toggleBtn.innerText = '☀️';
+            }
         };
 
+        // DATA
         var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
         var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
         document.getElementById('pb').style.width = per+'%'; document.getElementById('pt').textContent = Math.round(per)+'%';
