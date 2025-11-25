@@ -14,7 +14,8 @@
             --pri: rgba(56, 189, 248, 0.8); /* Sky Blue */
             --sec: rgba(255, 255, 255, 0.1);
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.3);
-            --brand-grad: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%);
+            /* Luxury Gold Gradient */
+            --brand-grad: linear-gradient(135deg, #fef9c3 0%, #fbbf24 50%, #d97706 100%);
         }
         /* LIGHT MODE */
         :root.light {
@@ -23,7 +24,8 @@
             --pri: rgba(14, 165, 233, 0.9);
             --sec: rgba(0, 0, 0, 0.08);
             --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.2);
-            --brand-grad: linear-gradient(135deg, #1e293b 0%, #4f46e5 100%);
+            /* Deep Blue Gradient */
+            --brand-grad: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -41,7 +43,15 @@
         /* Header Fixed */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
-        .brand { font-size: 32px; font-weight: 900; background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 10px 20px rgba(0,0,0,0.15); letter-spacing: -1px; line-height: 1.1; }
+        
+        /* SUPER LUXURY BRAND */
+        .brand {
+            font-size: 36px; font-weight: 900;
+            background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 4px 20px rgba(251, 191, 36, 0.3); /* Glow Effect */
+            letter-spacing: -1.5px; line-height: 1.1;
+            transform: skewX(-5deg); /* Stylish Angle */
+        }
         
         .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); border-bottom: 1px solid rgba(0, 0, 0, 0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: all 0.3s ease; }
         :root.light .bot-link { color: #333; border-top: 1px solid white; border-bottom: 1px solid rgba(0,0,0,0.1); }
@@ -74,6 +84,16 @@
         .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.6), rgba(2,132,199,0.3)); color: white; border-color: rgba(56,189,248,0.3); }
         .btn-p::before { background: radial-gradient(ellipse, rgba(56,189,248,0.6), transparent 70%); }
         .btn-s { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); color: var(--txt); }
+
+        /* Dark Support Button Style (New) */
+        .btn-dark { 
+            background: rgba(0, 0, 0, 0.3); 
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            color: var(--txt); 
+            font-size: 13px;
+        }
+        :root.light .btn-dark { background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.1); color: #333; }
+        .btn-dark:hover { background: rgba(0, 0, 0, 0.5); }
 
         :root.light .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border-color: rgba(255,255,255,0.8); color: var(--txt); }
         :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); color: white; }
@@ -114,7 +134,6 @@
                 <div class="brand" id="brandTxt">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
-            <!-- Button ID and JS ID are now MATCHED: 'themeBtn' -->
             <button class="theme-btn" id="themeBtn">🌙</button>
         </div>
 
@@ -138,7 +157,9 @@
                     
                     <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
-                    <a href="https://t.me/__SUP__" style="display:block; text-align:center; margin-top:15px; color:var(--mute); font-size:13px; text-decoration:none">💬 پشتیبانی</a>
+                    
+                    <!-- Styled Support Button -->
+                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="margin-top:15px">💬 ارتباط با پشتیبانی</a>
                 </div>
                 <div>
                     <div class="stats">
@@ -197,41 +218,22 @@
     </div>
 
     <script>
-        // VARS
         var subUrl = '{{ subscription_url }}';
         var totStr = '{{ user.data_limit }}';
         var useStr = '{{ user.used_traffic }}';
         var expStr = '{{ user.expire }}';
         
         {% raw %}
-        // RECOVER URL
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        // === THEME TOGGLE LOGIC (FIXED) ===
-        var toggleBtn = document.getElementById('themeBtn');
-        var htmlTag = document.documentElement;
-
-        // 1. Load saved theme
-        if (localStorage.getItem('theme') === 'light') {
-            htmlTag.classList.add('light');
-            toggleBtn.innerText = '☀️';
-        }
-
-        // 2. Click Handler (Robust)
-        toggleBtn.onclick = function() {
-            if (htmlTag.classList.contains('light')) {
-                htmlTag.classList.remove('light');
-                localStorage.setItem('theme', 'dark');
-                toggleBtn.innerText = '🌙';
-            } else {
-                htmlTag.classList.add('light');
-                localStorage.setItem('theme', 'light');
-                toggleBtn.innerText = '☀️';
-            }
+        var root = document.documentElement; var tb = document.getElementById('tBtn');
+        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
+        tb.onclick = function() {
+            if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
+            else { root.classList.add('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
-        // DATA
         var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
         var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
         document.getElementById('pb').style.width = per+'%'; document.getElementById('pt').textContent = Math.round(per)+'%';
