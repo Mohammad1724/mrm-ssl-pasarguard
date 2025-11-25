@@ -50,7 +50,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #888888;
             --color-card: rgba(25, 25, 30, 0.8);
             --color-border: rgba(255, 255, 255, 0.1);
-            --color-btn-primary: rgba(56, 189, 248, 0.8); /* Sky Blue */
+            --color-btn-primary: rgba(56, 189, 248, 0.8);
             --color-btn-secondary: rgba(255, 255, 255, 0.1);
             --color-glow-1: rgba(249, 115, 22, 0.4);
             --color-glow-2: rgba(59, 130, 246, 0.3);
@@ -63,7 +63,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #666666;
             --color-card: rgba(255, 255, 255, 0.9);
             --color-border: rgba(0, 0, 0, 0.1);
-            --color-btn-primary: rgba(14, 165, 233, 0.9); /* Sky Blue */
+            --color-btn-primary: rgba(14, 165, 233, 0.9);
             --color-btn-secondary: rgba(0, 0, 0, 0.08);
             --color-glow-1: rgba(249, 115, 22, 0.2);
             --color-glow-2: rgba(59, 130, 246, 0.2);
@@ -157,7 +157,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .modal-box { background: #1a1a1a; padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: white; }
         .copy-input { width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; }
         
-        /* Hidden but focusable input for iOS copy hack */
         #clipboard-helper { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
     </style>
 </head>
@@ -269,113 +268,80 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <div class="modal" id="copyModal" onclick="if(event.target===this)closeModal('copyModal')">
         <div class="modal-box">
             <h3>کپی دستی</h3>
-            <p style="font-size:12px; color:#aaa; margin:10px 0">مرورگر اجازه کپی خودکار نداد. لطفا دستی کپی کنید:</p>
-            <input type="text" class="copy-input" id="manualCopyInput" readonly>
+            <p style="font-size:12px; color:#aaa; margin:10px 0">لینک را انتخاب و کپی کنید:</p>
+            <input type="text" class="copy-input" id="manualCopyInput" readonly onclick="this.select()">
             <br><br>
             <button class="btn btn-secondary" style="background:#333; color:white" onclick="closeModal('copyModal')">بستن</button>
         </div>
     </div>
 
     <script>
+        // --- LINK RECOVERY ---
+        // If 'subscription_url' is empty or undefined, get it from current URL
+        var subUrl = '{{ subscription_url }}';
+        if(!subUrl || subUrl === '' || subUrl.indexOf('{{') !== -1) {
+            subUrl = window.location.href;
+        }
+
+        // Update QR Code Image source if needed
+        var qrImg = document.querySelector('#qrModal img');
+        if(qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+
+        // --- THEME ---
         var themeBtn = document.getElementById('themeBtn');
         var root = document.documentElement;
-        
-        if (localStorage.getItem('theme') === 'light') {
-            root.classList.add('light');
-            themeBtn.textContent = '☀️';
-        }
-        
+        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); themeBtn.textContent = '☀️'; }
         themeBtn.onclick = function() {
-            if (root.classList.contains('light')) {
-                root.classList.remove('light');
-                themeBtn.textContent = '🌙';
-                localStorage.setItem('theme', 'dark');
-            } else {
-                root.classList.add('light');
-                themeBtn.textContent = '☀️';
-                localStorage.setItem('theme', 'light');
-            }
+            if (root.classList.contains('light')) { root.classList.remove('light'); themeBtn.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
+            else { root.classList.add('light'); themeBtn.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
+        // --- DATA ---
         var total = 0, used = 0;
         try { total = parseInt('{{ user.data_limit }}') || 0; } catch(e) {}
         try { used = parseInt('{{ user.used_traffic }}') || 0; } catch(e) {}
-
         var percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
-        var pBar = document.getElementById('progressBar');
-        var pText = document.getElementById('progressText');
-        if (pBar) pBar.style.width = percent + '%';
-        if (pText) pText.textContent = Math.round(percent) + '%';
+        var pBar = document.getElementById('progressBar'); var pText = document.getElementById('progressText');
+        if (pBar) pBar.style.width = percent + '%'; if (pText) pText.textContent = Math.round(percent) + '%';
         if (percent > 85 && pBar) pBar.style.background = '#ef4444';
 
         function formatBytes(b) {
-            if (total === 0) return 'نامحدود';
-            if (b <= 0) return '0 MB';
-            var units = ['B', 'KB', 'MB', 'GB', 'TB'];
-            var i = Math.floor(Math.log(b) / Math.log(1024));
+            if (total === 0) return 'نامحدود'; if (b <= 0) return '0 MB';
+            var units = ['B', 'KB', 'MB', 'GB', 'TB']; var i = Math.floor(Math.log(b) / Math.log(1024));
             return (b / Math.pow(1024, i)).toFixed(2) + ' ' + units[i];
         }
-        var remEl = document.getElementById('remaining');
-        if (remEl) remEl.textContent = formatBytes(total - used);
+        var remEl = document.getElementById('remaining'); if (remEl) remEl.textContent = formatBytes(total - used);
 
         var expEl = document.getElementById('expDate');
         if (expEl) {
             var rawDate = expEl.textContent.trim();
             if (rawDate && rawDate !== 'None' && rawDate !== 'null' && rawDate !== 'نامحدود') {
-                try {
-                    var d = new Date(rawDate);
-                    if (!isNaN(d.getTime())) expEl.textContent = d.toLocaleDateString('fa-IR');
-                } catch(e) {}
+                try { var d = new Date(rawDate); if (!isNaN(d.getTime())) expEl.textContent = d.toLocaleDateString('fa-IR'); } catch(e) {}
             }
         }
 
-        // === HYBRID COPY LOGIC (FIXED) ===
+        // --- COPY LOGIC ---
         function handleCopy(text) {
-            if(!text || text === '') {
-                alert('لینکی وجود ندارد!');
-                return;
-            }
-
-            // 1. Try Modern Clipboard (HTTPS)
+            // If text is template placeholder, use the fixed subUrl
+            if (!text || text.indexOf('{{') !== -1) text = subUrl;
+            
             if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text)
-                    .then(showToast)
-                    .catch(function() { fallbackCopy(text); });
+                navigator.clipboard.writeText(text).then(showToast).catch(function() { fallbackCopy(text); });
             } else {
-                // 2. Fallback for HTTP / Older Browsers
                 fallbackCopy(text);
             }
         }
 
         function fallbackCopy(text) {
-            // Use the permanent input to avoid DOM manipulation blocks
             var helper = document.getElementById('clipboard-helper');
-            
-            // Make it visible just for the copy action
-            helper.style.display = 'block';
-            helper.style.left = '0';
-            helper.style.top = '0';
-            helper.style.opacity = '1';
-            
+            helper.style.display = 'block'; helper.style.left = '0'; helper.style.top = '0'; helper.style.opacity = '1';
             helper.value = text;
-            helper.focus();
-            helper.select();
-            helper.setSelectionRange(0, 99999); // For iOS
-
+            helper.focus(); helper.select(); helper.setSelectionRange(0, 99999);
             try {
                 var result = document.execCommand('copy');
-                if (result) {
-                    showToast();
-                } else {
-                    openManualCopy(text);
-                }
-            } catch (err) {
-                openManualCopy(text);
-            }
-            
-            // Hide it again
-            helper.style.left = '-9999px';
-            helper.style.opacity = '0';
+                if (result) showToast(); else openManualCopy(text);
+            } catch (err) { openManualCopy(text); }
+            helper.style.left = '-9999px'; helper.style.opacity = '0';
         }
 
         function openManualCopy(text) {
@@ -383,15 +349,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             var input = document.getElementById('manualCopyInput');
             input.value = text;
             modal.style.display = 'flex';
-            
-            // Select text for user convenience
-            input.focus();
-            input.select();
+            input.focus(); input.select();
         }
 
         function showToast() {
-            var t = document.getElementById('toast');
-            t.classList.add('show');
+            var t = document.getElementById('toast'); t.classList.add('show');
             setTimeout(function() { t.classList.remove('show'); }, 2000);
         }
 
@@ -400,25 +362,20 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 
         function showConfigs() {
             openModal('configModal');
-            var list = document.getElementById('configList');
-            list.innerHTML = '...';
-            fetch(window.location.pathname + '/links')
-                .then(function(r) { return r.text(); })
-                .then(function(text) {
-                    if (text) {
-                        list.innerHTML = '<button class="btn btn-primary" style="height:32px; font-size:12px; margin-bottom:10px; width:100%" onclick="handleCopy(\'' + text.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
-                        var lines = text.split('\n');
-                        lines.forEach(function(line) {
-                            var l = line.trim();
-                            if (l && (l.indexOf('vmess') === 0 || l.indexOf('vless') === 0 || l.indexOf('trojan') === 0 || l.indexOf('ss://') === 0)) {
-                                var name = 'Config';
-                                if (l.indexOf('#') > -1) name = decodeURIComponent(l.split('#')[1]);
-                                list.innerHTML += '<div style="background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center"><span>' + name + '</span><button class="btn btn-secondary" style="width:auto; height:28px; padding:0 12px; font-size:11px" onclick="handleCopy(\'' + l + '\')">کپی</button></div>';
-                            }
-                        });
-                    }
-                })
-                .catch(function() { list.innerHTML = 'خطا در دریافت'; });
+            var list = document.getElementById('configList'); list.innerHTML = '...';
+            fetch(window.location.pathname + '/links').then(function(r) { return r.text(); }).then(function(text) {
+                if (text) {
+                    list.innerHTML = '<button class="btn btn-primary" style="height:32px; font-size:12px; margin-bottom:10px; width:100%" onclick="handleCopy(\'' + text.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
+                    var lines = text.split('\n');
+                    lines.forEach(function(line) {
+                        var l = line.trim();
+                        if (l && (l.indexOf('vmess') === 0 || l.indexOf('vless') === 0 || l.indexOf('trojan') === 0 || l.indexOf('ss://') === 0)) {
+                            var name = 'Config'; if (l.indexOf('#') > -1) name = decodeURIComponent(l.split('#')[1]);
+                            list.innerHTML += '<div style="background:rgba(255,255,255,0.1); padding:10px; border-radius:8px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center"><span>' + name + '</span><button class="btn btn-secondary" style="width:auto; height:28px; padding:0 12px; font-size:11px" onclick="handleCopy(\'' + l + '\')">کپی</button></div>';
+                        }
+                    });
+                }
+            }).catch(function() { list.innerHTML = 'خطا در دریافت'; });
         }
 
         var ua = navigator.userAgent.toLowerCase();
