@@ -227,7 +227,7 @@
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        var root = document.documentElement; var tb = document.getElementById('tBtn');
+        var root = document.documentElement; var tb = document.getElementById('themeBtn');
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
         tb.onclick = function() {
             if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
