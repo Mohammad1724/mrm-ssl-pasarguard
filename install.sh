@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.3 (Updated Menu)
+# Version: v1.4 (with fixes)
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.3"
+VERSION="v1.4"
 
 # >>> IMPORTANT: UPDATE THIS URL TO YOUR THEME FILE LOCATION <<<
 THEME_SCRIPT_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/theme.sh"
@@ -33,6 +33,10 @@ CYAN='\033[0;36m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
+# --- Service state (for port 80) ---
+NGINX_WAS_ACTIVE=0
+APACHE_WAS_ACTIVE=0
+
 # --- Helper Functions ---
 
 check_root() {
@@ -43,26 +47,80 @@ check_root() {
 }
 
 install_deps() {
-    # Install essentials quietly
-    if ! command -v certbot &> /dev/null || ! command -v openssl &> /dev/null || ! command -v nano &> /dev/null || ! command -v tar &> /dev/null; then
+    # Install essentials quietly (Debian/Ubuntu)
+    if ! command -v certbot &>/dev/null || \
+       ! command -v openssl &>/dev/null || \
+       ! command -v nano &>/dev/null || \
+       ! command -v tar &>/dev/null || \
+       ! command -v curl &>/dev/null || \
+       ! command -v lsof &>/dev/null; then
+
         echo -e "${BLUE}[INFO] Installing necessary dependencies...${NC}"
-        apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl cron openssl nano tar -qq > /dev/null
+
+        if command -v apt-get &>/dev/null; then
+            apt-get update -qq >/dev/null 2>&1
+            apt-get install -y -qq certbot lsof curl cron openssl nano tar >/dev/null 2>&1
+        else
+            echo -e "${RED}Error: apt-get not found. Please install certbot, lsof, curl, cron, openssl, nano, tar manually.${NC}"
+        fi
     fi
 }
 
 check_port_80() {
-    if lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
-        echo -e "${YELLOW}[WARN] Port 80 is busy. Temporarily stopping web services...${NC}"
+    NGINX_WAS_ACTIVE=0
+    APACHE_WAS_ACTIVE=0
+
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        NGINX_WAS_ACTIVE=1
+        echo -e "${YELLOW}[WARN] Stopping nginx to free port 80...${NC}"
         systemctl stop nginx 2>/dev/null
+    fi
+
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        APACHE_WAS_ACTIVE=1
+        echo -e "${YELLOW}[WARN] Stopping apache2 to free port 80...${NC}"
         systemctl stop apache2 2>/dev/null
+    fi
+
+    # If anything still listening on 80, kill it
+    if command -v lsof &>/dev/null && lsof -Pi :80 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo -e "${YELLOW}[WARN] Killing remaining processes on port 80...${NC}"
         fuser -k 80/tcp 2>/dev/null
     fi
 }
 
 restore_services() {
-    systemctl start nginx 2>/dev/null
-    systemctl start apache2 2>/dev/null
+    if [ "$NGINX_WAS_ACTIVE" -eq 1 ]; then
+        systemctl start nginx 2>/dev/null
+    fi
+    if [ "$APACHE_WAS_ACTIVE" -eq 1 ]; then
+        systemctl start apache2 2>/dev/null
+    fi
+}
+
+# Upsert helpers for .env
+upsert_env_string() {
+    local key="$1"
+    local value="$2"
+    local file="$3"
+    local escaped_value
+    escaped_value=$(printf '%s\n' "$value" | sed -e 's/[&/]/\\&/g')
+    if grep -qE "^[#[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null; then
+        sed -i "s|^[#[:space:]]*${key}[[:space:]]*=.*|${key} = \"${escaped_value}\"|" "$file"
+    else
+        echo "${key} = \"${value}\"" >> "$file"
+    fi
+}
+
+upsert_env_scalar() {
+    local key="$1"
+    local value="$2"
+    local file="$3"
+    if grep -qE "^[#[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null; then
+        sed -i "s|^[#[:space:]]*${key}[[:space:]]*=.*|${key} = ${value}|" "$file"
+    else
+        echo "${key} = ${value}" >> "$file"
+    fi
 }
 
 # ==========================================
@@ -86,7 +144,7 @@ generate_ssl() {
     DOMAIN_LIST=()
     echo ""
     echo -e "${CYAN}--- Step 2: Enter Domains ---${NC}"
-    
+
     for (( i=1; i<=DOMAIN_COUNT; i++ ))
     do
         read -p "Enter Domain #$i: " SINGLE_DOMAIN
@@ -108,16 +166,16 @@ generate_ssl() {
     if [[ "$EMAIL" == "b" || "$EMAIL" == "back" ]]; then return; fi
 
     check_port_80
-    
+
     SUCCESS_LIST=()
     FAIL_LIST=()
 
     for DOMAIN in "${DOMAIN_LIST[@]}"; do
         echo ""
         echo -e "${BLUE}--- Processing: $DOMAIN ---${NC}"
-        
+
         certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
-        
+
         if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
             echo -e "${GREEN}✔ Success: $DOMAIN${NC}"
             SUCCESS_LIST+=("$DOMAIN")
@@ -139,7 +197,7 @@ generate_ssl() {
     echo -e "${CYAN}--- Step 4: Storage ---${NC}"
     echo -e "Where should folders be saved? (Default: $DEFAULT_PATH)"
     read -p ">> " USER_PATH
-    
+
     if [[ "$USER_PATH" == "b" || "$USER_PATH" == "back" ]]; then 
         echo -e "${YELLOW}Files kept in system path only.${NC}"
         read -p "Press Enter..."
@@ -161,8 +219,9 @@ generate_ssl() {
         chmod 600 "$FINAL_DEST/privkey.pem"
 
         CRON_CMD="cp -L /etc/letsencrypt/live/$DOMAIN/fullchain.pem $FINAL_DEST/fullchain.pem && cp -L /etc/letsencrypt/live/$DOMAIN/privkey.pem $FINAL_DEST/privkey.pem"
-        (crontab -l 2>/dev/null | grep -v "$DOMAIN"; echo "0 3 * * * $CRON_CMD") | crontab -
-        
+        CRON_TAG="# mrm-ssl-sync-$DOMAIN"
+        (crontab -l 2>/dev/null | grep -v "mrm-ssl-sync-$DOMAIN"; echo "0 3 * * * $CRON_CMD $CRON_TAG") | crontab -
+
         echo -e "${GREEN}Saved -> $FINAL_DEST${NC}"
     done
 
@@ -178,7 +237,7 @@ generate_ssl() {
 list_all_certs() {
     echo ""
     echo -e "${CYAN}--- All Active Certificates (Dashboard) ---${NC}"
-    
+
     if [ ! -d "/etc/letsencrypt/live" ]; then
         echo -e "${RED}No certificates found on this server.${NC}"
         read -p "Press Enter..."
@@ -191,30 +250,30 @@ list_all_certs() {
     echo "------------------------------------------------------------------------"
 
     FOUND_COUNT=0
-    
+
     for d in /etc/letsencrypt/live/*; do
         if [ -d "$d" ]; then
             DOMAIN=$(basename "$d")
             CERT_FILE="$d/fullchain.pem"
-            
+
             if [ ! -f "$CERT_FILE" ]; then continue; fi
-            
+
             FOUND_COUNT=$((FOUND_COUNT+1))
             END_DATE=$(openssl x509 -in "$CERT_FILE" -noout -enddate 2>/dev/null | cut -d= -f2)
-            
+
             if [ -z "$END_DATE" ]; then continue; fi
 
             EXP_TIMESTAMP=$(date -d "$END_DATE" +%s 2>/dev/null)
             NOW_TIMESTAMP=$(date +%s)
-            
+
             if [ -z "$EXP_TIMESTAMP" ]; then continue; fi
 
             DIFF_SEC=$((EXP_TIMESTAMP - NOW_TIMESTAMP))
             DAYS_LEFT=$((DIFF_SEC / 86400))
-            
+
             if [ "$DAYS_LEFT" -lt 10 ]; then COLOR=$RED; elif [ "$DAYS_LEFT" -lt 30 ]; then COLOR=$YELLOW; else COLOR=$GREEN; fi
             FORMATTED_DATE=$(date -d "$END_DATE" +"%Y-%m-%d")
-            
+
             printf "%-30s %-25s ${COLOR}%-15s${NC}\n" "$DOMAIN" "$FORMATTED_DATE" "$DAYS_LEFT Days"
         fi
     done
@@ -233,7 +292,7 @@ show_location() {
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" ]]; then return; fi
 
     PASAR_DIR="$DEFAULT_PATH/$DOMAIN"
-    
+
     if [ ! -f "$PASAR_DIR/fullchain.pem" ]; then
         echo -e "${YELLOW}Not found in default path.${NC}"
         echo -e "Did you save it in a custom folder? (Leave empty to cancel)"
@@ -288,14 +347,13 @@ force_renew_sync() {
     echo -e "${RED}--- Fix & Update All SSLs ---${NC}"
     echo -e "This will renew ALL certificates and sync them to panel folder."
     read -p "Are you sure? (y/n): " CONFIRM
-    
+
     if [[ "$CONFIRM" == "y" ]]; then
         echo -e "${BLUE}Stopping web services...${NC}"
-        systemctl stop nginx 2>/dev/null
-        fuser -k 80/tcp 2>/dev/null
+        check_port_80
 
         certbot renew --force-renewal
-        
+
         for d in /etc/letsencrypt/live/*; do
             if [ -d "$d" ]; then
                 DOMAIN=$(basename "$d")
@@ -329,11 +387,11 @@ delete_ssl() {
 
     echo -e "${YELLOW}Are you sure you want to delete SSL for: $DOMAIN ?${NC}"
     read -p "Type 'yes' to confirm: " CONFIRM
-    
+
     if [[ "$CONFIRM" == "yes" ]]; then
         certbot delete --cert-name "$DOMAIN" --non-interactive
         if [ -d "$DEFAULT_PATH/$DOMAIN" ]; then rm -rf "$DEFAULT_PATH/$DOMAIN"; echo -e "${GREEN}✔ Custom folder deleted.${NC}"; fi
-        (crontab -l 2>/dev/null | grep -v "$DOMAIN") | crontab -
+        (crontab -l 2>/dev/null | grep -v "mrm-ssl-sync-$DOMAIN") | crontab -
         echo -e "${GREEN}Deletion Complete.${NC}"
     else
         echo -e "${YELLOW}Cancelled.${NC}"
@@ -350,10 +408,10 @@ backup_restore_menu() {
     echo "3) Back"
     echo ""
     read -p "Select [1-3]: " BR_OPT
-    
+
     mkdir -p "$BACKUP_DIR"
     TIMESTAMP=$(date +"%Y-%m-%d_%H-%M")
-    
+
     case $BR_OPT in
         1)
             BACKUP_FILE="$BACKUP_DIR/ssl_backup_$TIMESTAMP.tar.gz"
@@ -452,17 +510,16 @@ set_panel_ssl() {
     if [[ "$CHOICE" =~ ^[0-9]+$ ]] && [ "$CHOICE" -ge 1 ] && [ "$CHOICE" -le ${#DOMAINS[@]} ]; then
         INDEX=$((CHOICE-1))
         SELECTED_DOMAIN=${DOMAINS[$INDEX]}
-        
+
         FULL_CERT_PATH="$DEFAULT_PATH/$SELECTED_DOMAIN/fullchain.pem"
         FULL_KEY_PATH="$DEFAULT_PATH/$SELECTED_DOMAIN/privkey.pem"
 
         if [[ -f "$FULL_CERT_PATH" && -f "$ENV_FILE_PATH" ]]; then
             echo -e "${BLUE}Updating .env for $SELECTED_DOMAIN...${NC}"
-            
-            # Improved Regex: handles #, spaces, tabs at start of line
-            sed -i "s|^#*[[:space:]]*UVICORN_SSL_CERTFILE.*|UVICORN_SSL_CERTFILE = \"$FULL_CERT_PATH\"|g" "$ENV_FILE_PATH"
-            sed -i "s|^#*[[:space:]]*UVICORN_SSL_KEYFILE.*|UVICORN_SSL_KEYFILE = \"$FULL_KEY_PATH\"|g" "$ENV_FILE_PATH"
-            
+
+            upsert_env_string "UVICORN_SSL_CERTFILE" "$FULL_CERT_PATH" "$ENV_FILE_PATH"
+            upsert_env_string "UVICORN_SSL_KEYFILE" "$FULL_KEY_PATH" "$ENV_FILE_PATH"
+
             echo -e "${GREEN}✔ Config updated!${NC}"
             echo -e "Restarting Panel to apply changes..."
             restart_panel
@@ -479,10 +536,10 @@ setup_telegram_backup() {
     echo -e "${CYAN}--- Setup Telegram Backup ---${NC}"
     echo -e "Configure your bot for automatic backups."
     echo ""
-    
+
     read -p "Enter Bot Token: " BOT_TOKEN
     read -p "Enter Chat ID: " CHAT_ID
-    
+
     if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
         echo -e "${RED}Inputs cannot be empty.${NC}"
         return
@@ -490,11 +547,11 @@ setup_telegram_backup() {
 
     if [ -f "$ENV_FILE_PATH" ]; then
         echo -e "${BLUE}Updating .env...${NC}"
-        
-        sed -i "s|^#*[[:space:]]*BACKUP_TELEGRAM_BOT_KEY.*|BACKUP_TELEGRAM_BOT_KEY=$BOT_TOKEN|g" "$ENV_FILE_PATH"
-        sed -i "s|^#*[[:space:]]*BACKUP_TELEGRAM_CHAT_ID.*|BACKUP_TELEGRAM_CHAT_ID=$CHAT_ID|g" "$ENV_FILE_PATH"
-        sed -i "s|^#*[[:space:]]*BACKUP_SERVICE_ENABLED.*|BACKUP_SERVICE_ENABLED=true|g" "$ENV_FILE_PATH"
-        
+
+        upsert_env_string "BACKUP_TELEGRAM_BOT_KEY" "$BOT_TOKEN" "$ENV_FILE_PATH"
+        upsert_env_string "BACKUP_TELEGRAM_CHAT_ID" "$CHAT_ID" "$ENV_FILE_PATH"
+        upsert_env_scalar "BACKUP_SERVICE_ENABLED" "true" "$ENV_FILE_PATH"
+
         echo -e "${GREEN}✔ Telegram Backup Configured!${NC}"
         echo -e "Restarting Panel..."
         restart_panel
@@ -507,16 +564,24 @@ install_theme_wrapper() {
     echo ""
     echo -e "${BLUE}Downloading FarsNetVIP Theme...${NC}"
     echo -e "URL: ${YELLOW}$THEME_SCRIPT_URL${NC}"
-    
+
     # Check if url is placeholder
     if [[ "$THEME_SCRIPT_URL" == *"YOUR_USERNAME"* ]]; then
          echo -e "${RED}Error: You haven't updated the Theme URL in this script yet!${NC}"
-         echo -e "Please open this script with nano and edit line 14."
+         echo -e "Please open this script with nano and edit THEME_SCRIPT_URL."
          read -p "Press Enter..."
          return
     fi
 
-    bash <(curl -Ls "$THEME_SCRIPT_URL")
+    TMP_SCRIPT=$(mktemp)
+    if curl -fsSL "$THEME_SCRIPT_URL" -o "$TMP_SCRIPT"; then
+        bash "$TMP_SCRIPT"
+        rm -f "$TMP_SCRIPT"
+    else
+        echo -e "${RED}Error: Failed to download theme script from GitHub.${NC}"
+        rm -f "$TMP_SCRIPT"
+    fi
+
     echo ""
     read -p "Press Enter to return..."
 }
@@ -525,7 +590,7 @@ deploy_to_node() {
     echo ""
     echo -e "${CYAN}--- Apply SSL to Node ---${NC}"
     echo -e "Copies a domain's SSL to Node folder."
-    
+
     read -p "Enter Domain Name (e.g. panel.example.com): " DOMAIN
     if [[ "$DOMAIN" == "b" || "$DOMAIN" == "back" || -z "$DOMAIN" ]]; then return; fi
 
@@ -588,7 +653,7 @@ view_node_files_simple() {
 change_panel_port() {
     echo ""
     echo -e "${CYAN}--- Change Panel Port ---${NC}"
-    
+
     if [ ! -f "$ENV_FILE_PATH" ]; then
         echo -e "${RED}Config file not found.${NC}"
         read -p "Press Enter..."
@@ -598,9 +663,9 @@ change_panel_port() {
     # Regex matches even if commented out (# UVICORN_PORT)
     CURRENT_PORT=$(grep "^#*[[:space:]]*UVICORN_PORT" "$ENV_FILE_PATH" | cut -d '=' -f2 | tr -d ' ' | head -n 1)
     echo -e "Current Port: ${YELLOW}$CURRENT_PORT${NC}"
-    
+
     read -p "Enter New Port (e.g. 2096): " NEW_PORT
-    
+
     if [[ ! "$NEW_PORT" =~ ^[0-9]+$ ]]; then
         echo -e "${RED}Invalid port number.${NC}"
         return
@@ -612,8 +677,8 @@ change_panel_port() {
     fi
 
     echo -e "${BLUE}Updating config...${NC}"
-    sed -i "s|^#*[[:space:]]*UVICORN_PORT.*|UVICORN_PORT = $NEW_PORT|g" "$ENV_FILE_PATH"
-    
+    upsert_env_scalar "UVICORN_PORT" "$NEW_PORT" "$ENV_FILE_PATH"
+
     echo -e "${GREEN}✔ Port changed to $NEW_PORT.${NC}"
     echo -e "Restarting Panel..."
     restart_panel
