@@ -1,8 +1,16 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP Ultimate (Dynamic Config)
+# Theme: FarsNetVIP Ultimate (Smart Config)
+# Features: Remember Previous Settings
 # ==========================================
+
+# Colors
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
 
 # Paths
 TEMPLATE_DIR="/var/lib/pasarguard/templates/subscription"
@@ -10,45 +18,89 @@ TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
 CONFIG_FILE="$TEMPLATE_DIR/theme_config.js"
 ENV_FILE="/opt/pasarguard/.env"
 
-# Colors
-CYAN='\033[0;36m'
-GREEN='\033[0;32m'
-NC='\033[0m'
+# Helper to extract values from existing config
+get_val() {
+    if [ -f "$CONFIG_FILE" ]; then
+        # Extracts text between quotes for a given key
+        grep "$1:" "$CONFIG_FILE" | sed -n 's/.*: "\(.*\)",/\1/p'
+    fi
+}
 
 clear
-echo -e "${CYAN}Installing FarsNetVIP Dynamic Theme...${NC}"
+echo -e "${CYAN}=======================================${NC}"
+echo -e "${YELLOW}   FarsNetVIP Theme Installer (Smart)  ${NC}"
+echo -e "${CYAN}=======================================${NC}"
 
+# --- 1. LOAD PREVIOUS SETTINGS ---
+PREV_BRAND=$(get_val "brandName")
+PREV_BOT=$(get_val "botUsername")
+PREV_SUPPORT=$(get_val "supportID")
+PREV_TUT1=$(get_val "tut1")
+PREV_TUT2=$(get_val "tut2")
+PREV_TUT3=$(get_val "tut3")
+
+# Set Fallback Defaults if new install
+DEF_BRAND=${PREV_BRAND:-"FarsNetVIP"}
+DEF_BOT=${PREV_BOT:-"MyBot"}
+DEF_SUPPORT=${PREV_SUPPORT:-"Admin"}
+DEF_TUT1=${PREV_TUT1:-"1. نرم‌افزار را دانلود کنید."}
+DEF_TUT2=${PREV_TUT2:-"2. لینک را کپی کنید."}
+DEF_TUT3=${PREV_TUT3:-"3. متصل شوید."}
+
+echo -e "${GREEN}ℹ Tip: Press ENTER to keep the [current value]${NC}\n"
+
+# --- 2. SMART INPUTS ---
+
+echo -e "${BLUE}[1] Branding Info:${NC}"
+read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
+IN_BRAND=${IN_BRAND:-$DEF_BRAND}
+
+echo -e "\n${BLUE}[2] Telegram Info:${NC}"
+read -p "Bot Username (no @) [$DEF_BOT]: " IN_BOT_USER
+IN_BOT_USER=${IN_BOT_USER:-$DEF_BOT}
+
+read -p "Support ID (no @) [$DEF_SUPPORT]: " IN_ADMIN_ID
+IN_ADMIN_ID=${IN_ADMIN_ID:-$DEF_SUPPORT}
+
+echo -e "\n${BLUE}[3] Tutorial Text:${NC}"
+read -p "Step 1 [$DEF_TUT1]: " TUT_1
+TUT_1=${TUT_1:-$DEF_TUT1}
+
+read -p "Step 2 [$DEF_TUT2]: " TUT_2
+TUT_2=${TUT_2:-$DEF_TUT2}
+
+read -p "Step 3 [$DEF_TUT3]: " TUT_3
+TUT_3=${TUT_3:-$DEF_TUT3}
+
+# --- 3. INSTALLATION ---
+echo -e "\n${BLUE}Saving configuration...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# 1. Create Default Config File
-echo -e "${GREEN}Creating config file...${NC}"
+# Generate Config JS
 cat << EOF > "$CONFIG_FILE"
 const THEME_CONFIG = {
-    brandName: "FarsNetVIP",
-    botUsername: "MyBot",
-    supportID: "Admin",
+    brandName: "$IN_BRAND",
+    botUsername: "$IN_BOT_USER",
+    supportID: "$IN_ADMIN_ID",
     
-    // Tutorial Steps
-    tut1: "1. نرم‌افزار را دانلود کنید.",
-    tut2: "2. لینک را کپی کنید.",
-    tut3: "3. متصل شوید.",
+    tut1: "$TUT_1",
+    tut2: "$TUT_2",
+    tut3: "$TUT_3",
     
-    // App Links
     androidUrl: "https://play.google.com/store/apps/details?id=com.v2ray.ang",
     iosUrl: "https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690",
     winUrl: "https://github.com/2dust/v2rayN/releases"
 };
 EOF
 
-# 2. Create The Smart HTML
-echo -e "${GREEN}Creating HTML template...${NC}"
+echo -e "${BLUE}Generating HTML...${NC}"
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title id="pageTitle">Panel</title>
+    <title id="pTitle">User Panel</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;500;700;900&display=swap');
         :root {
@@ -171,10 +223,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         </div>
     </div>
     
-    <!-- Load Config and Apply -->
-    <script src="theme_config.js?v=1"></script>
+    <script src="theme_config.js?v=2"></script>
     <script>
-        // Apply Config
         if(typeof THEME_CONFIG !== 'undefined') {
             document.title = THEME_CONFIG.brandName;
             document.getElementById('brandTxt').innerText = THEME_CONFIG.brandName;
@@ -188,8 +238,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             document.getElementById('lnkIos').href = THEME_CONFIG.iosUrl;
             document.getElementById('lnkWin').href = THEME_CONFIG.winUrl;
         }
-
-        // Logic
+        
         const total = {{ user.data_limit }};
         const used = {{ user.used_traffic }};
         let p = 0; if(total > 0) p = (used/total)*100; else if(total==0 && used>0) p=100; if(p>100)p=100;
@@ -218,4 +267,4 @@ echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}Theme Installed! Use manager.sh to edit settings.${NC}"
+echo -e "${GREEN}✔ Theme Installed! Use manager.sh to edit settings later.${NC}"
