@@ -2,7 +2,7 @@
 
 # ==========================================
 # Theme: FarsNetVIP Ultimate (Glass / Liquid UI)
-# Status: FIXED VERSION
+# Status: FIXED GLASS VERSION
 # ==========================================
 
 # Colors
@@ -27,9 +27,9 @@ get_prev() {
     fi
 }
 
-# Helper: escape & برای استفاده امن در sed
+# Helper: escape برای sed
 sed_escape() {
-    printf '%s' "$1" | sed -e 's/[&]/\\&/g'
+    printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
 }
 
 clear
@@ -72,7 +72,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <style>
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap');
 
-/* پایه رنگ‌ها */
+/* پایه رنگ‌ها (حالت پیش‌فرض: تیره) */
 :root {
     --background: #020617;              /* خیلی تیره، نزدیک مشکی */
     --foreground: #f9fafb;
@@ -95,19 +95,30 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     --glow-blue: rgba(56, 189, 248, 0.35);
 }
 
-[data-theme="light"] {
+/* حالت روشن روی <html> */
+html[data-theme="light"] {
     --background: #f9fafb;
     --foreground: #020617;
-    --card: rgba(255, 255, 255, 0.85);
+    --card: rgba(255, 255, 255, 0.92);
     --card-foreground: #020617;
     --primary: #7c3aed;
     --primary-fg: #ffffff;
-    --secondary: rgba(249, 250, 251, 0.9);
+    --secondary: rgba(249, 250, 251, 0.95);
     --secondary-fg: #111827;
     --muted: rgba(243, 244, 246, 0.9);
     --muted-fg: #6b7280;
-    --border: rgba(209, 213, 219, 0.8);
-    --input: rgba(229, 231, 235, 0.9);
+    --border: rgba(209, 213, 219, 0.9);
+    --input: rgba(229, 231, 235, 0.95);
+    --glow-orange: rgba(249, 115, 22, 0.3);
+    --glow-blue: rgba(56, 189, 248, 0.25);
+}
+
+/* پس‌زمینه‌ی مخصوص حالت روشن (واضح‌تر) */
+html[data-theme="light"] body {
+    background:
+        radial-gradient(circle at top right, rgba(249, 250, 251, 0.9), transparent 55%),
+        radial-gradient(circle at bottom left, rgba(191, 219, 254, 0.85), transparent 55%),
+        #e5e7eb;
 }
 
 /* عمومی */
@@ -824,21 +835,38 @@ body::after {
         else if(ua.includes('iphone') || ua.includes('ipad')) document.getElementById('dlIos').classList.add('recom');
         else if(ua.includes('win')) document.getElementById('dlWin').classList.add('recom');
 
-        // 7. Theme
+        // 7. Theme (Dark / Light)
         function toggleTheme() {
-            const b = document.body;
-            if(b.getAttribute('data-theme')==='light') {
-                b.removeAttribute('data-theme'); localStorage.setItem('theme','dark');
-                document.getElementById('themeIcon').innerText = '🌙';
+            const root = document.documentElement; // <html>
+            const icon = document.getElementById('themeIcon');
+
+            if (root.getAttribute('data-theme') === 'light') {
+                // سوئیچ به حالت تیره
+                root.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'dark');
+                if (icon) icon.innerText = '🌙';
             } else {
-                b.setAttribute('data-theme','light'); localStorage.setItem('theme','light');
-                document.getElementById('themeIcon').innerText = '☀️';
+                // سوئیچ به حالت روشن
+                root.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+                if (icon) icon.innerText = '☀️';
             }
         }
-        if(localStorage.getItem('theme')==='light') {
-            document.body.setAttribute('data-theme','light');
-            document.getElementById('themeIcon').innerText = '☀️';
-        }
+
+        // اعمال تم ذخیره‌شده (on load)
+        (function initTheme() {
+            const saved = localStorage.getItem('theme');
+            const root = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+
+            if (saved === 'light') {
+                root.setAttribute('data-theme', 'light');
+                if (icon) icon.innerText = '☀️';
+            } else {
+                root.removeAttribute('data-theme');
+                if (icon) icon.innerText = '🌙';
+            }
+        })();
 
         function openModal(id){document.getElementById(id).style.display='flex';}
         function closeModal(id){document.getElementById(id).style.display='none';}
@@ -847,7 +875,7 @@ body::after {
 </html>
 EOF
 
-# 3. Replace Placeholders (با escape & برای ایمنی بیشتر در sed)
+# 3. Replace Placeholders (با escape برای ایمنی در sed)
 BRAND_ESC=$(sed_escape "$IN_BRAND")
 BOT_ESC=$(sed_escape "$IN_BOT")
 SUP_ESC=$(sed_escape "$IN_SUP")
