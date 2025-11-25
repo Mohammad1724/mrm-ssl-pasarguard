@@ -2,7 +2,7 @@
 
 # ==========================================
 # Theme: FarsNetVIP Ultimate (Glass / Liquid UI)
-# Status: FIXED GLASS VERSION + WORKING THEME TOGGLE
+# Status: GLASS VERSION + WORKING THEME TOGGLE + LIQUID BUTTONS
 # ==========================================
 
 # Colors
@@ -413,7 +413,7 @@ body::after {
     text-align: right;
 }
 
-/* دکمه‌ها (ژله‌ای + نور داخل) */
+/* دکمه‌ها (ژله‌ای + نور داخل + Liquid Glass) */
 .btn {
     position: relative;
     display: inline-flex;
@@ -437,6 +437,11 @@ body::after {
         0 0 28px rgba(249, 115, 22, 0.65);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
+
+    /* افکت Liquid Glass با SVG فیلتر */
+    filter: url(#glass-distortion);
+    -webkit-filter: url(#glass-distortion);
+
     transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 .btn::before {
@@ -622,6 +627,27 @@ body::after {
     <div class="ticker-container">
         <div class="ticker-text" id="newsTxt">__NEWS__</div>
     </div>
+
+    <!-- SVG Filter for Liquid Glass Buttons -->
+    <svg xmlns="http://www.w3.org/2000/svg"
+         style="position:absolute; width:0; height:0; overflow:hidden"
+         aria-hidden="true">
+      <defs>
+        <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
+          <feTurbulence type="fractalNoise"
+                        baseFrequency="0.006 0.006"
+                        numOctaves="2"
+                        seed="92"
+                        result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="2" result="blurred" />
+          <feDisplacementMap in="SourceGraphic"
+                             in2="blurred"
+                             scale="15"
+                             xChannelSelector="R"
+                             yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
 
     <div class="toast" id="toast">کپی شد!</div>
 
