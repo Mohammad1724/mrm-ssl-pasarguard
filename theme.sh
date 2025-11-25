@@ -1,12 +1,5 @@
 #!/bin/bash
 
-# ==========================================
-# Theme: FarsNetVIP (Root-Level Fix)
-# Status: THEME TOGGLE FIXED (Global Scope)
-# ==========================================
-
-#!/bin/bash
-
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
 
 TEMPLATE_DIR="/var/lib/pasarguard/templates/subscription"
@@ -57,8 +50,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #888888;
             --color-card: rgba(25, 25, 30, 0.8);
             --color-border: rgba(255, 255, 255, 0.1);
-            --color-btn-primary: rgba(124, 58, 237, 0.8);
-            --color-btn-secondary: rgba(255, 255, 255, 0.1);
             --color-glow-1: rgba(249, 115, 22, 0.4);
             --color-glow-2: rgba(59, 130, 246, 0.3);
         }
@@ -70,8 +61,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #666666;
             --color-card: rgba(255, 255, 255, 0.9);
             --color-border: rgba(0, 0, 0, 0.1);
-            --color-btn-primary: rgba(124, 58, 237, 0.9);
-            --color-btn-secondary: rgba(0, 0, 0, 0.08);
             --color-glow-1: rgba(249, 115, 22, 0.2);
             --color-glow-2: rgba(59, 130, 246, 0.2);
         }
@@ -149,7 +138,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             font-size: 12px;
             color: var(--color-text-muted);
             text-decoration: none;
-            background: var(--color-btn-secondary);
+            background: rgba(255,255,255,0.1);
             padding: 4px 12px;
             border-radius: 20px;
         }
@@ -160,7 +149,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             height: 44px;
             border-radius: 12px;
             border: 1px solid var(--color-border);
-            background: var(--color-btn-secondary);
+            background: rgba(255,255,255,0.1);
             font-size: 20px;
             cursor: pointer;
             display: flex;
@@ -250,28 +239,215 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             margin-bottom: 20px;
         }
 
-        /* Buttons */
+        /* ========== GLASS JELLY BUTTONS ========== */
         .btn {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 48px;
-            border-radius: 14px;
+            height: 50px;
+            border-radius: 16px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            border: 1px solid var(--color-border);
-            transition: transform 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+            
+            /* Glass Effect */
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.15) 0%,
+                rgba(255, 255, 255, 0.05) 50%,
+                rgba(255, 255, 255, 0.02) 100%
+            );
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            
+            /* Jelly Border */
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-top: 1px solid rgba(255, 255, 255, 0.4);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            
+            /* Shadow for depth */
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.2),
+                inset 0 2px 4px rgba(255, 255, 255, 0.2),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+            
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .btn:active { transform: scale(0.97); }
+
+        /* Inner Lamp Glow */
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 25%;
+            width: 50%;
+            height: 100%;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255, 255, 255, 0.4) 0%,
+                rgba(255, 255, 255, 0.1) 40%,
+                transparent 70%
+            );
+            opacity: 0.8;
+            transition: all 0.4s ease;
+            pointer-events: none;
+        }
+
+        /* Ripple/Shine Effect Layer */
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.3),
+                transparent
+            );
+            transition: left 0.5s ease;
+            pointer-events: none;
+        }
+
+        /* Hover State */
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 12px 40px rgba(0, 0, 0, 0.25),
+                inset 0 2px 6px rgba(255, 255, 255, 0.3),
+                inset 0 -2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:hover::before {
+            opacity: 1;
+            top: -30%;
+        }
+
+        .btn:hover::after {
+            left: 100%;
+        }
+
+        /* Active/Click State - Lamp Pulse */
+        .btn:active {
+            transform: scale(0.97) translateY(0);
+            box-shadow: 
+                0 4px 20px rgba(0, 0, 0, 0.2),
+                inset 0 3px 8px rgba(255, 255, 255, 0.4),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:active::before {
+            opacity: 1;
+            top: -20%;
+            width: 80%;
+            left: 10%;
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255, 255, 255, 0.7) 0%,
+                rgba(255, 255, 255, 0.2) 50%,
+                transparent 80%
+            );
+        }
+
+        /* PRIMARY BUTTON (Purple Glass) */
         .btn-primary {
-            background: var(--color-btn-primary);
+            background: linear-gradient(
+                135deg,
+                rgba(124, 58, 237, 0.6) 0%,
+                rgba(124, 58, 237, 0.4) 50%,
+                rgba(79, 70, 229, 0.3) 100%
+            );
             color: white;
-            box-shadow: 0 4px 15px rgba(124,58,237,0.3);
+            border: 1px solid rgba(167, 139, 250, 0.3);
+            border-top: 1px solid rgba(167, 139, 250, 0.5);
+            box-shadow: 
+                0 8px 32px rgba(124, 58, 237, 0.3),
+                inset 0 2px 4px rgba(255, 255, 255, 0.2),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
         }
+
+        .btn-primary:hover {
+            box-shadow: 
+                0 12px 40px rgba(124, 58, 237, 0.4),
+                inset 0 2px 6px rgba(255, 255, 255, 0.3),
+                inset 0 -2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary:active {
+            box-shadow: 
+                0 4px 20px rgba(124, 58, 237, 0.35),
+                inset 0 3px 10px rgba(255, 255, 255, 0.5),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-primary::before {
+            background: radial-gradient(
+                ellipse at center,
+                rgba(167, 139, 250, 0.6) 0%,
+                rgba(167, 139, 250, 0.2) 40%,
+                transparent 70%
+            );
+        }
+
+        .btn-primary:active::before {
+            background: radial-gradient(
+                ellipse at center,
+                rgba(255, 255, 255, 0.8) 0%,
+                rgba(167, 139, 250, 0.4) 50%,
+                transparent 80%
+            );
+        }
+
+        /* SECONDARY BUTTON (Clear Glass) */
         .btn-secondary {
-            background: var(--color-btn-secondary);
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.12) 0%,
+                rgba(255, 255, 255, 0.06) 50%,
+                rgba(255, 255, 255, 0.02) 100%
+            );
+            color: var(--color-text);
+        }
+
+        /* Light Mode Button Adjustments */
+        :root.light .btn {
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.7) 0%,
+                rgba(255, 255, 255, 0.4) 50%,
+                rgba(255, 255, 255, 0.2) 100%
+            );
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                inset 0 2px 4px rgba(255, 255, 255, 0.8),
+                inset 0 -2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        :root.light .btn-primary {
+            background: linear-gradient(
+                135deg,
+                rgba(124, 58, 237, 0.8) 0%,
+                rgba(124, 58, 237, 0.6) 50%,
+                rgba(79, 70, 229, 0.5) 100%
+            );
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-top: 1px solid rgba(167, 139, 250, 0.6);
+        }
+
+        :root.light .btn-secondary {
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.8) 0%,
+                rgba(255, 255, 255, 0.5) 50%,
+                rgba(255, 255, 255, 0.3) 100%
+            );
             color: var(--color-text);
         }
 
@@ -290,10 +466,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             margin-bottom: 15px;
         }
         .stat-box {
-            background: var(--color-btn-secondary);
+            background: rgba(255,255,255,0.05);
             padding: 12px;
             border-radius: 12px;
             border: 1px solid var(--color-border);
+            transition: background 0.3s;
+        }
+        :root.light .stat-box {
+            background: rgba(0,0,0,0.03);
         }
         .stat-label {
             font-size: 11px;
@@ -322,16 +502,28 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             align-items: center;
             gap: 5px;
             padding: 12px;
-            background: var(--color-btn-secondary);
+            background: rgba(255,255,255,0.05);
             border-radius: 12px;
             text-decoration: none;
             color: var(--color-text);
             font-size: 11px;
             border: 1px solid var(--color-border);
-            transition: 0.2s;
+            transition: all 0.3s;
         }
-        .dl-btn:hover { transform: translateY(-2px); }
-        .dl-btn.recommended { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
+        :root.light .dl-btn {
+            background: rgba(0,0,0,0.03);
+        }
+        .dl-btn:hover { 
+            transform: translateY(-2px); 
+            background: rgba(255,255,255,0.1);
+        }
+        :root.light .dl-btn:hover {
+            background: rgba(0,0,0,0.06);
+        }
+        .dl-btn.recommended { 
+            border-color: #f59e0b; 
+            background: rgba(245,158,11,0.1); 
+        }
 
         /* Toast */
         .toast {
@@ -483,13 +675,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         var themeBtn = document.getElementById('themeBtn');
         var root = document.documentElement;
         
-        // Load saved theme
         if (localStorage.getItem('theme') === 'light') {
             root.classList.add('light');
             themeBtn.textContent = '☀️';
         }
         
-        // Toggle function
         themeBtn.onclick = function() {
             if (root.classList.contains('light')) {
                 root.classList.remove('light');
@@ -507,7 +697,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         try { total = parseInt('{{ user.data_limit }}') || 0; } catch(e) {}
         try { used = parseInt('{{ user.used_traffic }}') || 0; } catch(e) {}
 
-        // Progress
         var percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
         var pBar = document.getElementById('progressBar');
         var pText = document.getElementById('progressText');
@@ -515,7 +704,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         if (pText) pText.textContent = Math.round(percent) + '%';
         if (percent > 85 && pBar) pBar.style.background = '#ef4444';
 
-        // Remaining
         function formatBytes(b) {
             if (total === 0) return 'نامحدود';
             if (b <= 0) return '0 MB';
@@ -526,7 +714,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         var remEl = document.getElementById('remaining');
         if (remEl) remEl.textContent = formatBytes(total - used);
 
-        // Date
         var expEl = document.getElementById('expDate');
         if (expEl) {
             var rawDate = expEl.textContent.trim();
@@ -579,7 +766,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 .catch(function() { list.innerHTML = 'خطا در دریافت'; });
         }
 
-        // Smart OS Detection
         var ua = navigator.userAgent.toLowerCase();
         if (ua.indexOf('android') > -1) document.getElementById('dlAndroid').classList.add('recommended');
         else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('dlIos').classList.add('recommended');
