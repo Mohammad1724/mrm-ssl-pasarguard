@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP (Fix: Expire Date)
+# Theme: FarsNetVIP (Date Logic Fix v2)
 # ==========================================
 
 # Colors & Paths
@@ -31,14 +31,14 @@ read -p "Support ID (no @) [$DEF_SUPPORT]: " IN_SUP; IN_SUP=${IN_SUP:-$DEF_SUPPO
 echo -e "\n${BLUE}Installing...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# Generate HTML with Date Logic Fix
+# Generate HTML with FIXED Date Logic
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>User Panel</title>
+    <title>__BRAND__ | {{ user.username }}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;500;700;900&display=swap');
         :root {
@@ -60,8 +60,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
         body { font-family: 'Vazirmatn', sans-serif; background: var(--bg-body); background-attachment: fixed; color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 15px; padding-top: 60px; padding-bottom: 40px; }
-        
-        /* CSS Classes */
         .ticker-wrap { position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); height: 40px; overflow: hidden; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .ticker { display: inline-block; white-space: nowrap; padding-right: 100%; animation: ticker 25s linear infinite; line-height: 40px; font-size: 12px; color: #fff; font-weight: 500; }
         @keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(100%, 0, 0); } }
@@ -155,18 +153,16 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 </div>
                 <div class="col-left">
                     <div class="data-grid">
-                        <!-- DATE FIX HERE: Check if date exists -->
                         <div class="data-item">
                             <span class="d-label">تاریخ انقضا</span>
                             <span class="d-value">
-                                {% if user.expire_date %}
+                                {% if user.expire_date and user.expire_date != '' and user.expire_date != 'None' %}
                                     {{ user.expire_date }}
                                 {% else %}
                                     نامحدود
                                 {% endif %}
                             </span>
                         </div>
-                        
                         <div class="data-item"><span class="d-label">حجم کل</span><span class="d-value">{{ user.data_limit | filesizeformat }}</span></div>
                         <div class="data-item"><span class="d-label">مصرف شده</span><span class="d-value">{{ user.used_traffic | filesizeformat }}</span></div>
                         <div class="data-item"><span class="d-label">باقی‌مانده</span><span class="d-value" id="remText" style="color: var(--accent)">...</span></div>
@@ -192,21 +188,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <div id="tutModal" class="modal-overlay"><div class="modal-box"><h3>راهنما</h3><br><div class="tut-row" id="t1">__TUT1__</div><div class="tut-row" id="t2">__TUT2__</div><div class="tut-row" id="t3">__TUT3__</div><button class="close-btn" onclick="closeModal('tutModal')">باشه</button></div></div>
     
     <script>
-        // --- INLINE CONFIG ---
         const THEME_CONFIG = {
-            brandName: "__BRAND__",
-            botUsername: "__BOT__",
-            supportID: "__SUP__",
-            newsText: "__NEWS__",
-            tut1: "__TUT1__",
-            tut2: "__TUT2__",
-            tut3: "__TUT3__",
-            androidUrl: "__ANDROID__",
-            iosUrl: "__IOS__",
-            winUrl: "__WIN__"
+            brandName: "__BRAND__", botUsername: "__BOT__", supportID: "__SUP__", newsText: "__NEWS__",
+            tut1: "__TUT1__", tut2: "__TUT2__", tut3: "__TUT3__",
+            androidUrl: "__ANDROID__", iosUrl: "__IOS__", winUrl: "__WIN__"
         };
 
-        // Apply Config (This ensures placeholders are replaced if sed fails/delays)
         if(typeof THEME_CONFIG !== 'undefined') {
             document.title = THEME_CONFIG.brandName;
             document.getElementById('brandTxt').innerText = THEME_CONFIG.brandName;
@@ -287,9 +274,9 @@ sed -i "s|__NEWS__|$IN_NEWS|g" "$TEMPLATE_FILE"
 sed -i "s|__TUT1__|$TUT_1|g" "$TEMPLATE_FILE"
 sed -i "s|__TUT2__|$TUT_2|g" "$TEMPLATE_FILE"
 sed -i "s|__TUT3__|$TUT_3|g" "$TEMPLATE_FILE"
-sed -i "s|__ANDROID__|https://play.google.com/store/apps/details?id=com.v2ray.ang|g" "$TEMPLATE_FILE"
-sed -i "s|__IOS__|https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690|g" "$TEMPLATE_FILE"
-sed -i "s|__WIN__|https://github.com/2dust/v2rayN/releases|g" "$TEMPLATE_FILE"
+sed -i "s|__ANDROID__|$LNK_AND|g" "$TEMPLATE_FILE"
+sed -i "s|__IOS__|$LNK_IOS|g" "$TEMPLATE_FILE"
+sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
 
 # Update Config
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
@@ -298,4 +285,4 @@ echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}✔ Theme Installed! Check your link.${NC}"
+echo -e "${GREEN}✔ Theme Installed! Date bug fixed.${NC}"
