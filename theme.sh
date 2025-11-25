@@ -153,16 +153,10 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 </div>
                 <div class="col-left">
                     <div class="data-grid">
-                        <div class="data-item">
-                            <span class="d-label">تاریخ انقضا</span>
-                            <span class="d-value">
-                                {% if user.expire_date and user.expire_date != '' and user.expire_date != 'None' %}
-                                    {{ user.expire_date }}
-                                {% else %}
-                                    نامحدود
-                                {% endif %}
-                            </span>
-                        </div>
+                        <div <div class="data-item">
+    <span class="d-label">تاریخ انقضا</span>
+    <span class="d-value">{{ user.expire_date }}</span>
+</div>
                         <div class="data-item"><span class="d-label">حجم کل</span><span class="d-value">{{ user.data_limit | filesizeformat }}</span></div>
                         <div class="data-item"><span class="d-label">مصرف شده</span><span class="d-value">{{ user.used_traffic | filesizeformat }}</span></div>
                         <div class="data-item"><span class="d-label">باقی‌مانده</span><span class="d-value" id="remText" style="color: var(--accent)">...</span></div>
