@@ -227,13 +227,15 @@ _edit_bot() {
 }
 
 _edit_sup() {
-    local CUR=$(grep "__SUP__" "$HTML_FILE" 2>/dev/null || echo "Unknown")
-    # Regex for support is tricky, assuming it's the specific line
+    # پیدا کردن یوزرنیم فعلی بر اساس کلاس btn-dark
+    local CUR=$(grep "btn-dark" "$HTML_FILE" | head -n1 | sed -n 's/.*href="https:\/\/t.me\/\([^"]*\)".*/\1/p')
+    echo -e "Current Support ID: ${YELLOW}$CUR${NC}"
+    
     echo -e "Enter new Support Username (no @)"
     read -p ">> " NEW_VAL
     if [ ! -z "$NEW_VAL" ]; then
-        # Replace specific support link pattern
-        sed -i "s|href=\"https://t.me/[^\"]*\" style=\"display:block|href=\"https://t.me/$NEW_VAL\" style=\"display:block|" "$HTML_FILE"
+        # جایگزینی لینک در دکمه‌ای که کلاس btn-dark دارد
+        sed -i "s|href=\"https://t.me/[^\"]*\" class=\"btn btn-dark\"|href=\"https://t.me/$NEW_VAL\" class=\"btn btn-dark\"|" "$HTML_FILE"
         echo -e "${GREEN}✔ Updated.${NC}"
         sleep 1
     fi
