@@ -16,7 +16,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme (Buttons Restored) ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Color Swap) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -109,7 +109,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         :root.light .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border-color: rgba(255,255,255,0.8); color: var(--txt); }
         :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); color: white; }
 
-        /* TWO COLUMNS FOR COPY & QR (RESTORED) */
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
@@ -159,13 +158,13 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     <div class="pw"><div class="pf" id="pb"></div></div>
                     <div class="pt"><span>مصرف شده</span><span id="pt">0%</span></div>
                     
-                    <!-- Two columns for Copy & QR -->
+                    <!-- Buttons Swapped Colors -->
                     <div class="btn-grid">
-                        <button class="btn btn-p" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
+                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
                     
-                    <button class="btn btn-s" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
+                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
                     <a href="https://t.me/__SUP__" style="display:block; text-align:center; margin-top:15px; color:var(--mute); font-size:13px; text-decoration:none">💬 پشتیبانی</a>
                 </div>
