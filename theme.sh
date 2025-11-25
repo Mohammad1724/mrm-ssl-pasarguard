@@ -51,8 +51,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-card: rgba(25, 25, 30, 0.8);
             --color-border: rgba(255, 255, 255, 0.1);
             
-            /* Changed to Sky Blue */
-            --color-btn-primary: rgba(56, 189, 248, 0.8); 
+            /* Sky Blue Primary Button */
+            --color-btn-primary: rgba(56, 189, 248, 0.8);
             
             --color-btn-secondary: rgba(255, 255, 255, 0.1);
             --color-glow-1: rgba(249, 115, 22, 0.4);
@@ -67,7 +67,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-card: rgba(255, 255, 255, 0.9);
             --color-border: rgba(0, 0, 0, 0.1);
             
-            /* Changed to Sky Blue */
+            /* Sky Blue Primary Button */
             --color-btn-primary: rgba(14, 165, 233, 0.9);
             
             --color-btn-secondary: rgba(0, 0, 0, 0.08);
@@ -198,7 +198,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             width: 60px;
             height: 60px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #7c3aed, #4c1d95);
+            /* Changed to Light Orange Gradient */
+            background: linear-gradient(135deg, #fbbf24, #f97316);
             display: flex;
             align-items: center;
             justify-content: center;
