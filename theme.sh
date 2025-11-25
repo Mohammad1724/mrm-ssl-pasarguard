@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP Ultimate (Glass / Liquid UI)
-# Status: GLASS VERSION + WORKING THEME TOGGLE + LIQUID BUTTONS
+# Theme: FarsNetVIP Ultimate (High-End Glass/Jelly UI)
+# Status: FINAL FIXED (Buttons Remastered)
 # ==========================================
 
 # Colors
@@ -19,14 +19,14 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# Helper: Extract previous Brand value from existing HTML (Smart Default)
+# Helper: Extract previous Brand value
 get_prev() {
     if [ -f "$TEMPLATE_FILE" ]; then
         grep 'id="brandTxt"' "$TEMPLATE_FILE" | head -n1 | sed -E 's/.*id="brandTxt">([^<]+)<.*/\1/'
     fi
 }
 
-# Helper: escape برای sed
+# Helper: escape string
 sed_escape() {
     printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
 }
@@ -52,7 +52,7 @@ read -p "News Text [$DEF_NEWS]: " IN_NEWS
 [ -z "$IN_SUP" ] && IN_SUP="$PREV_SUP"
 [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
 
-# Links (Fixed)
+# Links
 LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
 LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
 LNK_WIN="https://github.com/2dust/v2rayN/releases"
@@ -60,7 +60,7 @@ LNK_WIN="https://github.com/2dust/v2rayN/releases"
 echo -e "\n${BLUE}Installing Theme...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# 2. Generate HTML (Single File, No Dependencies)
+# 2. Generate HTML
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -71,555 +71,241 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <style>
 @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700&display=swap');
 
-/* پایه رنگ‌ها (حالت پیش‌فرض: تیره) */
+/* پایه رنگ‌ها (Dark Mode Default) */
 :root {
-    --background: #020617;              /* خیلی تیره، نزدیک مشکی */
-    --foreground: #f9fafb;
-    --card: rgba(15, 23, 42, 0.65);     /* شیشه‌ای تیره */
-    --card-foreground: #f9fafb;
-    --primary: #7c3aed;                 /* بنفش اصلی */
-    --primary-fg: #f9fafb;
-    --secondary: rgba(15, 23, 42, 0.4);
-    --secondary-fg: #e5e7eb;
-    --muted: rgba(15, 23, 42, 0.3);
-    --muted-fg: #a1a1aa;
-    --border: rgba(148, 163, 184, 0.4);
-    --input: rgba(15, 23, 42, 0.7);
-    --ring: #7c3aed;
-    --radius: 0.9rem;
-    --success: #10b981;
-    --warning: #f59e0b;
-    --destructive: #ef4444;
-    --glow-orange: rgba(249, 115, 22, 0.55);  /* نور نارنجی */
-    --glow-blue: rgba(56, 189, 248, 0.35);
+    --background: #0a0a0a;
+    --foreground: #f0f0f0;
+    --card: rgba(30, 30, 35, 0.6);
+    --primary-grad: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    --secondary-bg: rgba(255, 255, 255, 0.05);
+    --radius: 16px;
+    --glow-orange: rgba(249, 115, 22, 0.5);
+    --glow-blue: rgba(59, 130, 246, 0.4);
+    
+    /* Button Colors */
+    --btn-pri-bg: rgba(124, 58, 237, 0.65);
+    --btn-sec-bg: rgba(255, 255, 255, 0.08);
+    --border-light: rgba(255, 255, 255, 0.15);
 }
 
-/* حالت روشن روی <html> */
+/* Light Mode */
 html[data-theme="light"] {
-    --background: #f9fafb;
-    --foreground: #020617;
-    --card: rgba(255, 255, 255, 0.92);
-    --card-foreground: #020617;
-    --primary: #7c3aed;
-    --primary-fg: #ffffff;
-    --secondary: rgba(249, 250, 251, 0.95);
-    --secondary-fg: #111827;
-    --muted: rgba(243, 244, 246, 0.9);
-    --muted-fg: #6b7280;
-    --border: rgba(209, 213, 219, 0.9);
-    --input: rgba(229, 231, 235, 0.95);
-    --glow-orange: rgba(249, 115, 22, 0.3);
-    --glow-blue: rgba(56, 189, 248, 0.25);
+    --background: #eef2f6;
+    --foreground: #1e293b;
+    --card: rgba(255, 255, 255, 0.75);
+    --primary-grad: linear-gradient(135deg, #7c3aed, #6d28d9);
+    --secondary-bg: rgba(0, 0, 0, 0.05);
+    --glow-orange: rgba(249, 115, 22, 0.25);
+    --glow-blue: rgba(59, 130, 246, 0.2);
+    
+    --btn-pri-bg: rgba(124, 58, 237, 0.8);
+    --btn-sec-bg: rgba(255, 255, 255, 0.6);
+    --border-light: rgba(255, 255, 255, 0.8);
 }
 
-/* پس‌زمینه‌ی مخصوص حالت روشن (واضح‌تر) */
-html[data-theme="light"] body {
-    background:
-        radial-gradient(circle at top right, rgba(249, 250, 251, 0.9), transparent 55%),
-        radial-gradient(circle at bottom left, rgba(191, 219, 254, 0.85), transparent 55%),
-        #e5e7eb;
-}
-
-/* عمومی */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    -webkit-tap-highlight-color: transparent;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 body {
     font-family: 'Vazirmatn', sans-serif;
-    background:
-        radial-gradient(circle at top right, var(--glow-orange), transparent 55%),
-        radial-gradient(circle at bottom left, var(--glow-blue), transparent 55%),
-        #020617;
+    background-color: var(--background);
     color: var(--foreground);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 20px;
-    padding-top: 60px;
-    position: relative;
-    overflow-x: hidden;
-    transition: background-color 0.4s ease, color 0.4s ease;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; padding-top: 60px;
+    position: relative; overflow-x: hidden;
+    transition: background 0.3s;
 }
 
-/* اورب‌های نوری پس‌زمینه (نور لامپ‌ها) */
-body::before,
-body::after {
-    content: "";
-    position: fixed;
-    z-index: -1;
-    border-radius: 999px;
-    filter: blur(45px);
-    opacity: 0.9;
-    pointer-events: none;
-}
+/* Background Ambient Lights (Lamps) */
 body::before {
-    width: 380px;
-    height: 380px;
-    top: -120px;
-    right: -80px;
-    background: radial-gradient(circle, var(--glow-orange), transparent 60%);
+    content: ""; position: fixed; top: -150px; right: -50px; width: 400px; height: 400px;
+    background: radial-gradient(circle, var(--glow-orange), transparent 70%);
+    filter: blur(60px); opacity: 0.8; z-index: -1;
 }
 body::after {
-    width: 320px;
-    height: 320px;
-    bottom: -100px;
-    left: -60px;
-    background: radial-gradient(circle, var(--glow-blue), transparent 60%);
+    content: ""; position: fixed; bottom: -100px; left: -100px; width: 400px; height: 400px;
+    background: radial-gradient(circle, var(--glow-blue), transparent 70%);
+    filter: blur(60px); opacity: 0.8; z-index: -1;
 }
 
-/* نوار خبر (Ticker) */
+/* Ticker */
 .ticker-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 40px;
-    background: rgba(15, 23, 42, 0.8);
-    border-bottom: 1px solid rgba(148, 163, 184, 0.35);
-    z-index: 50;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    position: fixed; top: 0; left: 0; width: 100%; height: 40px;
+    background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255,255,255,0.1); z-index: 50;
+    display: flex; align-items: center; overflow: hidden;
 }
 .ticker-text {
-    white-space: nowrap;
-    animation: ticker 28s linear infinite;
-    font-size: 13px;
-    font-weight: 500;
-    color: #fed7aa; /* نارنجی روشن */
-    padding-inline: 40px;
+    white-space: nowrap; animation: ticker 25s linear infinite;
+    font-size: 13px; color: #fbbf24; padding: 0 20px;
 }
-@keyframes ticker {
-    0%   { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
-}
+@keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
-.container {
-    width: 100%;
-    max-width: 800px;
-}
+.container { width: 100%; max-width: 800px; }
 
-/* هدر */
-.header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-}
-.brand {
-    font-size: 24px;
-    font-weight: 700;
-    text-shadow: 0 0 22px rgba(15, 23, 42, 0.8);
-}
+/* Header */
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.brand { font-size: 26px; font-weight: 800; letter-spacing: -1px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
 .bot-badge {
-    font-size: 12px;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 64, 175, 0.9));
-    color: var(--secondary-fg);
-    padding: 4px 12px;
-    border-radius: 999px;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 6px;
-    border: 1px solid rgba(148, 163, 184, 0.5);
-    box-shadow: 0 0 20px rgba(15, 23, 42, 0.9);
+    font-size: 12px; background: var(--secondary-bg); color: var(--foreground);
+    padding: 4px 12px; border-radius: 20px; text-decoration: none;
+    display: inline-flex; align-items: center; margin-top: 4px; border: 1px solid var(--border-light);
 }
 .theme-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 14px;
-    background: radial-gradient(circle at 30% 0%, #ffffff33, transparent 55%),
-                rgba(15, 23, 42, 0.85);
-    border: 1px solid rgba(148, 163, 184, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 18px;
-    box-shadow:
-        0 0 0 1px rgba(148, 163, 184, 0.5),
-        0 18px 35px rgba(15, 23, 42, 0.9);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-}
-.theme-btn:hover {
-    transform: translateY(-1px);
-    box-shadow:
-        0 0 0 1px rgba(248, 250, 252, 0.4),
-        0 20px 40px rgba(15, 23, 42, 0.95);
+    width: 42px; height: 42px; border-radius: 14px;
+    background: var(--secondary-bg); border: 1px solid var(--border-light);
+    display: flex; justify-content: center; align-items: center; font-size: 20px;
+    cursor: pointer; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-/* کارت اصلی */
+/* Card */
 .card {
-    position: relative;
-    background: radial-gradient(circle at 0% 0%, rgba(248, 250, 252, 0.22), transparent 55%),
-                var(--card);
-    border: 1px solid rgba(148, 163, 184, 0.55);
-    border-radius: var(--radius);
-    padding: 24px;
-    box-shadow:
-        0 0 0 1px rgba(148, 163, 184, 0.4),
-        0 32px 80px rgba(15, 23, 42, 0.95),
-        0 0 80px rgba(249, 115, 22, 0.18);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
-    overflow: hidden;
-}
-.card::before {
-    /* هاله‌ی نرم داخل کارت مثل نور لامپ */
-    content: "";
-    position: absolute;
-    inset: -30%;
-    background:
-        radial-gradient(circle at 10% -10%, rgba(248, 250, 252, 0.35), transparent 60%),
-        radial-gradient(circle at 110% 110%, rgba(249, 115, 22, 0.35), transparent 65%);
-    opacity: 0.38;
-    z-index: -1;
-}
-.grid-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 24px;
-}
-@media (min-width: 768px) {
-    .grid-layout {
-        grid-template-columns: 1fr 1.2fr;
-    }
-    .col-info { order: 1; }
-    .col-actions { order: 2; }
+    background: var(--card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius); padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
 
-/* پروفایل */
-.profile {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-}
+.grid-layout { display: grid; grid-template-columns: 1fr; gap: 24px; }
+@media (min-width: 768px) { .grid-layout { grid-template-columns: 1fr 1.2fr; } .col-info { order: 1; } .col-actions { order: 2; } }
+
+/* Profile */
+.profile { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .avatar {
-    width: 64px;
-    height: 64px;
-    background: radial-gradient(circle at 30% 0%, #ffffff44, transparent 55%),
-                linear-gradient(135deg, #4c1d95, #7c3aed);
-    color: var(--primary-fg);
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 28px;
-    position: relative;
-    box-shadow:
-        0 0 0 3px rgba(15, 23, 42, 1),
-        0 0 30px rgba(124, 58, 237, 0.7);
+    width: 68px; height: 68px; border-radius: 50%;
+    background: var(--primary-grad); color: white;
+    display: flex; justify-content: center; align-items: center; font-size: 30px;
+    box-shadow: 0 4px 15px rgba(124, 58, 237, 0.5); position: relative;
 }
 .online-dot {
-    position: absolute;
-    bottom: 2px;
-    right: 2px;
-    width: 14px;
-    height: 14px;
-    background: var(--success);
-    border: 2px solid var(--card);
-    border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--background), 0 0 12px rgba(34, 197, 94, 0.9);
+    position: absolute; bottom: 2px; right: 2px; width: 14px; height: 14px;
+    background: #10b981; border: 2px solid rgba(30,30,30,1); border-radius: 50%;
 }
-.user-name {
-    font-size: 20px;
-    font-weight: 700;
-}
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-top: 4px;
-}
-.st-active {
-    background: rgba(16, 185, 129, 0.18);
-    color: var(--success);
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
-}
-.st-inactive {
-    background: rgba(239, 68, 68, 0.16);
-    color: var(--destructive);
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    box-shadow: 0 0 12px rgba(239, 68, 68, 0.35);
-}
+.user-name { font-size: 20px; font-weight: 700; }
+.status-badge { font-size: 12px; padding: 3px 10px; border-radius: 10px; margin-top: 5px; display: inline-block; font-weight: 600; }
+.st-active { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.st-inactive { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
 
-/* نوار مصرف */
-.prog-con {
-    margin-bottom: 24px;
-}
+/* Progress */
+.prog-con { margin-bottom: 24px; }
 .progress-bar {
-    height: 9px;
-    background: rgba(15, 23, 42, 0.8);
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.5);
+    height: 10px; background: rgba(0,0,0,0.3); border-radius: 20px;
+    overflow: hidden; border: 1px solid rgba(255,255,255,0.1);
 }
 .progress-fill {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #22c55e, #eab308, #f97316);
-    transition: width 0.9s ease;
-    box-shadow: 0 0 18px rgba(249, 115, 22, 0.7);
+    height: 100%; width: 0%; background: linear-gradient(90deg, #10b981, #f59e0b);
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.6); transition: width 1s;
 }
-.progress-text {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    margin-top: 6px;
-    color: var(--muted-fg);
-    font-weight: 500;
-}
+.progress-text { display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; color: #9ca3af; }
 
-/* آمار */
-.stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 24px;
-}
-.stat-item {
-    background: linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.7));
-    padding: 12px;
-    border-radius: calc(var(--radius) - 4px);
-    display: flex;
-    flex-direction: column;
-    border: 1px solid rgba(148, 163, 184, 0.5);
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.95),
-        0 12px 30px rgba(15, 23, 42, 0.9);
-}
-.stat-lbl {
-    font-size: 11px;
-    color: var(--muted-fg);
-}
-.stat-val {
-    font-size: 14px;
-    font-weight: 700;
-    direction: ltr;
-    text-align: right;
-}
-
-/* دکمه‌ها (ژله‌ای + نور داخل + Liquid Glass) */
+/* --- GLASS / JELLY BUTTONS (REMASTERED) --- */
 .btn {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: calc(var(--radius) - 4px);
-    font-size: 14px;
-    font-weight: 500;
-    height: 40px;
-    width: 100%;
-    cursor: pointer;
-    text-decoration: none;
-    border: 1px solid rgba(148, 163, 184, 0.5);
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 100%; height: 46px;
+    font-size: 14px; font-weight: 600; color: #ffffff;
+    text-decoration: none; cursor: pointer;
+    border-radius: 16px; /* Rounded Jelly Look */
+    
+    /* Glass Base */
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-top: 1px solid rgba(255, 255, 255, 0.4); /* Top Highlight */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    
+    /* Shadows for Volume (Jelly Effect) */
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.1);
+        
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
     overflow: hidden;
-    color: var(--foreground);
-    background: radial-gradient(circle at 20% 0%, #ffffff44, transparent 55%),
-                linear-gradient(135deg, rgba(30, 64, 175, 0.9), rgba(79, 70, 229, 0.95));
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.95),
-        0 18px 40px rgba(15, 23, 42, 0.95),
-        0 0 28px rgba(249, 115, 22, 0.65);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-
-    /* افکت Liquid Glass با SVG فیلتر */
-    filter: url(#glass-distortion);
-    -webkit-filter: url(#glass-distortion);
-
-    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
-.btn::before {
-    /* نور داخل دکمه مثل لامپ کوچیک */
-    content: "";
-    position: absolute;
-    width: 130%;
-    height: 130%;
-    top: -90%;
-    left: -15%;
-    background: radial-gradient(circle, rgba(248, 250, 252, 0.45), transparent 70%);
-    opacity: 0.34;
+
+/* Inner Glow (Lamp Effect) */
+.btn::after {
+    content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 50%;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.15), transparent);
     pointer-events: none;
 }
+
+/* Primary Button (Purple Jelly) */
 .btn-pri {
-    color: var(--primary-fg);
+    background: var(--btn-pri-bg);
+    box-shadow: 
+        0 8px 20px rgba(124, 58, 237, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
+
+/* Secondary Button (Glass Jelly) */
 .btn-sec {
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.9));
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.95),
-        0 16px 32px rgba(15, 23, 42, 0.95);
-}
-.btn:hover {
-    transform: translateY(-1px);
-    box-shadow:
-        0 0 0 1px rgba(248, 250, 252, 0.35),
-        0 26px 52px rgba(15, 23, 42, 1),
-        0 0 36px rgba(249, 115, 22, 0.8);
-}
-.btn:active {
-    transform: translateY(1px) scale(0.99);
-    box-shadow:
-        0 0 0 1px rgba(148, 163, 184, 0.5),
-        0 10px 20px rgba(15, 23, 42, 0.9);
-}
-
-.act-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-/* دانلود اپ‌ها */
-.dl-sec {
-    margin-top: 24px;
-    border-top: 1px solid var(--border);
-    padding-top: 16px;
-}
-.dl-title {
-    font-size: 13px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: var(--muted-fg);
-}
-.dl-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-}
-.dl-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 12px;
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.6);
-    text-decoration: none;
+    background: var(--btn-sec-bg);
     color: var(--foreground);
-    transition: 0.18s ease;
-    background: rgba(15, 23, 42, 0.8);
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 1),
-        0 12px 28px rgba(15, 23, 42, 0.95);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
 }
-.dl-item:hover {
-    border-color: rgba(249, 115, 22, 0.9);
-    background: radial-gradient(circle at 30% 0%, rgba(248, 250, 252, 0.3), transparent 55%),
-                rgba(15, 23, 42, 0.95);
-    box-shadow:
-        0 0 0 1px rgba(248, 250, 252, 0.4),
-        0 22px 40px rgba(15, 23, 42, 1),
-        0 0 30px rgba(249, 115, 22, 0.9);
+
+/* Hover State (Lift & Glow) */
+.btn:active { transform: scale(0.98); }
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 
+        0 12px 24px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
-.dl-item.recom {
-    border-color: rgba(249, 115, 22, 0.95);
-    box-shadow:
-        0 0 0 1px rgba(249, 115, 22, 0.9),
-        0 22px 40px rgba(15, 23, 42, 1),
-        0 0 35px rgba(249, 115, 22, 0.95);
+.btn-pri:hover {
+    box-shadow: 
+        0 12px 28px rgba(124, 58, 237, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
-.dl-icon {
-    font-size: 20px;
+/* ----------------------------------------- */
+
+.act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.stat-item {
+    background: var(--secondary-bg); padding: 12px; border-radius: 12px;
+    border: 1px solid var(--border-light); display: flex; flex-direction: column;
 }
-.dl-name {
-    font-size: 11px;
-    font-weight: 500;
+.stat-lbl { font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
+.stat-val { font-size: 15px; font-weight: 700; text-align: right; direction: ltr; }
+
+/* Downloads */
+.dl-sec { margin-top: 24px; border-top: 1px solid var(--border-light); padding-top: 20px; }
+.dl-title { font-size: 13px; margin-bottom: 12px; opacity: 0.7; }
+.dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.dl-item {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 12px; border-radius: 12px; text-decoration: none; color: var(--foreground);
+    background: var(--secondary-bg); border: 1px solid var(--border-light);
+    transition: 0.2s; backdrop-filter: blur(5px);
 }
+.dl-item:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); border-color: #f59e0b; }
+.dl-item.recom { border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.1); box-shadow: 0 0 15px rgba(245, 158, 11, 0.2); }
 
 /* Toast */
 .toast {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(248, 250, 252, 0.96);
-    color: #020617;
-    padding: 10px 20px;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 600;
-    opacity: 0;
-    pointer-events: none;
-    transition: 0.3s;
-    z-index: 100;
-    box-shadow:
-        0 12px 28px rgba(15, 23, 42, 0.9),
-        0 0 30px rgba(249, 115, 22, 0.6);
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #ffffff; color: #000; padding: 12px 24px; border-radius: 30px;
+    font-weight: 700; opacity: 0; transition: 0.3s; z-index: 999; pointer-events: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
-.toast.show {
-    opacity: 1;
-    bottom: 32px;
-}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* Modals */
+/* Modal */
 .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.78);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    z-index: 50;
-    display: none;
-    align-items: center;
-    justify-content: center;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+    z-index: 100; display: none; align-items: center; justify-content: center;
 }
 .modal-box {
-    background: rgba(15, 23, 42, 0.9);
-    border: 1px solid rgba(148, 163, 184, 0.6);
-    padding: 24px;
-    border-radius: var(--radius);
-    width: 90%;
-    max-width: 400px;
-    max-height: 80vh;
-    overflow-y: auto;
-    text-align: center;
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 1),
-        0 22px 40px rgba(15, 23, 42, 1),
-        0 0 40px rgba(249, 115, 22, 0.75);
+    background: #1a1a1a; border: 1px solid #333; width: 90%; max-width: 380px;
+    padding: 24px; border-radius: 20px; text-align: center; color: #fff;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
 }
-
-/* کانفیگ‌ها */
 .conf-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.6);
-    border-radius: 10px;
-    margin-bottom: 8px;
-    text-align: left;
-    background: rgba(15, 23, 42, 0.9);
-    box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 1),
-        0 10px 22px rgba(15, 23, 42, 0.95);
-}
-.conf-name {
-    font-size: 12px;
-    font-family: monospace;
-    direction: ltr;
-    max-width: 70%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; margin-bottom: 8px;
 }
     </style>
 </head>
@@ -627,28 +313,6 @@ body::after {
     <div class="ticker-container">
         <div class="ticker-text" id="newsTxt">__NEWS__</div>
     </div>
-
-    <!-- SVG Filter for Liquid Glass Buttons -->
-    <svg xmlns="http://www.w3.org/2000/svg"
-         style="position:absolute; width:0; height:0; overflow:hidden"
-         aria-hidden="true">
-      <defs>
-        <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
-          <feTurbulence type="fractalNoise"
-                        baseFrequency="0.006 0.006"
-                        numOctaves="2"
-                        seed="92"
-                        result="noise" />
-          <feGaussianBlur in="noise" stdDeviation="2" result="blurred" />
-          <feDisplacementMap in="SourceGraphic"
-                             in2="blurred"
-                             scale="15"
-                             xChannelSelector="R"
-                             yChannelSelector="G" />
-        </filter>
-      </defs>
-    </svg>
-
     <div class="toast" id="toast">کپی شد!</div>
 
     <div class="container">
@@ -657,7 +321,6 @@ body::after {
                 <div class="brand" id="brandTxt">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-badge">🤖 @__BOT__</a>
             </div>
-            <!-- دکمه تم بدون onclick، فقط با id -->
             <div class="theme-btn" id="themeToggle">
                 <span id="themeIcon">🌙</span>
             </div>
@@ -666,14 +329,12 @@ body::after {
         <div class="card">
             <div class="grid-layout">
                 
-                <!-- Column 1: Actions -->
+                <!-- Actions -->
                 <div class="col-actions">
                     <div class="profile">
                         <div class="avatar">
                             👤
-                            {% if user.online_at %}
-                                <div class="online-dot"></div>
-                            {% endif %}
+                            {% if user.online_at %} <div class="online-dot"></div> {% endif %}
                         </div>
                         <div>
                             <div class="user-name">{{ user.username }}</div>
@@ -687,10 +348,7 @@ body::after {
 
                     <div class="prog-con">
                         <div class="progress-bar"><div class="progress-fill" id="pBar"></div></div>
-                        <div class="progress-text">
-                            <span>مصرف شده</span>
-                            <span id="pText">0%</span>
-                        </div>
+                        <div class="progress-text"><span>مصرف شده</span><span id="pText">0%</span></div>
                     </div>
 
                     <div class="act-grid">
@@ -701,22 +359,18 @@ body::after {
                     <a href="{{ subscription_url }}" class="btn btn-sec" style="width:100%; margin-bottom:10px">🚀 اتصال مستقیم (Add)</a>
                     <button class="btn btn-sec" style="width:100%" onclick="showConfigs()">📂 نمایش کانفیگ‌ها</button>
                     
-                    <a href="https://t.me/__SUP__" class="btn" style="width:100%; margin-top:16px; color:var(--muted-fg)">
+                    <a href="https://t.me/__SUP__" class="btn" style="width:100%; margin-top:16px; background:transparent; border:none; box-shadow:none; color:var(--muted-fg); font-size:12px">
                         💬 ارتباط با پشتیبانی
                     </a>
                 </div>
 
-                <!-- Column 2: Info -->
+                <!-- Info -->
                 <div class="col-info">
                     <div class="stats-grid">
                         <div class="stat-item">
                             <span class="stat-lbl">تاریخ انقضا</span>
                             <span class="stat-val" id="expDate">
-                                {% if user.expire %}
-                                    {{ user.expire }}
-                                {% else %}
-                                    نامحدود
-                                {% endif %}
+                                {% if user.expire %}{{ user.expire }}{% else %}نامحدود{% endif %}
                             </span>
                         </div>
                         <div class="stat-item">
@@ -729,22 +383,16 @@ body::after {
                         </div>
                         <div class="stat-item">
                             <span class="stat-lbl">باقی‌مانده</span>
-                            <span class="stat-val" id="remText" style="color: var(--primary)">...</span>
+                            <span class="stat-val" id="remText" style="color: #3b82f6">...</span>
                         </div>
                     </div>
 
                     <div class="dl-sec">
                         <div class="dl-title">دانلود اپلیکیشن</div>
                         <div class="dl-grid">
-                            <a href="__ANDROID__" class="dl-item" id="dlAnd">
-                                <span class="dl-icon">🤖</span><span class="dl-name">اندروید</span>
-                            </a>
-                            <a href="__IOS__" class="dl-item" id="dlIos">
-                                <span class="dl-icon">🍏</span><span class="dl-name">آیفون</span>
-                            </a>
-                            <a href="__WIN__" class="dl-item" id="dlWin">
-                                <span class="dl-icon">💻</span><span class="dl-name">ویندوز</span>
-                            </a>
+                            <a href="__ANDROID__" class="dl-item" id="dlAnd"><span class="dl-icon">🤖</span><span class="dl-name">اندروید</span></a>
+                            <a href="__IOS__" class="dl-item" id="dlIos"><span class="dl-icon">🍏</span><span class="dl-name">آیفون</span></a>
+                            <a href="__WIN__" class="dl-item" id="dlWin"><span class="dl-icon">💻</span><span class="dl-name">ویندوز</span></a>
                         </div>
                     </div>
                 </div>
@@ -757,8 +405,8 @@ body::after {
     <div id="qrModal" class="modal-overlay" onclick="if(event.target===this)closeModal('qrModal')">
         <div class="modal-box">
             <h3>اسکن کد</h3><br>
-            <div style="background:white; padding:15px; border-radius:12px; display:inline-block">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ subscription_url }}" width="200">
+            <div style="background:white; padding:10px; border-radius:10px; display:inline-block">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ subscription_url }}" width="180">
             </div>
             <button class="btn btn-sec" style="margin-top:20px" onclick="closeModal('qrModal')">بستن</button>
         </div>
@@ -767,23 +415,23 @@ body::after {
     <div id="confModal" class="modal-overlay" onclick="if(event.target===this)closeModal('confModal')">
         <div class="modal-box">
             <h3>لیست کانفیگ‌ها</h3><br>
-            <div id="confList" style="text-align:left">درحال دریافت...</div>
+            <div id="confList" style="text-align:left; max-height:300px; overflow-y:auto">درحال دریافت...</div>
             <button class="btn btn-sec" style="margin-top:20px" onclick="closeModal('confModal')">بستن</button>
         </div>
     </div>
 
     <script>
-        // --- DATA ---
+        // DATA
         const total = {{ user.data_limit }};
         const used = {{ user.used_traffic }};
         
-        // 1. Progress
-        let p = 0; if(total > 0) p = (used/total)*100; if(p>100)p=100;
+        // Progress
+        let p = 0; if(total>0) p = (used/total)*100; if(p>100)p=100;
         document.getElementById('pBar').style.width = p + '%';
         document.getElementById('pText').innerText = Math.round(p) + '%';
-        if(p > 85) document.getElementById('pBar').style.background = 'var(--destructive)';
+        if(p > 85) document.getElementById('pBar').style.background = '#ef4444';
 
-        // 2. Remaining
+        // Remaining
         const rem = total - used;
         function fmt(b) { 
             if(total===0) return 'نامحدود'; if(b<=0) return '0 MB'; 
@@ -792,19 +440,13 @@ body::after {
         }
         document.getElementById('remText').innerText = fmt(rem);
 
-        // 3. Date Fix
+        // Date
         const expEl = document.getElementById('expDate');
         const raw = expEl.innerText.trim();
-        if(!raw || raw === 'None' || raw === 'null') {
-            expEl.innerText = 'نامحدود';
-        } else {
-            try {
-                const d = new Date(raw);
-                if(!isNaN(d.getTime())) expEl.innerText = d.toLocaleDateString('fa-IR');
-            } catch(e){}
-        }
+        if(!raw || raw === 'None' || raw === 'null') expEl.innerText = 'نامحدود';
+        else { try { const d = new Date(raw); if(!isNaN(d.getTime())) expEl.innerText = d.toLocaleDateString('fa-IR'); } catch(e){} }
 
-        // 4. Copy
+        // Copy
         function forceCopy(text) {
             const ta = document.createElement("textarea");
             ta.value = text; ta.style.position = "fixed"; ta.style.left = "-9999px";
@@ -817,71 +459,51 @@ body::after {
             t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2000);
         }
 
-        // 5. Config List
+        // Configs
         function showConfigs() {
             openModal('confModal');
             const list = document.getElementById('confList');
             list.innerHTML = '...';
-            
-            fetch(window.location.pathname + '/links')
-                .then(r => r.text())
-                .then(text => {
-                    if(text) {
-                        list.innerHTML = '';
-                        // Button to Copy All
-                        list.innerHTML += '<div style="margin-bottom:10px"><button class="btn btn-pri" style="height:30px; font-size:12px" onclick="forceCopy(\\''+text.replace(/\\n/g, '\\\\n')+'\\')">کپی همه کانفیگ‌ها</button></div>';
-                        
-                        const lines = text.split('\\n');
-                        lines.forEach(line => {
-                            const l = line.trim();
-                            if(l && (l.startsWith('vless') || l.startsWith('vmess') || l.startsWith('trojan') || l.startsWith('ss'))) {
-                                let name = 'Config';
-                                let proto = l.split('://')[0].toUpperCase();
-                                if(l.includes('#')) name = decodeURIComponent(l.split('#')[1]);
-                                
-                                list.innerHTML += \`
-                                    <div class="conf-row">
-                                        <div>
-                                            <span class="status-badge st-active" style="font-size:10px">\${proto}</span>
-                                            <span class="conf-name">\${name}</span>
-                                        </div>
-                                        <button class="btn btn-sec" style="width:auto; height:28px; padding:0 10px; font-size:11px" onclick="forceCopy('\${l}')">کپی</button>
-                                    </div>
-                                \`;
-                            }
-                        });
-                    }
-                }).catch(() => list.innerHTML = 'خطا');
+            fetch(window.location.pathname + '/links').then(r=>r.text()).then(text => {
+                if(text) {
+                    list.innerHTML = '';
+                    list.innerHTML += '<div style="margin-bottom:10px"><button class="btn btn-pri" style="height:34px; font-size:12px" onclick="forceCopy(\\''+text.replace(/\\n/g, '\\\\n')+'\\')">کپی همه</button></div>';
+                    const lines = text.split('\\n');
+                    lines.forEach(line => {
+                        const l = line.trim();
+                        if(l && (l.startsWith('vless')||l.startsWith('vmess')||l.startsWith('trojan')||l.startsWith('ss'))) {
+                            let name = 'Config';
+                            let proto = l.split('://')[0].toUpperCase();
+                            if(l.includes('#')) name = decodeURIComponent(l.split('#')[1]);
+                            list.innerHTML += \`<div class="conf-row"><div><span class="status-badge st-active" style="font-size:10px">\${proto}</span> <span style="font-size:12px">\${name}</span></div><button class="btn btn-sec" style="width:auto; height:28px; padding:0 12px; font-size:11px" onclick="forceCopy('\${l}')">کپی</button></div>\`;
+                        }
+                    });
+                }
+            }).catch(() => list.innerHTML = 'خطا');
         }
 
-        // 6. Smart OS
+        // Smart OS
         const ua = navigator.userAgent.toLowerCase();
         if(ua.includes('android')) document.getElementById('dlAnd').classList.add('recom');
-        else if(ua.includes('iphone') || ua.includes('ipad')) document.getElementById('dlIos').classList.add('recom');
+        else if(ua.includes('iphone')||ua.includes('ipad')) document.getElementById('dlIos').classList.add('recom');
         else if(ua.includes('win')) document.getElementById('dlWin').classList.add('recom');
 
-        // 7. Theme (Dark / Light)
+        // Theme Logic
         function toggleTheme() {
-            const root = document.documentElement; // <html>
+            const root = document.documentElement;
             const icon = document.getElementById('themeIcon');
-
             if (root.getAttribute('data-theme') === 'light') {
-                root.removeAttribute('data-theme');
-                localStorage.setItem('theme', 'dark');
+                root.removeAttribute('data-theme'); localStorage.setItem('theme', 'dark');
                 if (icon) icon.innerText = '🌙';
             } else {
-                root.setAttribute('data-theme', 'light');
-                localStorage.setItem('theme', 'light');
+                root.setAttribute('data-theme', 'light'); localStorage.setItem('theme', 'light');
                 if (icon) icon.innerText = '☀️';
             }
         }
-
-        // اعمال تم ذخیره‌شده (on load)
         (function initTheme() {
             const saved = localStorage.getItem('theme');
             const root = document.documentElement;
             const icon = document.getElementById('themeIcon');
-
             if (saved === 'light') {
                 root.setAttribute('data-theme', 'light');
                 if (icon) icon.innerText = '☀️';
@@ -891,16 +513,10 @@ body::after {
             }
         })();
 
-        // اتصال دکمه تم بدون استفاده از onclick
-        (function bindThemeButton() {
-            var btn = document.getElementById('themeToggle');
-            if (btn) {
-                btn.style.cursor = 'pointer';
-                btn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    toggleTheme();
-                });
-            }
+        // Bind Toggle
+        (function bindBtn(){
+            var b = document.getElementById('themeToggle');
+            if(b) b.addEventListener('click', function(e){ e.preventDefault(); toggleTheme(); });
         })();
 
         function openModal(id){document.getElementById(id).style.display='flex';}
@@ -910,7 +526,7 @@ body::after {
 </html>
 EOF
 
-# 3. Replace Placeholders (با escape برای ایمنی در sed)
+# 3. Replacements
 BRAND_ESC=$(sed_escape "$IN_BRAND")
 BOT_ESC=$(sed_escape "$IN_BOT")
 SUP_ESC=$(sed_escape "$IN_SUP")
@@ -924,20 +540,13 @@ sed -i "s|__ANDROID__|$LNK_AND|g" "$TEMPLATE_FILE"
 sed -i "s|__IOS__|$LNK_IOS|g" "$TEMPLATE_FILE"
 sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
 
-# Update Panel Config (.env)
-if [ ! -f "$ENV_FILE" ]; then
-    touch "$ENV_FILE"
-fi
+# Config Update
+if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
-# Restart Panel
-if command -v pasarguard &> /dev/null; then
-    pasarguard restart
-else
-    systemctl restart pasarguard 2>/dev/null
-fi
-
+# Restart
+if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
 echo -e "${GREEN}✔ Theme Installed!${NC}"
