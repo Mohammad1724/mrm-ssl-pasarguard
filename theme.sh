@@ -12,7 +12,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme (Fix 500 Error) ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -204,7 +204,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-primary" onclick="handleCopy()">کپی لینک</button>
+                        <button class="btn btn-primary" onclick="handleCopy('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-secondary" onclick="openModal('qrModal')">QR Code</button>
                     </div>
                     <a href="{{ subscription_url }}" class="btn btn-secondary" style="width:100%; margin-bottom:10px">🚀 اتصال مستقیم</a>
@@ -216,7 +216,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     <div class="stats">
                         <div class="stat-box">
                             <div class="stat-label">انقضا</div>
-                            <div class="stat-value" id="expDate">{% if user.expire %}{{ user.expire }}{% else %}نامحدود{% endif %}</div>
+                            <div class="stat-value" id="expDate"></div>
                         </div>
                         <div class="stat-box">
                             <div class="stat-label">حجم کل</div>
@@ -276,20 +276,20 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     </div>
 
     <script>
-        // 1. Define Variables OUTSIDE Raw Block
+        // Define Python variables first
         var subUrl = '{{ subscription_url }}';
         var totalStr = '{{ user.data_limit }}';
         var usedStr = '{{ user.used_traffic }}';
+        var expireStr = '{{ user.expire }}';
         
         {% raw %}
-        // 2. Start RAW block for the logic to avoid Jinja Syntax Errors
+        // --- SAFE JS LOGIC ---
         
-        // Recover URL if empty or template literal
         if (!subUrl || subUrl === '' || subUrl.indexOf('{{') !== -1) {
             subUrl = window.location.href;
         }
 
-        // Setup QR
+        // Update QR
         var qrImg = document.getElementById('qrImage');
         if (qrImg) qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
@@ -302,7 +302,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             else { root.classList.add('light'); themeBtn.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
-        // Data
+        // Data Calc
         var total = parseInt(totalStr) || 0;
         var used = parseInt(usedStr) || 0;
         var percent = total > 0 ? Math.min((used / total) * 100, 100) : 0;
@@ -312,6 +312,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         if (pText) pText.textContent = Math.round(percent) + '%';
         if (percent > 85 && pBar) pBar.style.background = '#ef4444';
 
+        // Format Bytes
         function formatBytes(b) {
             if (total === 0) return 'نامحدود'; if (b <= 0) return '0 MB';
             var units = ['B', 'KB', 'MB', 'GB', 'TB']; var i = Math.floor(Math.log(b) / Math.log(1024));
@@ -320,10 +321,45 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         var remEl = document.getElementById('remaining'); 
         if (remEl) remEl.textContent = formatBytes(total - used);
 
-        // COPY LOGIC
+        // DATE CONVERSION (SHAMSI)
+        var expEl = document.getElementById('expDate');
+        if (expEl) {
+            var raw = expireStr.trim();
+            if (!raw || raw === 'None' || raw === 'null' || raw === 'نامحدود') {
+                expEl.innerText = 'نامحدود';
+            } else {
+                try {
+                    var d = new Date(raw);
+                    if (!isNaN(d.getTime())) {
+                        var shamsi = d.toLocaleDateString('fa-IR');
+                        
+                        // Calculate Days Left
+                        var now = new Date();
+                        var diff = Math.ceil((d - now) / (1000 * 60 * 60 * 24));
+                        var daysTxt = '';
+                        
+                        if (diff < 0) {
+                            daysTxt = `(منقضی: ${Math.abs(diff)} روز پیش)`;
+                            expEl.style.color = '#ef4444';
+                        } else if (diff === 0) {
+                            daysTxt = '(امروز تمام می‌شود)';
+                            expEl.style.color = '#f59e0b';
+                        } else {
+                            daysTxt = `(${diff} روز مانده)`;
+                            expEl.style.color = '#10b981';
+                        }
+                        
+                        expEl.innerHTML = `${shamsi}<br><span style="font-size:11px; opacity:0.8; color:inherit">${daysTxt}</span>`;
+                    } else {
+                        expEl.innerText = raw;
+                    }
+                } catch(e) { expEl.innerText = raw; }
+            }
+        }
+
+        // Copy Logic
         function handleCopy(text) {
             if (!text) text = subUrl;
-            
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(text).then(showToast).catch(function() { fallbackCopy(text); });
             } else {
