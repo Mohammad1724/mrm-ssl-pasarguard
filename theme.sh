@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP (Absolute Fix)
-# Status: BODY CLASS STRATEGY (100% Working)
+# Theme: FarsNetVIP (Root-Level Fix)
+# Status: THEME TOGGLE FIXED (Global Scope)
 # ==========================================
 
 # Colors
@@ -52,21 +52,35 @@ cat << 'EOF' > "$TEMPLATE_FILE"
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;600;800&display=swap');
         
-        /* --- 1. DEFINITIONS --- */
-        body {
-            /* DARK VARIABLES (Default) */
+        /* --- GLOBAL VARIABLES (Dark Default) --- */
+        :root {
             --bg: #050505;
             --fg: #e5e5e5;
-            --card-bg: rgba(20, 20, 25, 0.65);
+            --card-bg: rgba(20, 20, 25, 0.75);
             --btn-pri: rgba(124, 58, 237, 0.75);
             --btn-sec: rgba(255, 255, 255, 0.08);
             --border: rgba(255, 255, 255, 0.15);
-            --highlight: rgba(255, 255, 255, 0.1);
             --orb1: rgba(249, 115, 22, 0.45);
             --orb2: rgba(59, 130, 246, 0.35);
             --txt-muted: #a3a3a3;
-            
-            /* Base Styles */
+        }
+
+        /* --- LIGHT MODE OVERRIDE (Higher Specificity) --- */
+        :root.light-mode {
+            --bg: #f0f4f8;
+            --fg: #1e293b;
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --btn-pri: rgba(124, 58, 237, 0.9);
+            --btn-sec: rgba(255, 255, 255, 0.7);
+            --border: rgba(0, 0, 0, 0.15);
+            --orb1: rgba(249, 115, 22, 0.25);
+            --orb2: rgba(59, 130, 246, 0.25);
+            --txt-muted: #64748b;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
             font-family: 'Vazirmatn', sans-serif;
             background-color: var(--bg);
             color: var(--fg);
@@ -75,27 +89,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             display: flex; flex-direction: column; align-items: center;
             padding-top: 70px; padding-bottom: 30px;
             overflow-x: hidden;
-            transition: background-color 0.3s ease, color 0.3s ease;
+            transition: background-color 0.4s ease, color 0.4s ease;
         }
-
-        /* --- 2. LIGHT MODE OVERRIDES (Applied via class on body) --- */
-        body.light-mode {
-            --bg: #f0f4f8;
-            --fg: #1e293b;
-            --card-bg: rgba(255, 255, 255, 0.85);
-            --btn-pri: rgba(124, 58, 237, 0.85);
-            --btn-sec: rgba(255, 255, 255, 0.6);
-            --border: rgba(0, 0, 0, 0.1);
-            --highlight: rgba(255, 255, 255, 0.5);
-            --orb1: rgba(249, 115, 22, 0.2);
-            --orb2: rgba(59, 130, 246, 0.2);
-            --txt-muted: #64748b;
-        }
-
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         /* Background Orbs */
-        .orb { position: fixed; width: 350px; height: 350px; border-radius: 50%; filter: blur(90px); z-index: -1; opacity: 0.8; pointer-events: none; }
+        .orb { position: fixed; width: 350px; height: 350px; border-radius: 50%; filter: blur(90px); z-index: -1; opacity: 0.8; pointer-events: none; transition: background 0.4s ease; }
         .orb-1 { top: -80px; right: -80px; background: var(--orb1); }
         .orb-2 { bottom: -80px; left: -80px; background: var(--orb2); }
 
@@ -111,13 +109,13 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .brand { font-size: 26px; font-weight: 800; text-shadow: 0 2px 15px rgba(0,0,0,0.2); }
         .bot-tag { font-size: 12px; background: var(--sec-bg); padding: 4px 12px; border-radius: 20px; text-decoration: none; color: var(--fg); border: 1px solid var(--border); display: inline-block; margin-top: 4px; }
 
-        /* Theme Toggle Button (High Z-Index) */
+        /* Theme Toggle Button */
         .theme-togg {
             width: 46px; height: 46px; border-radius: 14px;
             background: var(--sec-bg); border: 1px solid var(--border);
             display: flex; justify-content: center; align-items: center;
             font-size: 22px; cursor: pointer; backdrop-filter: blur(5px);
-            z-index: 9999; /* Critical fix */
+            z-index: 9999;
             transition: 0.2s;
             -webkit-user-select: none; user-select: none;
         }
@@ -130,6 +128,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
             box-shadow: 0 10px 40px rgba(0,0,0,0.1);
             margin-bottom: 30px;
+            transition: background 0.4s ease, border 0.4s ease;
         }
 
         .grid { display: grid; gap: 24px; }
@@ -149,7 +148,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .pg-fill { height: 100%; width: 0; background: linear-gradient(90deg, #10b981, #f59e0b); transition: 1s; }
         .pg-txt { display: flex; justify-content: space-between; font-size: 12px; color: var(--txt-muted); margin-bottom: 24px; }
 
-        /* === GLASS & JELLY BUTTONS === */
+        /* === GLASS BUTTONS (FIXED) === */
         .btn {
             position: relative; width: 100%; height: 50px;
             display: inline-flex; align-items: center; justify-content: center;
@@ -157,15 +156,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             text-decoration: none; cursor: pointer;
             border-radius: 16px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-top: 1px solid rgba(255, 255, 255, 0.4); /* Top Light */
-            border-bottom: 1px solid rgba(0, 0, 0, 0.2); /* Bottom Shadow */
+            border-top: 1px solid rgba(255, 255, 255, 0.4);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.2);
             backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            box-shadow: 
-                0 5px 15px rgba(0, 0, 0, 0.15), 
-                inset 0 1px 0 rgba(255, 255, 255, 0.3); /* Jelly Shine */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
             transition: 0.2s; overflow: hidden;
         }
-        /* Inner Lamp Glow */
         .btn::before {
             content: ""; position: absolute; top: -50%; left: 0; width: 100%; height: 100%;
             background: linear-gradient(to bottom, rgba(255,255,255,0.15), transparent);
@@ -173,14 +169,15 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         }
         .btn:active { transform: scale(0.97); }
         
-        .btn.pri { background: var(--btn-pri); }
+        .btn.pri { background: var(--btn-pri); color: #fff; }
+        /* In light mode, sec button text needs to follow foreground color */
         .btn.sec { background: var(--sec-bg); color: var(--fg); }
 
         .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
         
         /* Stats Grid */
         .s-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-        .s-box { background: var(--sec-bg); padding: 12px; border-radius: 12px; border: 1px solid var(--border); }
+        .s-box { background: var(--sec-bg); padding: 12px; border-radius: 12px; border: 1px solid var(--border); transition: background 0.3s; }
         .s-lbl { font-size: 11px; color: var(--txt-muted); display: block; margin-bottom: 4px; }
         .s-val { font-size: 15px; font-weight: 700; text-align: right; direction: ltr; display: block; }
 
@@ -188,7 +185,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .dl-wrap { border-top: 1px solid var(--border); padding-top: 20px; margin-top: 10px; }
         .dl-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
         .dl-btn { display: flex; flex-direction: column; align-items: center; padding: 10px; background: var(--sec-bg); border-radius: 12px; text-decoration: none; color: var(--fg); border: 1px solid var(--border); font-size: 11px; gap: 6px; transition: 0.2s; }
-        .dl-btn:hover { transform: translateY(-3px); background: var(--highlight); }
+        .dl-btn:hover { transform: translateY(-3px); background: rgba(255,255,255,0.1); }
         .dl-btn.rec { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
 
         /* Modals & Toast */
@@ -211,7 +208,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 <div class="brand" id="bT">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-tag">🤖 @__BOT__</a>
             </div>
-            <!-- THEME BUTTON: Using explicit ID and click handler -->
+            <!-- Theme Toggle -->
             <div class="theme-togg" id="themeBtn">🌙</div>
         </div>
 
@@ -268,7 +265,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             <div style="background:#fff; padding:10px; border-radius:12px; display:inline-block">
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={{ subscription_url }}" width="180">
             </div>
-            <div class="btn sec" style="margin-top:20px" onclick="closeM('mq')">بستن</div>
+            <div class="btn sec" style="margin-top:20px; background:#333; color:#fff" onclick="closeM('mq')">بستن</div>
         </div>
     </div>
 
@@ -276,48 +273,47 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         <div class="m-box">
             <h3>کانفیگ‌ها</h3><br>
             <div id="clst" style="text-align:left; max-height:300px; overflow-y:auto; font-size:12px">...</div>
-            <div class="btn sec" style="margin-top:20px" onclick="closeM('mc')">بستن</div>
+            <div class="btn sec" style="margin-top:20px; background:#333; color:#fff" onclick="closeM('mc')">بستن</div>
         </div>
     </div>
 
     <script>
-        // === 1. THEME LOGIC (BODY CLASS STRATEGY) ===
-        const body = document.body;
+        // === GLOBAL TOGGLE LOGIC (ROOT CLASS) ===
+        // We toggle class on HTML (root) element for maximum scope
+        const root = document.documentElement;
         const tBtn = document.getElementById('themeBtn');
 
-        function applyTheme(isLight) {
-            if (isLight) {
-                body.classList.add('light-mode');
+        function updateThemeUI(isLight) {
+            if(isLight) {
+                root.classList.add('light-mode');
                 if(tBtn) tBtn.innerText = '☀️';
             } else {
-                body.classList.remove('light-mode');
+                root.classList.remove('light-mode');
                 if(tBtn) tBtn.innerText = '🌙';
             }
         }
 
-        // Init from Storage
+        // 1. Init
         try {
-            const saved = localStorage.getItem('theme');
-            if (saved === 'light') applyTheme(true);
-        } catch(e) {}
+            if(localStorage.getItem('theme') === 'light') updateThemeUI(true);
+        } catch(e){}
 
-        // Click Handler
+        // 2. Click Handler
         if(tBtn) {
             tBtn.addEventListener('click', function(e) {
-                e.preventDefault(); // Stop any default behavior
-                const isLight = body.classList.contains('light-mode');
-                if (isLight) {
-                    applyTheme(false);
+                e.preventDefault();
+                const isLight = root.classList.contains('light-mode');
+                if(isLight) {
+                    updateThemeUI(false);
                     localStorage.setItem('theme', 'dark');
                 } else {
-                    applyTheme(true);
+                    updateThemeUI(true);
                     localStorage.setItem('theme', 'light');
                 }
             });
         }
 
-        // === 2. DATA & UI LOGIC ===
-        // Try-Catch blocks prevent crashes if panel data is missing
+        // === DATA LOGIC ===
         let tot = 0, use = 0;
         try { tot = Number('{{ user.data_limit }}'); } catch(e){}
         try { use = Number('{{ user.used_traffic }}'); } catch(e){}
@@ -329,7 +325,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         const pT = document.getElementById('pT');
         if(pT) pT.innerText = Math.round(p)+'%';
 
-        // Remaining
+        // Rem
         const rm = tot - use;
         function fmt(b){
             if(tot===0) return 'نامحدود'; if(b<=0) return '0 MB';
@@ -339,7 +335,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         const rT = document.getElementById('rT');
         if(rT) rT.innerText = fmt(rm);
 
-        // Date Fix
+        // Date
         const xE = document.getElementById('xD');
         if(xE) {
             const rD = xE.innerText.trim();
@@ -375,7 +371,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             }).catch(()=>l.innerHTML='خطا');
         }
 
-        // Smart OS Highlight
+        // OS
         const u=navigator.userAgent.toLowerCase();
         if(u.includes('android')) document.getElementById('da').classList.add('rec');
         else if(u.includes('iphone')||u.includes('ipad')) document.getElementById('di').classList.add('rec');
@@ -405,4 +401,4 @@ echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}✔ Theme Installed (Body Class Fix)!${NC}"
+echo -e "${GREEN}✔ Theme Installed (Root-Scope)!${NC}"
