@@ -311,9 +311,9 @@
         }
 
         var ua = navigator.userAgent.toLowerCase();
-        if(u.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
-        else if(u.indexOf('iphone')>-1||u.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
-        else if(u.indexOf('win')>-1) document.getElementById('dw').classList.add('rec');
+        if(ua.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
+        else if(ua.indexOf('iphone')>-1||u.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
+        else if(ua.indexOf('win')>-1) document.getElementById('dw').classList.add('rec');
         {% endraw %}
     </script>
 </body>
