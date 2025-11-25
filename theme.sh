@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# Theme: FarsNetVIP Ultimate (Pro Max)
-# Features: News Ticker, Config Parser (Split Configs)
+# Theme: FarsNetVIP Ultimate (Gold Edition)
+# Features: Smart Install, News Ticker, Split Layout
 # ==========================================
 
 # Colors
@@ -18,19 +18,21 @@ TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
 CONFIG_FILE="$TEMPLATE_DIR/theme_config.js"
 ENV_FILE="/opt/pasarguard/.env"
 
-# Helper
+# Helper to get previous values
 get_val() { if [ -f "$CONFIG_FILE" ]; then grep "$1:" "$CONFIG_FILE" | sed -n 's/.*: "\(.*\)",/\1/p'; fi; }
 
 clear
 echo -e "${CYAN}=======================================${NC}"
-echo -e "${YELLOW}   FarsNetVIP Pro Max Installer        ${NC}"
+echo -e "${YELLOW}   FarsNetVIP Installer (Final)        ${NC}"
 echo -e "${CYAN}=======================================${NC}"
 
-# --- 1. LOAD SETTINGS ---
+# --- LOAD DEFAULTS ---
 DEF_BRAND=${1:-$(get_val "brandName")}; DEF_BRAND=${DEF_BRAND:-"FarsNetVIP"}
 DEF_BOT=${2:-$(get_val "botUsername")}; DEF_BOT=${DEF_BOT:-"MyBot"}
 DEF_SUPPORT=${3:-$(get_val "supportID")}; DEF_SUPPORT=${DEF_SUPPORT:-"Admin"}
 DEF_NEWS=${4:-$(get_val "newsText")}; DEF_NEWS=${DEF_NEWS:-"🔥 به جمع کاربران ویژه خوش آمدید! برای تمدید به پشتیبانی پیام دهید."}
+
+echo -e "${GREEN}Tip: Press Enter to keep [Default Value]${NC}\n"
 
 echo -e "${BLUE}[1] General Info:${NC}"
 read -p "Brand Name [$DEF_BRAND]: " IN_BRAND; IN_BRAND=${IN_BRAND:-$DEF_BRAND}
@@ -40,11 +42,11 @@ echo -e "\n${BLUE}[2] Telegram Info:${NC}"
 read -p "Bot Username (no @) [$DEF_BOT]: " IN_BOT; IN_BOT=${IN_BOT:-$DEF_BOT}
 read -p "Support ID (no @) [$DEF_SUPPORT]: " IN_SUP; IN_SUP=${IN_SUP:-$DEF_SUPPORT}
 
-# --- 2. INSTALLATION ---
-echo -e "\n${BLUE}Installing...${NC}"
+# --- INSTALLATION ---
+echo -e "\n${BLUE}Installing theme...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
-# Config JS
+# 1. Config JS
 cat << EOF > "$CONFIG_FILE"
 const THEME_CONFIG = {
     brandName: "$IN_BRAND",
@@ -52,9 +54,9 @@ const THEME_CONFIG = {
     supportID: "$IN_SUP",
     newsText: "$IN_NEWS",
     
-    tut1: "1. نرم‌افزار را دانلود کنید.",
+    tut1: "1. نرم‌افزار را از پایین صفحه دانلود کنید.",
     tut2: "2. دکمه کپی لینک را بزنید.",
-    tut3: "3. در برنامه Paste و متصل شوید.",
+    tut3: "3. وارد برنامه شوید و متصل شوید.",
     
     androidUrl: "https://play.google.com/store/apps/details?id=com.v2ray.ang",
     iosUrl: "https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690",
@@ -62,14 +64,14 @@ const THEME_CONFIG = {
 };
 EOF
 
-# HTML
+# 2. HTML Template
 cat << 'EOF' > "$TEMPLATE_FILE"
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title id="pTitle">User Panel</title>
+    <title id="pTitle">Panel</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;500;700;900&display=swap');
         :root {
@@ -89,14 +91,20 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --shadow: 0 20px 40px rgba(0,0,0,0.15);
         }
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg-body); background-attachment: fixed; color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 15px; padding-top: 50px; }
         
-        /* News Ticker */
-        .ticker-wrap { position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.3); backdrop-filter: blur(5px); height: 35px; overflow: hidden; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        .ticker { display: inline-block; white-space: nowrap; padding-right: 100%; animation: ticker 20s linear infinite; line-height: 35px; font-size: 12px; color: #fff; }
+        body { 
+            font-family: 'Vazirmatn', sans-serif; background: var(--bg-body); 
+            background-attachment: fixed; color: var(--text-main); min-height: 100vh; 
+            display: flex; flex-direction: column; align-items: center; 
+            padding: 15px; padding-top: 50px; /* Space for ticker */
+        }
+        
+        /* Ticker */
+        .ticker-wrap { position: fixed; top: 0; left: 0; width: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); height: 36px; overflow: hidden; z-index: 100; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .ticker { display: inline-block; white-space: nowrap; padding-right: 100%; animation: ticker 25s linear infinite; line-height: 36px; font-size: 12px; color: #fff; font-weight: 500; }
         @keyframes ticker { 0% { transform: translate3d(0, 0, 0); } 100% { transform: translate3d(100%, 0, 0); } }
 
-        .container { width: 100%; max-width: 900px; margin-top: 10px; }
+        .container { width: 100%; max-width: 900px; margin-top: 15px; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 0 5px; }
         .brand { font-size: 28px; font-weight: 900; background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .bot-link { font-size: 12px; background: var(--btn-bg); padding: 4px 12px; border-radius: 15px; text-decoration: none; color: var(--text-main); border: 1px solid var(--btn-border); display: inline-block; margin-top: 5px; font-weight: bold; }
@@ -126,13 +134,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .d-label { font-size: 10px; opacity: 0.7; margin-bottom: 4px; }
         .d-value { font-size: 14px; font-weight: 800; direction: ltr; text-align: right; }
         
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .action-btn { background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-main); text-decoration: none; padding: 15px 5px; border-radius: 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: 0.2s; }
         .action-btn:active { transform: scale(0.95); }
         .action-btn i { font-size: 22px; font-style: normal; }
         .btn-title { font-size: 11px; font-weight: bold; }
         
-        /* Config List Button */
         .config-btn { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; padding: 12px; background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 18px; color: var(--text-main); margin-bottom: 10px; cursor: pointer; font-size: 12px; transition: 0.2s; }
         .config-btn:hover { background: rgba(255,255,255,0.1); }
 
@@ -145,16 +152,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .modal-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 25px; border-radius: 25px; width: 90%; max-width: 350px; text-align: center; max-height: 80vh; overflow-y: auto; }
         .close-btn { background: #ff4444; color: white; border: none; padding: 8px 25px; border-radius: 10px; margin-top: 15px; cursor: pointer; font-weight: bold; }
         .tut-row { text-align: right; background: rgba(255,255,255,0.05); padding: 10px; margin: 5px 0; border-radius: 10px; font-size: 12px; }
-        
-        /* Config List Styles */
-        .conf-item { background: var(--btn-bg); border: 1px solid var(--btn-border); padding: 10px; margin-bottom: 8px; border-radius: 12px; text-align: left; font-family: monospace; font-size: 11px; display: flex; justify-content: space-between; align-items: center; overflow: hidden; }
-        .conf-name { max-width: 70%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; }
-        .conf-copy { background: var(--accent); color: #fff; border: none; padding: 4px 8px; border-radius: 6px; cursor: pointer; font-size: 10px; }
+        .conf-item { background: var(--btn-bg); border: 1px solid var(--btn-border); padding: 10px; margin-bottom: 8px; border-radius: 12px; text-align: left; display: flex; justify-content: space-between; align-items: center; }
+        .conf-name { font-size: 11px; }
     </style>
 </head>
 <body>
-    <!-- News Ticker -->
-    <div class="ticker-wrap"><div class="ticker" id="newsTxt">Loading News...</div></div>
+    <div class="ticker-wrap"><div class="ticker" id="newsTxt">News...</div></div>
 
     <div class="container">
         <div class="header">
@@ -188,9 +191,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                         <div class="action-btn" onclick="forceCopy('{{ subscription_url }}', true)"><i>📋</i><span class="btn-title" id="cpBtn">کپی</span></div>
                     </div>
                     
-                    <!-- Split Configs Button -->
-                    <div class="config-btn" onclick="showConfigs()">📂 نمایش لیست کانفیگ‌ها</div>
-                    
+                    <div class="config-btn" onclick="showConfigs()">📂 دریافت لیست کانفیگ‌ها</div>
                     <a href="#" id="supportLink" class="support-btn">💬 پشتیبانی و تمدید</a>
                 </div>
                 <div class="col-left">
@@ -210,16 +211,15 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         </div>
     </div>
 
-    <!-- Config List Modal -->
+    <!-- Modals -->
     <div id="confModal" class="modal-overlay">
         <div class="modal-box">
             <h3>لیست کانفیگ‌ها</h3><br>
-            <div id="confList" style="max-height:300px; overflow-y:auto">Loading...</div>
+            <div id="confList" style="max-height:300px; overflow-y:auto"></div>
             <button class="close-btn" onclick="closeModal('confModal')">بستن</button>
         </div>
     </div>
 
-    <!-- Modals -->
     <div id="qrModal" class="modal-overlay">
         <div class="modal-box"><h3>اسکن کنید</h3><br><div style="background:white; padding:10px; border-radius:15px; display:inline-block"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ subscription_url }}" width="150"></div><br><button class="close-btn" onclick="closeModal('qrModal')">بستن</button></div>
     </div>
@@ -233,7 +233,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         </div>
     </div>
     
-    <script src="theme_config.js?v=3"></script>
+    <script src="theme_config.js?v=4"></script>
     <script>
         if(typeof THEME_CONFIG !== 'undefined') {
             document.title = THEME_CONFIG.brandName;
@@ -252,32 +252,39 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         
         const total = {{ user.data_limit }};
         const used = {{ user.used_traffic }};
+        const subUrl = "{{ subscription_url }}";
+        
         let p = 0; if(total > 0) p = (used/total)*100; else if(total==0 && used>0) p=100; if(p>100)p=100;
         document.getElementById('pBar').style.width = p + '%'; document.getElementById('pText').innerText = Math.round(p) + '%';
         function fmt(b) { if(total===0) return 'نامحدود'; if(b<=0) return '0 MB'; const u=['B','KB','MB','GB','TB']; const i=Math.floor(Math.log(b)/Math.log(1024)); return (b/Math.pow(1024,i)).toFixed(2)+' '+u[i]; }
         document.getElementById('remText').innerText = fmt(total - used);
         
         function forceCopy(text, alert) {
-            var textArea = document.createElement("textarea"); textArea.value = text; textArea.contentEditable = true; textArea.readOnly = false; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; document.body.appendChild(textArea); textArea.focus(); textArea.select(); textArea.setSelectionRange(0, 999999);
+            var textArea = document.createElement("textarea"); textArea.value = text; 
+            textArea.contentEditable = true; textArea.readOnly = false; 
+            textArea.style.position = "fixed"; textArea.style.left = "-9999px"; 
+            document.body.appendChild(textArea); 
+            
+            if (navigator.userAgent.match(/ipad|iphone/i)) {
+                var range = document.createRange();
+                range.selectNodeContents(textArea);
+                var selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                textArea.setSelectionRange(0, 999999);
+            } else {
+                textArea.select();
+            }
+            
             try { document.execCommand('copy'); if(alert) { const btn = document.getElementById('cpBtn'); btn.innerText = '✓'; btn.style.color = '#00ff88'; setTimeout(() => { btn.innerText = 'کپی'; btn.style.color = 'inherit'; }, 2000); } } catch (err) {}
             document.body.removeChild(textArea);
         }
 
-        // Config Parser
         function showConfigs() {
             openModal('confModal');
-            const subUrl = "{{ subscription_url }}";
-            // We need to fetch the sub link content to parse configs (since they are base64 usually)
-            // But due to CORS/Security, we can't fetch easily in simple HTML template without backend proxy.
-            // So we will assume the link provided IS the list (if clear text) or we just show "Copy All".
-            // However, for v2ray links, we can try to decode base64 if provided directly.
-            // Since we can't decode the link content client-side easily without fetch, 
-            // we will show a helper message.
-            
-            // Better Approach for Static Template:
             document.getElementById('confList').innerHTML = 
-                '<p style="font-size:12px; opacity:0.7">برای کپی تکی، لینک اصلی را در مرورگر باز کنید یا از دکمه اتصال استفاده کنید.</p>' +
-                '<div class="conf-item"><span class="conf-name">کل کانفیگ‌ها (یکجا)</span><button class="conf-copy" onclick="forceCopy(\''+subUrl+'\', false)">کپی</button></div>';
+                '<p style="font-size:12px; opacity:0.8; margin-bottom:10px">لینک اشتراک (همه کانفیگ‌ها):</p>' +
+                '<div class="conf-item"><span class="conf-name">Subscription Link</span><button class="close-btn" style="margin:0; padding:5px 15px; background:var(--accent)" onclick="forceCopy(\''+subUrl+'\', false); this.innerText=\'✓\'">کپی</button></div>';
         }
 
         function toggleTheme() { const b=document.body; const btn=document.querySelector('.circle-btn:last-child'); if(b.getAttribute('data-theme')==='light'){b.removeAttribute('data-theme');localStorage.setItem('theme','dark');btn.innerText='🌙';}else{b.setAttribute('data-theme','light');localStorage.setItem('theme','light');btn.innerText='☀️';} }
@@ -289,11 +296,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 </html>
 EOF
 
-# Update Config
+# Update Panel
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
 if command -v pasarguard &> /dev/null; then pasarguard restart; else systemctl restart pasarguard 2>/dev/null; fi
-echo -e "${GREEN}✔ Theme Updated! (News Ticker + Configs added)${NC}"
+echo -e "${GREEN}✔ Theme Updated! Enjoy.${NC}"
