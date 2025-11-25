@@ -16,7 +16,7 @@ get_prev() { if [ -f "$TEMPLATE_FILE" ]; then grep 'id="brandTxt"' "$TEMPLATE_FI
 sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme (Precision Fix) ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme (Multi-App Support) ===${NC}"
 
 PREV_BRAND=$(get_prev); [ -z "$PREV_BRAND" ] && PREV_BRAND="FarsNetVIP"
 
@@ -109,7 +109,8 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         :root.light .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border-color: rgba(255,255,255,0.8); color: var(--txt); }
         :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); color: white; }
 
-        .bg { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+        .btn-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; text-align: left; direction: ltr; }
@@ -125,6 +126,17 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .mbox { background: #1a1a1a; padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: white; }
         .cin { width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; }
         #cph { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
+
+        /* APP SELECTOR LIST */
+        .app-list { display: grid; gap: 8px; margin-top: 10px; }
+        .app-btn {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 16px; background: rgba(255,255,255,0.08);
+            border-radius: 12px; color: white; text-decoration: none;
+            border: 1px solid var(--brd); transition: 0.2s;
+        }
+        .app-btn:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
+        .app-icon { font-size: 18px; margin-left: 10px; }
     </style>
 </head>
 <body>
@@ -155,14 +167,14 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                         <button class="btn btn-p" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
-                    <a href="{{ subscription_url }}" class="btn btn-s" style="width:100%; margin-bottom:10px">🚀 اتصال مستقیم</a>
+                    <!-- OPEN APP SELECTOR MODAL -->
+                    <button class="btn btn-s" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
                     <a href="https://t.me/__SUP__" style="display:block; text-align:center; margin-top:15px; color:var(--mute); font-size:13px; text-decoration:none">💬 پشتیبانی</a>
                 </div>
                 <div>
                     <div class="stats">
                         <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
-                        <!-- We use IDs to overwrite these values with JS for precision -->
                         <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
                         <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
                         <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
@@ -174,6 +186,23 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- APP SELECTION MODAL -->
+    <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
+        <div class="mbox">
+            <h3>انتخاب برنامه</h3>
+            <p style="font-size:12px; color:#aaa; margin-bottom:15px">با کدام برنامه باز شود؟</p>
+            <div class="app-list">
+                <div class="app-btn" onclick="openApp('v2rayng')"><span>v2rayNG</span><span class="app-icon">⚡</span></div>
+                <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span class="app-icon">🦋</span></div>
+                <div class="app-btn" onclick="openApp('v2raytun')"><span>v2rayTun</span><span class="app-icon">🛡️</span></div>
+                <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span class="app-icon">🌐</span></div>
+                <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span class="app-icon">🍏</span></div>
+            </div>
+            <br>
+            <button class="btn btn-s" style="background:#333; color:white" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
@@ -222,16 +251,12 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         document.getElementById('pb').style.width = per+'%'; document.getElementById('pt').textContent = Math.round(per)+'%';
         if(per>85) document.getElementById('pb').style.background = '#ef4444';
 
-        // Standard 1024 (GiB) Formatter
         function fb(b) { 
-            if(tot===0) return 'نامحدود'; 
-            if(b<=0) return '0 B'; 
-            var u=['B','KB','MB','GB','TB']; 
-            var i=Math.floor(Math.log(b)/Math.log(1024)); 
+            if(tot===0) return 'نامحدود'; if(b<=0) return '0 B'; 
+            var u=['B','KB','MB','GB','TB']; var i=Math.floor(Math.log(b)/Math.log(1024)); 
             return parseFloat((b/Math.pow(1024,i)).toFixed(2))+' '+u[i]; 
         }
         
-        // OVERWRITE ALL STATS WITH JS PRECISION
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
         document.getElementById('rem').textContent = fb(tot-use);
@@ -270,6 +295,33 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         function om(i) { document.getElementById(i).style.display='flex'; }
         function cm(i) { document.getElementById(i).style.display='none'; }
 
+        // --- MULTI-APP OPENER LOGIC ---
+        function openApp(app) {
+            var t = subUrl;
+            var name = document.title;
+            var link = '';
+
+            if(app === 'v2rayng') {
+                link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
+            } else if(app === 'hiddify') {
+                link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
+            } else if(app === 'v2raytun') {
+                link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
+            } else if(app === 'happ') {
+                link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(name);
+            } else {
+                // iOS / Universal (Base64 Sub)
+                try {
+                    var b64 = btoa(t);
+                    link = 'sub://' + b64 + '#' + encodeURIComponent(name);
+                } catch(e) { link = t; }
+            }
+            
+            window.location.href = link;
+            // Close modal after click
+            setTimeout(function(){ cm('appMod'); }, 500);
+        }
+
         function sc() {
             om('cfm'); var l=document.getElementById('cl'); l.innerHTML='...';
             fetch(window.location.pathname+'/links').then(function(r){return r.text()}).then(function(t){
@@ -296,7 +348,7 @@ cat << 'EOF' > "$TEMPLATE_FILE"
 </html>
 EOF
 
-# Fix Encoding (Important for 500 Error)
+# Fix Encoding
 python3 -c "import sys; f='$TEMPLATE_FILE'; d=open(f,'rb').read(); open(f,'w',encoding='utf-8').write(d.decode('utf-8','ignore'))"
 
 # Replacements
