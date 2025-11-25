@@ -2,13 +2,13 @@
 
 # ==========================================
 # Project: MRM SSL PASARGUARD
-# Version: v1.2 (Updated Menu)
+# Version: v1.3 (Updated Menu)
 # Created for: Pasarguard Panel Management
 # ==========================================
 
 # --- Configuration ---
 PROJECT_NAME="MRM SSL PASARGUARD"
-VERSION="v1.2"
+VERSION="v1.3"
 
 # >>> IMPORTANT: UPDATE THIS URL TO YOUR THEME FILE LOCATION <<<
 THEME_SCRIPT_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/theme.sh"
