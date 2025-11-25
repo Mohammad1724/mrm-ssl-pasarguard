@@ -7,57 +7,62 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
         
-        /* DARK MODE */
+        /* DARK MODE (Default) */
         :root {
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.8); --brd: rgba(255, 255, 255, 0.1);
-            --pri: rgba(56, 189, 248, 0.8); /* Sky Blue */
-            --sec: rgba(255, 255, 255, 0.1);
+            --pri: rgba(56, 189, 248, 0.8);
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.3);
-            /* Luxury Gold Gradient */
-            --brand-grad: linear-gradient(135deg, #fef9c3 0%, #fbbf24 50%, #d97706 100%);
         }
         /* LIGHT MODE */
         :root.light {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.9); --brd: rgba(0, 0, 0, 0.1);
             --pri: rgba(14, 165, 233, 0.9);
-            --sec: rgba(0, 0, 0, 0.08);
             --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.2);
-            /* Deep Blue Gradient */
-            --brand-grad: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 60px 20px 20px; transition: 0.3s; }
         
+        /* Background Orbs */
         .orb { position: fixed; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -100px; right: -50px; background: var(--g1); } .o2 { bottom: -100px; left: -50px; background: var(--g2); }
 
+        /* News Ticker */
         .ticker { position: fixed; top: 0; left: 0; width: 100%; height: 40px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); display: flex; align-items: center; overflow: hidden; z-index: 100; }
         .ticker span { white-space: nowrap; animation: s 20s linear infinite; color: #fbbf24; font-size: 13px; }
         @keyframes s { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
         .con { max-width: 800px; margin: 0 auto; }
         
-        /* Header Fixed */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
-        /* SUPER LUXURY BRAND */
+        /* === NEW BRAND STYLE (Glassy + Magenta Glow) === */
         .brand {
-            font-size: 36px; font-weight: 900;
-            background: var(--brand-grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-shadow: 0 4px 20px rgba(251, 191, 36, 0.3); /* Glow Effect */
+            font-size: 40px; font-weight: 900;
+            /* Glassy/Jelly Gradient */
+            background: linear-gradient(180deg, rgba(255,255,255,0.95) 10%, rgba(255,255,255,0.1) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            /* Neon Magenta Glow */
+            filter: drop-shadow(0 0 8px rgba(255, 0, 200, 0.9)) drop-shadow(0 0 20px rgba(255, 0, 200, 0.5));
             letter-spacing: -1.5px; line-height: 1.1;
-            transform: skewX(-5deg); /* Stylish Angle */
+            transform: skewX(-5deg);
+            transition: 0.3s;
+        }
+        :root.light .brand {
+            /* Darker Glass for Light Mode */
+            background: linear-gradient(180deg, rgba(80,80,80,0.95) 0%, rgba(80,80,80,0.2) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            /* Keep Magenta Glow */
+            filter: drop-shadow(0 0 6px rgba(255, 0, 200, 0.7));
         }
         
-        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); border-bottom: 1px solid rgba(0, 0, 0, 0.3); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: all 0.3s ease; }
+        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: 0.3s; }
         :root.light .bot-link { color: #333; border-top: 1px solid white; border-bottom: 1px solid rgba(0,0,0,0.1); }
         .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
 
-        /* Theme Button */
         .theme-btn { width: 46px; height: 46px; border-radius: 14px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
         .theme-btn:active { transform: scale(0.9); }
 
@@ -65,33 +70,35 @@
         .grid { display: grid; gap: 24px; } @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
         .prof { display: flex; gap: 15px; align-items: center; margin-bottom: 20px; }
-        .av { width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #fbbf24, #f97316); color: #7c2d12; display: flex; align-items: center; justify-content: center; font-size: 28px; position: relative; }
-        .dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid var(--bg); }
+        
+        /* === NEW AVATAR STYLE (Magenta & White Gradient) === */
+        .av { 
+            width: 65px; height: 65px; border-radius: 50%; 
+            background: linear-gradient(135deg, #ff00cc 0%, #ffffff 100%);
+            color: #333; /* Dark icon for contrast */
+            display: flex; align-items: center; justify-content: center; 
+            font-size: 30px; position: relative;
+            border: 2px solid rgba(255,255,255,0.5);
+            box-shadow: 0 5px 15px rgba(255, 0, 200, 0.3);
+        }
+        
+        .dot { position: absolute; bottom: 4px; right: 4px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
         .nm { font-size: 18px; font-weight: 700; }
         .st { display: inline-block; margin-top: 4px; font-size: 12px; padding: 2px 10px; border-radius: 10px; }
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        .pw { height: 10px; background: rgba(0,0,0,0.2); border-radius: 10px; overflow: hidden; margin-bottom: 5px; }
-        .pf { height: 100%; background: linear-gradient(90deg, #10b981, #f59e0b); width: 0%; transition: width 1s; }
+        .pw { height: 12px; background: rgba(0,0,0,0.2); border-radius: 10px; overflow: hidden; margin-bottom: 5px; border: 1px solid rgba(255,255,255,0.05); }
+        .pf { height: 100%; width: 0%; transition: width 1s, background 0.5s; border-radius: 10px; }
         .pt { display: flex; justify-content: space-between; font-size: 12px; color: var(--mute); margin-bottom: 20px; }
 
-        /* GLASS BUTTONS */
+        /* Buttons */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 16px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02)); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.15); border-top: 1px solid rgba(255,255,255,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.3); color: var(--txt); transition: 0.3s; }
-        .btn::before { content: ''; position: absolute; top: -60%; left: 20%; width: 60%; height: 120%; background: radial-gradient(ellipse, rgba(249,115,22,0.5), transparent 70%); opacity: 0.6; pointer-events: none; }
-        .btn:active { transform: scale(0.97); }
-        .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
+        .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
         
         .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.6), rgba(2,132,199,0.3)); color: white; border-color: rgba(56,189,248,0.3); }
-        .btn-p::before { background: radial-gradient(ellipse, rgba(56,189,248,0.6), transparent 70%); }
         .btn-s { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); color: var(--txt); }
 
-        /* Dark Support Button Style (New) */
-        .btn-dark { 
-            background: rgba(0, 0, 0, 0.3); 
-            border: 1px solid rgba(255, 255, 255, 0.1); 
-            color: var(--txt); 
-            font-size: 13px;
-        }
+        .btn-dark { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--txt); font-size: 13px; }
         :root.light .btn-dark { background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.1); color: #333; }
         .btn-dark:hover { background: rgba(0, 0, 0, 0.5); }
 
@@ -99,10 +106,9 @@
         :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); color: white; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
-        .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; text-align: left; direction: ltr; }
+        .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
         .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
         .db { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 12px; text-decoration: none; color: var(--txt); font-size: 11px; border: 1px solid var(--brd); }
@@ -119,11 +125,11 @@
         .app-list { display: grid; gap: 8px; margin-top: 10px; }
         .app-btn { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.08); border-radius: 12px; color: white; text-decoration: none; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
         .app-btn:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
-        .app-icon { font-size: 18px; margin-left: 10px; }
     </style>
 </head>
 <body>
     <div class="orb o1"></div> <div class="orb o2"></div>
+    <!-- Added ID="nT" for Installer Script -->
     <div class="ticker"><span id="nT">__NEWS__</span></div>
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
@@ -158,7 +164,6 @@
                     <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
                     
-                    <!-- Styled Support Button -->
                     <a href="https://t.me/__SUP__" class="btn btn-dark" style="margin-top:15px">💬 ارتباط با پشتیبانی</a>
                 </div>
                 <div>
@@ -183,11 +188,11 @@
             <h3>انتخاب برنامه</h3>
             <p style="font-size:12px; color:#aaa; margin-bottom:15px">با کدام برنامه باز شود؟</p>
             <div class="app-list">
-                <div class="app-btn" onclick="openApp('v2rayng')"><span>v2rayNG</span><span class="app-icon">⚡</span></div>
-                <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span class="app-icon">🦋</span></div>
-                <div class="app-btn" onclick="openApp('v2raytun')"><span>v2rayTun</span><span class="app-icon">🛡️</span></div>
-                <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span class="app-icon">🌐</span></div>
-                <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span class="app-icon">🍏</span></div>
+                <div class="app-btn" onclick="openApp('v2rayng')"><span>v2rayNG</span><span>⚡</span></div>
+                <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span>🦋</span></div>
+                <div class="app-btn" onclick="openApp('v2raytun')"><span>v2rayTun</span><span>🛡️</span></div>
+                <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span>🌐</span></div>
+                <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span>🍏</span></div>
             </div>
             <br>
             <button class="btn btn-s" style="background:#333; color:white" onclick="cm('appMod')">بستن</button>
@@ -227,7 +232,10 @@
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        var root = document.documentElement; var tb = document.getElementById('themeBtn');
+        var root = document.documentElement; 
+        // FIX: Changed ID to match HTML
+        var tb = document.getElementById('themeBtn');
+        
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
         tb.onclick = function() {
             if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
@@ -236,8 +244,20 @@
 
         var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
         var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
-        document.getElementById('pb').style.width = per+'%'; document.getElementById('pt').textContent = Math.round(per)+'%';
-        if(per>85) document.getElementById('pb').style.background = '#ef4444';
+        
+        // NEW: COLOR CHANGING PROGRESS BAR (Blue -> Purple -> Red)
+        var pb = document.getElementById('pb');
+        pb.style.width = per+'%'; 
+        document.getElementById('pt').textContent = Math.round(per)+'%';
+
+        if (per < 50) {
+            pb.style.background = 'linear-gradient(90deg, #3b82f6, #60a5fa)'; // Blue
+        } else if (per < 85) {
+            pb.style.background = 'linear-gradient(90deg, #3b82f6, #d946ef)'; // Blue to Magenta
+        } else {
+            pb.style.background = 'linear-gradient(90deg, #f43f5e, #e11d48)'; // Red Warning
+            pb.style.boxShadow = '0 0 10px rgba(225, 29, 72, 0.6)';
+        }
 
         function fb(b) { 
             if(tot===0) return 'نامحدود'; if(b<=0) return '0 B'; 
@@ -310,9 +330,10 @@
             }).catch(function(){l.innerHTML='خطا'});
         }
 
+        // FIX: Changed 'u' to 'ua'
         var ua = navigator.userAgent.toLowerCase();
         if(ua.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
-        else if(ua.indexOf('iphone')>-1||u.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
+        else if(ua.indexOf('iphone')>-1||ua.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
         else if(ua.indexOf('win')>-1) document.getElementById('dw').classList.add('rec');
         {% endraw %}
     </script>
