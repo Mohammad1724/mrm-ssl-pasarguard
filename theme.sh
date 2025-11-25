@@ -50,6 +50,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #888888;
             --color-card: rgba(25, 25, 30, 0.8);
             --color-border: rgba(255, 255, 255, 0.1);
+            
+            /* Changed to Sky Blue */
+            --color-btn-primary: rgba(56, 189, 248, 0.8); 
+            
+            --color-btn-secondary: rgba(255, 255, 255, 0.1);
             --color-glow-1: rgba(249, 115, 22, 0.4);
             --color-glow-2: rgba(59, 130, 246, 0.3);
         }
@@ -61,6 +66,11 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             --color-text-muted: #666666;
             --color-card: rgba(255, 255, 255, 0.9);
             --color-border: rgba(0, 0, 0, 0.1);
+            
+            /* Changed to Sky Blue */
+            --color-btn-primary: rgba(14, 165, 233, 0.9);
+            
+            --color-btn-secondary: rgba(0, 0, 0, 0.08);
             --color-glow-1: rgba(249, 115, 22, 0.2);
             --color-glow-2: rgba(59, 130, 246, 0.2);
         }
@@ -253,7 +263,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             text-decoration: none;
             overflow: hidden;
             
-            /* Glass Effect */
             background: linear-gradient(
                 135deg,
                 rgba(255, 255, 255, 0.12) 0%,
@@ -263,12 +272,10 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             
-            /* Jelly Border */
             border: 1px solid rgba(255, 255, 255, 0.15);
             border-top: 1px solid rgba(255, 255, 255, 0.3);
             border-bottom: 1px solid rgba(0, 0, 0, 0.2);
             
-            /* Shadow for depth */
             box-shadow: 
                 0 8px 32px rgba(0, 0, 0, 0.3),
                 inset 0 1px 2px rgba(255, 255, 255, 0.15),
@@ -278,7 +285,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Inner Lamp Glow - ORANGE/PINK */
         .btn::before {
             content: '';
             position: absolute;
@@ -297,7 +303,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             pointer-events: none;
         }
 
-        /* Shine sweep */
         .btn::after {
             content: '';
             position: absolute;
@@ -315,7 +320,6 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             pointer-events: none;
         }
 
-        /* Hover */
         .btn:hover {
             transform: translateY(-3px);
             box-shadow: 
@@ -324,16 +328,9 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 inset 0 -2px 6px rgba(0, 0, 0, 0.2);
         }
 
-        .btn:hover::before {
-            opacity: 0.9;
-            top: -40%;
-        }
+        .btn:hover::before { opacity: 0.9; top: -40%; }
+        .btn:hover::after { left: 100%; }
 
-        .btn:hover::after {
-            left: 100%;
-        }
-
-        /* Active - Lamp Flash */
         .btn:active {
             transform: scale(0.97);
             box-shadow: 
@@ -342,33 +339,19 @@ cat << 'EOF' > "$TEMPLATE_FILE"
                 inset 0 -2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        .btn:active::before {
-            opacity: 1;
-            top: -30%;
-            width: 80%;
-            left: 10%;
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.6) 0%,
-                rgba(249, 115, 22, 0.5) 40%,
-                rgba(236, 72, 153, 0.3) 60%,
-                transparent 80%
-            );
-        }
-
-        /* PRIMARY BUTTON */
+        /* PRIMARY (Sky Blue) */
         .btn-primary {
             background: linear-gradient(
                 135deg,
-                rgba(124, 58, 237, 0.5) 0%,
-                rgba(124, 58, 237, 0.3) 50%,
-                rgba(79, 70, 229, 0.2) 100%
+                rgba(56, 189, 248, 0.6) 0%, /* Sky Blue */
+                rgba(14, 165, 233, 0.4) 50%,
+                rgba(2, 132, 199, 0.3) 100%
             );
             color: white;
-            border: 1px solid rgba(167, 139, 250, 0.25);
-            border-top: 1px solid rgba(167, 139, 250, 0.4);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-top: 1px solid rgba(56, 189, 248, 0.5);
             box-shadow: 
-                0 8px 32px rgba(124, 58, 237, 0.25),
+                0 8px 32px rgba(56, 189, 248, 0.25),
                 inset 0 1px 2px rgba(255, 255, 255, 0.2),
                 inset 0 -2px 4px rgba(0, 0, 0, 0.15);
         }
@@ -376,15 +359,15 @@ cat << 'EOF' > "$TEMPLATE_FILE"
         .btn-primary::before {
             background: radial-gradient(
                 ellipse at center,
-                rgba(167, 139, 250, 0.6) 0%,
-                rgba(249, 115, 22, 0.4) 40%,
+                rgba(56, 189, 248, 0.6) 0%,
+                rgba(14, 165, 233, 0.3) 40%,
                 transparent 70%
             );
         }
 
         .btn-primary:hover {
             box-shadow: 
-                0 15px 45px rgba(124, 58, 237, 0.35),
+                0 15px 45px rgba(56, 189, 248, 0.35),
                 inset 0 1px 3px rgba(255, 255, 255, 0.25),
                 inset 0 -2px 6px rgba(0, 0, 0, 0.15);
         }
@@ -393,13 +376,13 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             background: radial-gradient(
                 ellipse at center,
                 rgba(255, 255, 255, 0.7) 0%,
-                rgba(167, 139, 250, 0.5) 40%,
-                rgba(249, 115, 22, 0.4) 60%,
+                rgba(56, 189, 248, 0.5) 40%,
+                rgba(14, 165, 233, 0.4) 60%,
                 transparent 80%
             );
         }
 
-        /* SECONDARY BUTTON */
+        /* SECONDARY */
         .btn-secondary {
             background: linear-gradient(
                 135deg,
@@ -410,99 +393,26 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             color: var(--color-text);
         }
 
-        /* ========== LIGHT MODE BUTTONS ========== */
+        /* LIGHT MODE BUTTONS */
         :root.light .btn {
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.95) 0%,
-                rgba(255, 255, 255, 0.7) 40%,
-                rgba(240, 240, 245, 0.5) 100%
-            );
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            border-top: 2px solid rgba(255, 255, 255, 1);
-            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-            box-shadow: 
-                0 8px 32px rgba(0, 0, 0, 0.12),
-                0 2px 8px rgba(0, 0, 0, 0.08),
-                inset 0 2px 4px rgba(255, 255, 255, 1),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.04);
+            background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.7));
+            border: 1px solid rgba(255,255,255,0.8); border-top: 2px solid white; border-bottom: 1px solid rgba(0,0,0,0.08);
             color: var(--color-text);
         }
-
-        :root.light .btn::before {
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.9) 0%,
-                rgba(249, 115, 22, 0.25) 40%,
-                transparent 70%
-            );
-            opacity: 0.7;
-        }
-
-        :root.light .btn:hover {
-            box-shadow: 
-                0 15px 40px rgba(0, 0, 0, 0.15),
-                0 4px 12px rgba(0, 0, 0, 0.1),
-                inset 0 2px 6px rgba(255, 255, 255, 1),
-                inset 0 -2px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        :root.light .btn:active {
-            box-shadow: 
-                0 4px 16px rgba(0, 0, 0, 0.12),
-                inset 0 3px 10px rgba(255, 255, 255, 1),
-                inset 0 -1px 4px rgba(0, 0, 0, 0.06);
-        }
-
-        :root.light .btn:active::before {
-            opacity: 1;
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 1) 0%,
-                rgba(249, 115, 22, 0.4) 50%,
-                transparent 80%
-            );
-        }
-
         :root.light .btn-primary {
-            background: linear-gradient(
-                135deg,
-                rgba(124, 58, 237, 0.9) 0%,
-                rgba(124, 58, 237, 0.75) 50%,
-                rgba(79, 70, 229, 0.6) 100%
-            );
-            border: 1px solid rgba(124, 58, 237, 0.3);
-            border-top: 2px solid rgba(167, 139, 250, 0.7);
-            box-shadow: 
-                0 8px 32px rgba(124, 58, 237, 0.3),
-                0 2px 8px rgba(124, 58, 237, 0.2),
-                inset 0 2px 4px rgba(255, 255, 255, 0.3),
-                inset 0 -2px 4px rgba(0, 0, 0, 0.1);
-            color: white;
+            background: linear-gradient(135deg, rgba(56,189,248,0.9), rgba(14,165,233,0.7)); /* Sky Blue Light */
+            color: white; border: 1px solid rgba(14,165,233,0.3); border-top: 2px solid rgba(125,211,252,0.6);
         }
-
         :root.light .btn-primary::before {
-            background: radial-gradient(
-                ellipse at center,
-                rgba(255, 255, 255, 0.6) 0%,
-                rgba(167, 139, 250, 0.4) 40%,
-                transparent 70%
-            );
+            background: radial-gradient(ellipse at center, rgba(255,255,255,0.6) 0%, rgba(56,189,248,0.4) 40%, transparent 70%);
         }
-
         :root.light .btn-secondary {
-            background: linear-gradient(
-                135deg,
-                rgba(255, 255, 255, 0.98) 0%,
-                rgba(255, 255, 255, 0.8) 40%,
-                rgba(245, 245, 250, 0.6) 100%
-            );
-            color: var(--color-text);
+            background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(245,245,250,0.6));
         }
 
         .btn-grid {
             display: grid;
-            grid-template-columns: 1fr; /* Single Column = Full Width */
+            grid-template-columns: 1fr;
             gap: 10px;
             margin-bottom: 10px;
         }
@@ -521,20 +431,9 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             border: 1px solid var(--color-border);
             transition: background 0.3s;
         }
-        :root.light .stat-box {
-            background: rgba(0,0,0,0.03);
-        }
-        .stat-label {
-            font-size: 11px;
-            color: var(--color-text-muted);
-            margin-bottom: 4px;
-        }
-        .stat-value {
-            font-size: 14px;
-            font-weight: 700;
-            text-align: left;
-            direction: ltr;
-        }
+        :root.light .stat-box { background: rgba(0,0,0,0.03); }
+        .stat-label { font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px; }
+        .stat-value { font-size: 14px; font-weight: 700; text-align: left; direction: ltr; }
 
         /* Downloads */
         .downloads {
@@ -546,73 +445,31 @@ cat << 'EOF' > "$TEMPLATE_FILE"
             border-top: 1px solid var(--color-border);
         }
         .dl-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 5px;
-            padding: 12px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 12px;
-            text-decoration: none;
-            color: var(--color-text);
-            font-size: 11px;
-            border: 1px solid var(--color-border);
-            transition: all 0.3s;
+            display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px;
+            background: rgba(255,255,255,0.05); border-radius: 12px; text-decoration: none;
+            color: var(--color-text); font-size: 11px; border: 1px solid var(--color-border); transition: all 0.3s;
         }
-        :root.light .dl-btn {
-            background: rgba(0,0,0,0.03);
-        }
-        .dl-btn:hover { 
-            transform: translateY(-2px); 
-            background: rgba(255,255,255,0.1);
-        }
-        :root.light .dl-btn:hover {
-            background: rgba(0,0,0,0.06);
-        }
-        .dl-btn.recommended { 
-            border-color: #f59e0b; 
-            background: rgba(245,158,11,0.1); 
-        }
+        :root.light .dl-btn { background: rgba(0,0,0,0.03); }
+        .dl-btn:hover { transform: translateY(-2px); background: rgba(255,255,255,0.1); }
+        :root.light .dl-btn:hover { background: rgba(0,0,0,0.06); }
+        .dl-btn.recommended { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
         /* Toast */
         .toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%) translateY(20px);
-            background: white;
-            color: black;
-            padding: 12px 24px;
-            border-radius: 30px;
-            font-weight: 700;
-            opacity: 0;
-            transition: 0.3s;
-            z-index: 1000;
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: white; color: black; padding: 12px 24px; border-radius: 30px;
+            font-weight: 700; opacity: 0; transition: 0.3s; z-index: 1000;
         }
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
         /* Modal */
         .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(5px);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 500;
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+            display: none; align-items: center; justify-content: center; z-index: 500;
         }
         .modal-box {
-            background: #1a1a1a;
-            padding: 24px;
-            border-radius: 20px;
-            text-align: center;
-            width: 90%;
-            max-width: 350px;
-            color: white;
+            background: #1a1a1a; padding: 24px; border-radius: 20px; text-align: center;
+            width: 90%; max-width: 350px; color: white;
         }
     </style>
 </head>
