@@ -12,26 +12,25 @@
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.8); --brd: rgba(255, 255, 255, 0.1);
             --pri: rgba(56, 189, 248, 0.8);
-            --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.3);
+            --g1: rgba(14, 165, 233, 0.2); --g2: rgba(59, 130, 246, 0.2); /* Blue ambient */
         }
         /* LIGHT MODE */
         :root.light {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.9); --brd: rgba(0, 0, 0, 0.1);
             --pri: rgba(14, 165, 233, 0.9);
-            --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.2);
+            --g1: rgba(14, 165, 233, 0.1); --g2: rgba(59, 130, 246, 0.1);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 60px 20px 20px; transition: 0.3s; }
         
-        /* Background Orbs */
+        /* Background Orbs (Adjusted to Blueish) */
         .orb { position: fixed; width: 300px; height: 300px; border-radius: 50%; filter: blur(80px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -100px; right: -50px; background: var(--g1); } .o2 { bottom: -100px; left: -50px; background: var(--g2); }
 
-        /* News Ticker */
         .ticker { position: fixed; top: 0; left: 0; width: 100%; height: 40px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); display: flex; align-items: center; overflow: hidden; z-index: 100; }
-        .ticker span { white-space: nowrap; animation: s 20s linear infinite; color: #fbbf24; font-size: 13px; }
+        .ticker span { white-space: nowrap; animation: s 20s linear infinite; color: #38bdf8; font-size: 13px; font-weight: 700; }
         @keyframes s { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
         .con { max-width: 800px; margin: 0 auto; }
@@ -39,24 +38,35 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
-        /* === NEW BRAND STYLE (Glassy + Magenta Glow) === */
+        /* === 1. ULTRA GLASS BRAND STYLE === */
         .brand {
-            font-size: 40px; font-weight: 900;
-            /* Glassy/Jelly Gradient */
-            background: linear-gradient(180deg, rgba(255,255,255,0.95) 10%, rgba(255,255,255,0.1) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            /* Neon Magenta Glow */
-            filter: drop-shadow(0 0 8px rgba(255, 0, 200, 0.9)) drop-shadow(0 0 20px rgba(255, 0, 200, 0.5));
-            letter-spacing: -1.5px; line-height: 1.1;
+            font-size: 42px; font-weight: 900;
+            letter-spacing: -2px;
+            /* Crystal Glass Gradient Effect */
+            background: linear-gradient(180deg, 
+                rgba(255,255,255,1) 0%, 
+                rgba(255,255,255,0.4) 45%, 
+                rgba(255,255,255,0.1) 50%, 
+                rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent;
+            /* Icy Glow + Sharp Edge */
+            filter: drop-shadow(0 0 1px rgba(255,255,255,0.5)) 
+                    drop-shadow(0 0 15px rgba(56, 189, 248, 0.5)); /* Sky Blue Ambient */
             transform: skewX(-5deg);
             transition: 0.3s;
         }
+        
+        /* Light Mode Glass (Smoked Glass Look) */
         :root.light .brand {
-            /* Darker Glass for Light Mode */
-            background: linear-gradient(180deg, rgba(80,80,80,0.95) 0%, rgba(80,80,80,0.2) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            /* Keep Magenta Glow */
-            filter: drop-shadow(0 0 6px rgba(255, 0, 200, 0.7));
+            background: linear-gradient(180deg, 
+                rgba(50,50,50,1) 0%, 
+                rgba(100,100,100,0.5) 45%, 
+                rgba(100,100,100,0.2) 50%, 
+                rgba(50,50,50,0.8) 100%);
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.4));
         }
         
         .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: 0.3s; }
@@ -71,15 +81,17 @@
 
         .prof { display: flex; gap: 15px; align-items: center; margin-bottom: 20px; }
         
-        /* === NEW AVATAR STYLE (Magenta & White Gradient) === */
+        /* === 2. SKY BLUE & WHITE AVATAR === */
         .av { 
             width: 65px; height: 65px; border-radius: 50%; 
-            background: linear-gradient(135deg, #ff00cc 0%, #ffffff 100%);
-            color: #333; /* Dark icon for contrast */
+            /* Gradient: White (Top Left) -> Sky Blue (Bottom Right) */
+            background: linear-gradient(135deg, #f0f9ff 0%, #0ea5e9 100%);
+            color: #0c4a6e; /* Dark blue icon text */
             display: flex; align-items: center; justify-content: center; 
             font-size: 30px; position: relative;
-            border: 2px solid rgba(255,255,255,0.5);
-            box-shadow: 0 5px 15px rgba(255, 0, 200, 0.3);
+            border: 2px solid rgba(255,255,255,0.8); /* White border */
+            /* Sky Blue Glow */
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.6); 
         }
         
         .dot { position: absolute; bottom: 4px; right: 4px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
@@ -91,7 +103,6 @@
         .pf { height: 100%; width: 0%; transition: width 1s, background 0.5s; border-radius: 10px; }
         .pt { display: flex; justify-content: space-between; font-size: 12px; color: var(--mute); margin-bottom: 20px; }
 
-        /* Buttons */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 50px; border-radius: 16px; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02)); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.15); border-top: 1px solid rgba(255,255,255,0.3); box-shadow: 0 8px 32px rgba(0,0,0,0.3); color: var(--txt); transition: 0.3s; }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
         
@@ -129,7 +140,6 @@
 </head>
 <body>
     <div class="orb o1"></div> <div class="orb o2"></div>
-    <!-- Added ID="nT" for Installer Script -->
     <div class="ticker"><span id="nT">__NEWS__</span></div>
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
@@ -183,6 +193,7 @@
         </div>
     </div>
 
+    <!-- Modals -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
             <h3>انتخاب برنامه</h3>
@@ -233,7 +244,6 @@
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
         var root = document.documentElement; 
-        // FIX: Changed ID to match HTML
         var tb = document.getElementById('themeBtn');
         
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
@@ -245,13 +255,13 @@
         var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
         var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
         
-        // NEW: COLOR CHANGING PROGRESS BAR (Blue -> Purple -> Red)
+        // PROGRESS BAR LOGIC
         var pb = document.getElementById('pb');
         pb.style.width = per+'%'; 
         document.getElementById('pt').textContent = Math.round(per)+'%';
 
         if (per < 50) {
-            pb.style.background = 'linear-gradient(90deg, #3b82f6, #60a5fa)'; // Blue
+            pb.style.background = 'linear-gradient(90deg, #3b82f6, #60a5fa)'; // Sky Blue
         } else if (per < 85) {
             pb.style.background = 'linear-gradient(90deg, #3b82f6, #d946ef)'; // Blue to Magenta
         } else {
@@ -330,7 +340,6 @@
             }).catch(function(){l.innerHTML='خطا'});
         }
 
-        // FIX: Changed 'u' to 'ua'
         var ua = navigator.userAgent.toLowerCase();
         if(ua.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
         else if(ua.indexOf('iphone')>-1||ua.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
