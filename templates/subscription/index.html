@@ -41,7 +41,7 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
-        /* Small Header Brand (Preserving ID for script) */
+        /* Small Header Brand */
         .brand {
             font-size: 26px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
@@ -57,54 +57,63 @@
         .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
         .grid { display: grid; gap: 30px; } @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
-        /* === PROFILE & DUAL CHART SECTION === */
-        .prof-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); }
-        .prof-info { display: flex; gap: 12px; align-items: center; }
+        /* === PROFILE SECTION === */
+        .prof-container { 
+            display: flex; 
+            justify-content: flex-start; /* Align left */
+            align-items: center; 
+            margin-bottom: 15px; 
+            padding-bottom: 15px; 
+            border-bottom: 1px solid var(--brd); 
+        }
+        .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
         
         .av { 
-            width: 55px; height: 55px; border-radius: 50%; 
+            width: 60px; height: 60px; border-radius: 50%; 
             background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%);
             color: #92400e; display: flex; align-items: center; justify-content: center; 
-            font-size: 24px; position: relative;
+            font-size: 26px; position: relative;
             border: 1px solid rgba(255, 255, 255, 0.8);
             box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); 
         }
-        .dot { position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: #10b981; border-radius: 50%; border: 2px solid white; }
-        .nm { font-size: 16px; font-weight: 700; }
+        .dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
+        .nm { font-size: 18px; font-weight: 700; }
         .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* DUAL RING CHART */
-        .chart-box { position: relative; width: 75px; height: 75px; display: flex; align-items: center; justify-content: center; }
+        /* === BIG DUAL RING CHART === */
+        .chart-box { 
+            position: relative; 
+            width: 130px; height: 130px; /* BIG SIZE */
+            display: flex; align-items: center; justify-content: center; 
+            margin: 10px auto 25px auto; /* Center it with spacing */
+        }
         .ring-outer {
             position: absolute; inset: 0; border-radius: 50%;
-            /* Dynamic Conic Gradient */
             background: conic-gradient(var(--cData) var(--per), rgba(255,255,255,0.05) 0);
-            mask: radial-gradient(farthest-side, transparent 74%, #000 76%);
-            -webkit-mask: radial-gradient(farthest-side, transparent 74%, #000 76%);
+            mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
+            -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             transition: background 1s;
         }
         .ring-inner {
-            position: absolute; inset: 9px; border-radius: 50%;
+            position: absolute; inset: 15px; border-radius: 50%; /* Adjusted for size */
             background: conic-gradient(var(--cTime) var(--tper), rgba(255,255,255,0.02) 0);
-            mask: radial-gradient(farthest-side, transparent 70%, #000 73%);
-            -webkit-mask: radial-gradient(farthest-side, transparent 70%, #000 73%);
+            mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
+            -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             transition: background 1s;
         }
-        .chart-val { z-index: 2; font-size: 13px; font-weight: 800; color: var(--txt); }
+        .chart-val { z-index: 2; font-size: 24px; font-weight: 900; color: var(--txt); text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 
         /* BUTTONS */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); color: var(--txt); transition: 0.3s; }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
         
-        /* DIRECT CONNECT BUTTON - Updated */
+        /* DIRECT CONNECT BUTTON */
         .btn-p { 
             /* Dark Mode: Very transparent */
             background: rgba(56, 189, 248, 0.05); 
-            color: #38bdf8; 
-            border: 1px solid rgba(56, 189, 248, 0.15); 
+            color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); 
         }
-        /* Green Lamp Effect */
         .btn-p::before { 
             content: ''; position: absolute; inset: 0;
             background: radial-gradient(ellipse, rgba(74, 222, 128, 0.7), transparent 70%);
@@ -113,13 +122,12 @@
         
         /* Light Mode Primary */
         :root.light .btn-p { 
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); /* Solid Blue */
-            color: #0369a1; 
-            border: 1px solid #7dd3fc; 
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0369a1; border: 1px solid #7dd3fc; 
             box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
         }
         :root.light .btn-p::before { 
-            background: radial-gradient(ellipse, rgba(34, 197, 94, 0.8), transparent 70%); /* Stronger Green */
+            background: radial-gradient(ellipse, rgba(34, 197, 94, 0.8), transparent 70%);
             opacity: 0.6; filter: blur(8px);
         }
 
@@ -128,24 +136,7 @@
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* === BIG BRAND FOOTER === */
-        .big-brand-box { margin-top: 30px; text-align: center; padding-top: 10px; }
-        .big-brand {
-            font-size: 48px; font-weight: 900; letter-spacing: -2px;
-            /* Modern Gradient for Big Brand */
-            background: linear-gradient(135deg, #ffffff 0%, #e0f2fe 40%, #38bdf8 70%, #fbbf24 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.3));
-            animation: shine 5s linear infinite; background-size: 200% auto;
-        }
-        @keyframes shine { to { background-position: 200% center; } }
-        :root.light .big-brand {
-            background: linear-gradient(135deg, #1e293b 0%, #0ea5e9 60%, #d97706 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.2));
-        }
-
-        /* STATS & DOWNLOADS */
+        /* === STATS & DOWNLOADS === */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
@@ -154,6 +145,27 @@
         .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(255,255,255,0.05); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; }
         .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
+
+        /* === BIG TRANSPARENT BRAND (BOTTOM RIGHT) === */
+        .big-brand-box {
+            margin-top: 25px;
+            text-align: center;
+            padding: 10px 0;
+            opacity: 0.5;
+        }
+        .big-brand {
+            font-size: 60px; font-weight: 900; letter-spacing: -3px;
+            color: transparent;
+            -webkit-text-stroke: 1px rgba(255, 255, 255, 0.15);
+            background: none;
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+            transform: skewX(-5deg);
+            user-select: none;
+        }
+        :root.light .big-brand {
+            -webkit-text-stroke: 1px rgba(0, 0, 0, 0.1);
+            filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.05));
+        }
 
         /* MODALS */
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
@@ -175,7 +187,6 @@
     <div class="con">
         <div class="head">
             <div class="brand-box">
-                <!-- Header Brand (Preserving ID) -->
                 <div class="brand" id="brandTxt">__BRAND__</div>
                 <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
@@ -185,54 +196,55 @@
         <div class="card">
             <div class="grid">
                 <!-- LEFT COLUMN -->
-                <div style="display:flex; flex-direction:column; justify-content:space-between;">
-                    <div>
-                        <!-- PROFILE + DUAL CHART ROW -->
-                        <div class="prof-container">
-                            <div class="prof-info">
-                                <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
-                                <div>
-                                    <div class="nm">{{ user.username }}</div>
-                                    {% if user.status.name == 'active' %}<span class="st act">فعال</span>{% else %}<span class="st in">غیرفعال</span>{% endif %}
-                                </div>
-                            </div>
-                            <!-- DUAL CHART -->
-                            <div class="chart-box">
-                                <div class="ring-outer" id="rOut"></div>
-                                <div class="ring-inner" id="rIn"></div>
-                                <div class="chart-val" id="chTxt">0%</div>
+                <div style="display:flex; flex-direction:column;">
+                    <!-- PROFILE HEADER -->
+                    <div class="prof-container">
+                        <div class="prof-info">
+                            <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
+                            <div>
+                                <div class="nm">{{ user.username }}</div>
+                                {% if user.status.name == 'active' %}<span class="st act">فعال</span>{% else %}<span class="st in">غیرفعال</span>{% endif %}
                             </div>
                         </div>
-
-                        <!-- BUTTONS -->
-                        <div class="btn-grid">
-                            <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
-                            <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
-                        </div>
-                        
-                        <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
-                        <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
-                        <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">💬 ارتباط با پشتیبانی</a>
                     </div>
 
-                    <!-- BIG BRAND FOOTER -->
-                    <div class="big-brand-box">
-                        <div class="big-brand">__BRAND__</div>
+                    <!-- BIG DUAL CHART (Centered Below Profile) -->
+                    <div class="chart-box">
+                        <div class="ring-outer" id="rOut"></div>
+                        <div class="ring-inner" id="rIn"></div>
+                        <div class="chart-val" id="chTxt">0%</div>
                     </div>
+
+                    <!-- BUTTONS (Pushed Down) -->
+                    <div class="btn-grid">
+                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
+                        <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
+                    </div>
+                    
+                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
+                    <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
+                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">💬 ارتباط با پشتیبانی</a>
                 </div>
 
                 <!-- RIGHT COLUMN -->
-                <div>
-                    <div class="stats">
-                        <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
-                        <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
-                        <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
-                        <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
+                <div style="display:flex; flex-direction:column; justify-content:space-between;">
+                    <div>
+                        <div class="stats">
+                            <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
+                            <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
+                            <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
+                            <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
+                        </div>
+                        <div class="dls">
+                            <a href="__ANDROID__" class="db" id="da"><span>🤖</span>Android</a>
+                            <a href="__IOS__" class="db" id="di"><span>🍏</span>iOS</a>
+                            <a href="__WIN__" class="db" id="dw"><span>💻</span>Windows</a>
+                        </div>
                     </div>
-                    <div class="dls">
-                        <a href="__ANDROID__" class="db" id="da"><span>🤖</span>Android</a>
-                        <a href="__IOS__" class="db" id="di"><span>🍏</span>iOS</a>
-                        <a href="__WIN__" class="db" id="dw"><span>💻</span>Windows</a>
+
+                    <!-- BIG GLASSY BRAND (Bottom Right) -->
+                    <div class="big-brand-box">
+                        <div class="big-brand">__BRAND__</div>
                     </div>
                 </div>
             </div>
@@ -285,7 +297,6 @@
                     var now = new Date();
                     var diff = expDate - now;
                     var days = diff / (1000 * 60 * 60 * 24);
-                    // Scale ring based on 30 days max
                     if (days > 30) tPer = 100;
                     else if (days <= 0) tPer = 0;
                     else tPer = (days / 30) * 100;
@@ -294,15 +305,14 @@
         } else { tPer = 100; }
 
         // Colors
-        var cData = '#3b82f6'; if(per > 80) cData = '#e11d48'; // Red if high usage
-        var cTime = '#10b981'; if(tPer < 20) cTime = '#f59e0b'; if(tPer < 5) cTime = '#ef4444'; // Red if exp soon
+        var cData = '#3b82f6'; if(per > 80) cData = '#e11d48';
+        var cTime = '#10b981'; if(tPer < 20) cTime = '#f59e0b'; if(tPer < 5) cTime = '#ef4444';
 
         // Apply Gradients
         var rOut = document.getElementById('rOut');
         var rIn = document.getElementById('rIn');
         rOut.style.background = 'conic-gradient('+cData+' '+per+'%, rgba(255,255,255,0.05) 0)';
         rIn.style.background = 'conic-gradient('+cTime+' '+tPer+'%, rgba(255,255,255,0.02) 0)';
-        // CSS variables for JS reference if needed
         rOut.style.setProperty('--cData', cData); rOut.style.setProperty('--per', per+'%');
         rIn.style.setProperty('--cTime', cTime); rIn.style.setProperty('--tper', tPer+'%');
         
