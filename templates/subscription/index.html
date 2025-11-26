@@ -41,17 +41,29 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
+        /* === MODERN HOLOGRAPHIC BRAND === */
         .brand {
-            font-size: 42px; font-weight: 900; letter-spacing: -2px;
-            background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(255,255,255,0.4) 45%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.8) 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 1px rgba(255,255,255,0.5)) drop-shadow(0 0 15px rgba(56, 189, 248, 0.5));
-            transform: skewX(-5deg); transition: 0.3s;
+            font-size: 44px; 
+            font-weight: 900; 
+            letter-spacing: -1.5px;
+            /* Modern Gradient: White -> Sky Blue -> Hint of Gold */
+            background: linear-gradient(135deg, #ffffff 0%, #e0f2fe 40%, #38bdf8 70%, #fbbf24 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent;
+            /* Soft diffuse glow instead of hard shadow */
+            filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.3));
+            /* No skew, upright and clean */
+            transform: none; 
+            animation: shine 5s linear infinite;
         }
+        @keyframes shine { to { background-position: 200% center; } }
+
         :root.light .brand {
-            background: linear-gradient(180deg, rgba(50,50,50,1) 0%, rgba(100,100,100,0.5) 45%, rgba(100,100,100,0.2) 50%, rgba(50,50,50,0.8) 100%);
+            /* Darker gradient for light mode */
+            background: linear-gradient(135deg, #1e293b 0%, #0ea5e9 60%, #d97706 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.4));
+            filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.2));
         }
         
         .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 13px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.5); box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: fit-content; transition: 0.3s; }
@@ -89,14 +101,25 @@
         :root.light .btn::before { background: radial-gradient(ellipse, rgba(255, 100, 0, 0.8), transparent 70%); opacity: 0.7; filter: blur(6px); }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
         
-        .btn-p { background: linear-gradient(135deg, rgba(186, 230, 253, 0.25), rgba(186, 230, 253, 0.05)); color: white; border-color: rgba(186, 230, 253, 0.15); }
-        .btn-p::before { background: radial-gradient(ellipse, rgba(249,115,22,0.4), transparent 70%); opacity: 0.08; filter: blur(15px); }
+        /* === SUPER FAINT PRIMARY BUTTON === */
+        .btn-p { 
+            /* 5% Opacity Blue - Very Transparent */
+            background: rgba(56, 189, 248, 0.05); 
+            color: #38bdf8; /* Bright Blue Text to be readable */
+            border: 1px solid rgba(56, 189, 248, 0.1); /* Very faint border */
+        }
+        .btn-p:hover {
+            background: rgba(56, 189, 248, 0.1); /* Slightly more visible on hover */
+        }
+        .btn-p::before { display: none; /* Remove orange glow completely from this button to keep it clean blue */ }
+        
+        :root.light .btn-p { background: rgba(14, 165, 233, 0.08); color: #0284c7; border-color: rgba(14, 165, 233, 0.2); }
+
         .btn-s { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); color: var(--txt); }
         .btn-dark { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--txt); font-size: 13px; }
         :root.light .btn-dark { background: rgba(0, 0, 0, 0.05); border: 1px solid rgba(0, 0, 0, 0.1); color: #333; }
         .btn-dark:hover { background: rgba(0, 0, 0, 0.5); }
         :root.light .btn { background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7)); border-color: rgba(255,255,255,0.8); color: var(--txt); }
-        :root.light .btn-p { background: linear-gradient(135deg, rgba(56,189,248,0.8), rgba(125,211,252,0.6)); color: white; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
@@ -126,7 +149,6 @@
         .chart-pie {
             width: 100%; height: 100%;
             border-radius: 50%;
-            /* Gradient set by JS */
             background: conic-gradient(var(--pri) 0%, rgba(255,255,255,0.05) 0%);
             mask: radial-gradient(farthest-side, transparent 70%, #000 71%);
             -webkit-mask: radial-gradient(farthest-side, transparent 70%, #000 71%);
@@ -201,7 +223,7 @@
                         <a href="__WIN__" class="db" id="dw"><span>💻</span>Windows</a>
                     </div>
                     
-                    <!-- NEW CHART SECTION -->
+                    <!-- CHART SECTION -->
                     <div class="chart-container">
                         <div class="chart-wrap">
                             <div class="chart-pie" id="chPie"></div>
