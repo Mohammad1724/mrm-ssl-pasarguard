@@ -79,7 +79,6 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
 
-        /* Header title: Dashboard */
         .brand {
             font-size: 28px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
@@ -90,7 +89,6 @@
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
 
-        /* Bot button (bigger) */
         .bot-link {
             display: inline-flex; align-items: center;
             font-size: 14px; font-weight: 700;
@@ -158,71 +156,56 @@
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
         .st.in  { background: rgba(239,68,68,0.2);  color: #f87171; }
 
-        /* CHART + LEGEND WRAPPER */
+        /* NEW BAR-STYLE CHART WRAPPER */
         .chart-wrapper {
             background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--brd);
             border-radius: 20px;
-            padding: 15px;
+            padding: 14px 14px 10px;
             margin-bottom: 20px;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            gap: 12px;
         }
         :root.light .chart-wrapper { background: rgba(0,0,0,0.02); }
 
-        .chart-box {
-            position: relative;
-            width: 130px; height: 130px;
+        .usage-row { display: flex; flex-direction: column; gap: 6px; }
+
+        .usage-header {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px;
+        }
+        .usage-left { display: flex; align-items: center; gap: 8px; }
+        .usage-icon {
+            width: 26px; height: 26px;
+            border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            margin-bottom: 15px;
+            background: radial-gradient(circle at 30% 30%, #f97316, #92400e);
+            color: white; font-size: 14px;
+            box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
         }
+        .usage-title { font-size: 12px; font-weight: 700; }
+        .usage-sub { font-size: 11px; color: var(--mute); }
 
-        .ring-outer {
-            position: absolute; inset: 0; border-radius: 50%;
-            background: conic-gradient(var(--cData) var(--per), rgba(255,255,255,0.08) 0);
-            mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
-            -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
-            transition: background 1s;
-        }
-        :root.light .ring-outer {
-            background: conic-gradient(var(--cData) var(--per), rgba(0,0,0,0.08) 0);
-        }
+        .usage-percent { font-size: 13px; font-weight: 800; }
 
-        .ring-inner {
-            position: absolute; inset: 15px; border-radius: 50%;
-            background: conic-gradient(var(--cTime) var(--tper), rgba(255,255,255,0.05) 0);
-            mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
-            -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
-            transition: background 1s;
+        .usage-bar {
+            width: 100%; height: 8px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
         }
-        :root.light .ring-inner {
-            background: conic-gradient(var(--cTime) var(--tper), rgba(0,0,0,0.05) 0);
+        :root.light .usage-bar {
+            background: rgba(0,0,0,0.05);
+            border-color: rgba(0,0,0,0.08);
         }
-
-        .chart-val {
-            z-index: 2;
-            font-size: 26px; font-weight: 900;
-            color: var(--txt);
-            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        .usage-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            transition: width 0.8s ease-out, background 0.3s ease-out;
         }
-        :root.light .chart-val { text-shadow: none; }
-
-        .chart-legend {
-            width: 100%;
-            display: flex; justify-content: space-between;
-            font-size: 12px; color: var(--mute);
-        }
-        .legend-item {
-            display: flex; align-items: center; gap: 6px;
-            background: rgba(255,255,255,0.05);
-            padding: 6px 12px;
-            border-radius: 10px;
-            width: 48%;
-        }
-        :root.light .legend-item { background: rgba(0,0,0,0.04); }
-        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-        .legend-text b { color: var(--txt); display: block; font-size: 13px; }
 
         /* BUTTONS */
         .btn {
@@ -239,21 +222,21 @@
         .btn:hover { transform: translateY(-2px); }
         .btn::before {
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 0%, rgba(249,115,22,0.5), transparent 70%);
+            background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
         :root.light .btn::before {
-            background: radial-gradient(circle at 50% 0%, rgba(245,158,11,0.6), transparent 70%);
+            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%);
             opacity: 0.6;
         }
 
         .btn-p {
-            background: rgba(56,189,248,0.05);
+            background: rgba(56, 189, 248, 0.05);
             color: #38bdf8;
-            border: 1px solid rgba(56,189,248,0.15);
+            border: 1px solid rgba(56, 189, 248, 0.15);
         }
         .btn-p::before {
-            background: radial-gradient(circle at 50% 0%, rgba(74,222,128,0.7), transparent 70%);
+            background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%);
             opacity: 0.3;
         }
         :root.light .btn-p {
@@ -334,7 +317,7 @@
             font-weight: 900;
             letter-spacing: -1.5px;
 
-            /* گرادینت بدون سبز: آبی + بنفش + نارنجی/طلایی */
+            /* گرادینت بدون سبز */
             background: linear-gradient(
                 45deg,
                 #38bdf8,
@@ -346,12 +329,10 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
 
-            /* استروک نازک برای برجستگی لبه‌ها */
             -webkit-text-stroke: 0.6px rgba(255, 255, 255, 0.55);
 
             animation: aurora 6s ease infinite;
 
-            /* برجستگی سه‌بعدی */
             filter:
                 drop-shadow(0 0 18px rgba(56, 189, 248, 0.7))
                 drop-shadow(0 8px 25px rgba(0, 0, 0, 0.8));
@@ -378,7 +359,6 @@
             -webkit-text-stroke: 0.6px rgba(0, 0, 0, 0.3);
             filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
         }
-        /* توجه: دیگر هیچ .big-brand::after (انعکاس) وجود ندارد */
 
         /* MODALS */
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
@@ -419,7 +399,6 @@
             <div class="grid">
                 <!-- LEFT COLUMN -->
                 <div style="display:flex; flex-direction:column;">
-                    <!-- PROFILE -->
                     <div class="prof-container">
                         <div class="prof-info">
                             <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
@@ -434,21 +413,38 @@
                         </div>
                     </div>
 
-                    <!-- CHART + LEGEND -->
+                    <!-- BAR-STYLE CHART -->
                     <div class="chart-wrapper">
-                        <div class="chart-box">
-                            <div class="ring-outer" id="rOut"></div>
-                            <div class="ring-inner" id="rIn"></div>
-                            <div class="chart-val" id="chTxt">0%</div>
-                        </div>
-                        <div class="chart-legend">
-                            <div class="legend-item">
-                                <div class="legend-dot" id="ldData" style="background:#3b82f6"></div>
-                                <div class="legend-text">حجم <b id="lgData">...</b></div>
+                        <!-- حجم -->
+                        <div class="usage-row">
+                            <div class="usage-header">
+                                <div class="usage-left">
+                                    <div class="usage-icon">📊</div>
+                                    <div>
+                                        <div class="usage-title">حجم</div>
+                                        <div class="usage-sub" id="usageLabel">...</div>
+                                    </div>
+                                </div>
+                                <div class="usage-percent" id="usagePercent">0%</div>
                             </div>
-                            <div class="legend-item">
-                                <div class="legend-dot" id="ldTime" style="background:#10b981"></div>
-                                <div class="legend-text">زمان <b id="lgTime">...</b></div>
+                            <div class="usage-bar">
+                                <div class="usage-fill" id="usageFill"></div>
+                            </div>
+                        </div>
+                        <!-- زمان -->
+                        <div class="usage-row">
+                            <div class="usage-header">
+                                <div class="usage-left">
+                                    <div class="usage-icon">⏳</div>
+                                    <div>
+                                        <div class="usage-title">زمان</div>
+                                        <div class="usage-sub" id="timeLabel">...</div>
+                                    </div>
+                                </div>
+                                <div class="usage-percent" id="timePercent">0%</div>
+                            </div>
+                            <div class="usage-bar">
+                                <div class="usage-fill" id="timeFill"></div>
                             </div>
                         </div>
                     </div>
@@ -496,7 +492,7 @@
                         </div>
                     </div>
 
-                    <!-- AURORA BRAND (BOTTOM, WITH ID FOR THEME.SH) -->
+                    <!-- AURORA BRAND (BOTTOM) -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
@@ -584,50 +580,58 @@
         var tPer = 0;
         var expDate = null;
         var daysLeft = 'نامحدود';
+        var daysNum = null;
         if (expStr && expStr !== 'None' && expStr !== 'null') {
             try {
                 expDate = new Date(expStr);
                 if (!isNaN(expDate.getTime())) {
                     var now = new Date();
-                    var diff = expDate - now;
-                    var days = diff / (1000 * 60 * 60 * 24);
-                    if (days > 30) tPer = 100;
-                    else if (days <= 0) tPer = 0;
-                    else tPer = (days / 30) * 100;
-                    daysLeft = Math.ceil(days) + ' روز';
-                    if (days < 0) daysLeft = 'منقضی';
+                    var diffMs = expDate - now;
+                    var days = diffMs / (1000 * 60 * 60 * 24);
+                    daysNum = days;
+                    if (days > 30)      tPer = 100;
+                    else if (days <= 0) { tPer = 0; daysLeft = 'منقضی'; }
+                    else { tPer = (days / 30) * 100; daysLeft = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
         } else {
             tPer = 100;
         }
+        if (daysLeft === 'نامحدود' && expDate === null) tPer = 100;
 
-        // COLORS
-        var cData = '#3b82f6';
-        if (per > 80) cData = '#e11d48';
-        var cTime = '#10b981';
-        if (tPer < 20) cTime = '#f59e0b';
-        if (tPer < 5)  cTime = '#ef4444';
+        // به‌روزرسانی نوار حجم
+        var usagePercent = document.getElementById('usagePercent');
+        var usageFill    = document.getElementById('usageFill');
+        var usageLabel   = document.getElementById('usageLabel');
 
-        // APPLY CHART
-        var rOut = document.getElementById('rOut');
-        var rIn  = document.getElementById('rIn');
-        rOut.style.background =
-            'conic-gradient(' + cData + ' ' + per + '%, rgba(255,255,255,0.08) 0)';
-        rIn.style.background =
-            'conic-gradient(' + cTime + ' ' + tPer + '%, rgba(255,255,255,0.05) 0)';
-        rOut.style.setProperty('--cData', cData);
-        rOut.style.setProperty('--per', per + '%');
-        rIn.style.setProperty('--cTime', cTime);
-        rIn.style.setProperty('--tper', tPer + '%');
+        usagePercent.innerText = Math.round(per) + '%';
+        usageFill.style.width  = per + '%';
+        usageLabel.innerText   = fb(use) + ' / ' + fb(tot);
 
-        document.getElementById('chTxt').innerText = Math.round(per) + '%';
+        if (per > 85)
+            usageFill.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
+        else if (per > 65)
+            usageFill.style.background = 'linear-gradient(90deg, #f59e0b, #f97316)';
+        else
+            usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
 
-        // LEGEND
-        document.getElementById('ldData').style.background = cData;
-        document.getElementById('lgData').innerText = Math.round(per) + '%';
-        document.getElementById('ldTime').style.background = cTime;
-        document.getElementById('lgTime').innerText = daysLeft;
+        // به‌روزرسانی نوار زمان
+        var timePercent = document.getElementById('timePercent');
+        var timeFill    = document.getElementById('timeFill');
+        var timeLabel   = document.getElementById('timeLabel');
+
+        timePercent.innerText = Math.round(tPer) + '%';
+        timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
+        timeLabel.innerText   = daysLeft;
+
+        if (daysLeft === 'منقضی')
+            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
+        else if (daysNum !== null && daysNum < 3)
+            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
+        else if (daysNum !== null && daysNum < 7)
+            timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
+        else
+            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
 
         function fb(b) {
             if (tot === 0) return 'نامحدود';
@@ -729,10 +733,10 @@
                         t.split('\n').forEach(function (x) {
                             var z = x.trim();
                             if (z && (
-                                z.indexOf('vmess') === 0 ||
-                                z.indexOf('vless') === 0 ||
-                                z.indexOf('trojan') === 0 ||
-                                z.indexOf('ss://') === 0
+                                z.indexOf('vmess')===0 ||
+                                z.indexOf('vless')===0 ||
+                                z.indexOf('trojan')===0 ||
+                                z.indexOf('ss://')===0
                             )) {
                                 var n = 'Config';
                                 if (z.indexOf('#') > -1)
