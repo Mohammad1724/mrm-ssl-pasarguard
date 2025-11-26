@@ -130,7 +130,7 @@
             .grid { grid-template-columns: 1fr 1fr; }
         }
 
-        /* PROFILE SECTION */
+        /* PROFILE */
         .prof-container {
             display: flex; justify-content: flex-start; align-items: center;
             margin-bottom: 15px; padding-bottom: 15px;
@@ -173,7 +173,6 @@
         .usage-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .usage-left { display: flex; align-items: center; gap: 8px; }
 
-        /* ICONS */
         .usage-icon {
             width: 42px; height: 42px;
             border-radius: 14px;
@@ -195,12 +194,14 @@
         .usage-percent { font-size: 13px; font-weight: 800; }
 
         .usage-bar {
-            width: 100%; height: 10px; border-radius: 99px;
-            background: rgba(255,255,255,0.06); overflow: hidden;
+            width: 100%; height: 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            overflow: hidden;
             border: 1px solid rgba(255,255,255,0.08);
         }
         :root.light .usage-bar { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
-        .usage-fill { height: 100%; width: 0%; border-radius: 99px; transition: width 0.8s, background 0.3s; }
+        .usage-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.8s, background 0.3s; }
 
         /* BUTTONS */
         .btn {
@@ -215,16 +216,16 @@
         }
         .btn:active { transform: scale(0.97); }
         .btn:hover  { transform: translateY(-2px); }
+        
+        /* Orange Lamp (Default) */
         .btn::before {
             content: ''; position: absolute; inset: 0;
             background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
-        :root.light .btn::before {
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%);
-            opacity: 0.6;
-        }
+        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
 
+        /* Direct Connect (Green Lamp) */
         .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
         .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; }
         :root.light .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
@@ -236,55 +237,44 @@
         :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* STATS */
+        /* STATS & DOWNLOADS */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
         .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
-        .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(255,255,255,0.05); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; }
-        .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
+        .db {
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            padding: 8px 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            text-decoration: none; color: var(--txt);
+            font-size: 10px; border: 1px solid var(--brd);
+            transition: 0.2s; cursor: pointer; /* Clickable */
+        }
+        .db span { font-size: 14px; }
+        :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
+        .db:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
 
-        /* === NEON BREATHING BRAND (Bottom Left) === */
+        /* NEON BREATHING BRAND (Bottom Left) */
         .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
         .big-brand {
             font-size: 54px; font-weight: 900; letter-spacing: -1.5px;
-            /* Gradient: Sky Blue -> Magenta -> Light Purple -> Back to Sky Blue */
             background: linear-gradient(90deg, #38bdf8, #e879f9, #a78bfa, #38bdf8);
-            background-size: 300% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            -webkit-text-stroke: 0; /* No stroke for clean neon look */
-            
-            /* The Breathing Animation */
+            background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            -webkit-text-stroke: 0;
             animation: neon-breath 5s linear infinite;
-            
             z-index: 2; position: relative;
         }
-
         @keyframes neon-breath {
-            0% {
-                background-position: 0% 50%;
-                filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
-            }
-            50% {
-                background-position: 100% 50%;
-                /* Stronger Glow at the peak (Magenta/Purple phase) */
-                filter: drop-shadow(0 0 25px rgba(232, 121, 249, 0.8));
-            }
-            100% {
-                background-position: 0% 50%;
-                filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
-            }
+            0% { background-position: 0% 50%; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5)); }
+            50% { background-position: 100% 50%; filter: drop-shadow(0 0 25px rgba(232, 121, 249, 0.8)); }
+            100% { background-position: 0% 50%; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5)); }
         }
-
         :root.light .big-brand {
-            /* Slightly darker gradient for light mode readability */
             background: linear-gradient(90deg, #0ea5e9, #c026d3, #7c3aed, #0ea5e9);
-            background-size: 300% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4));
         }
 
@@ -296,12 +286,27 @@
         .cin { width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; }
         #cph { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
         .app-list { display: grid; gap: 8px; margin-top: 10px; }
-        .app-btn { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(255,255,255,0.08); border-radius: 12px; color: white; text-decoration: none; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
+        .app-btn {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 16px; background: rgba(255,255,255,0.08);
+            border-radius: 12px; color: white; text-decoration: none;
+            border: 1px solid var(--brd); transition: 0.2s; cursor: pointer;
+        }
+        .app-btn:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
     </style>
 </head>
 <body>
-    <div class="orb o1"></div> <div class="orb o2"></div>
-    <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
+    <div class="orb o1"></div>
+    <div class="orb o2"></div>
+
+    <!-- NEWS TICKER -->
+    <div class="ticker-wrap">
+        <div class="ticker-icon">📢</div>
+        <div class="ticker-content">
+            <span id="nT">__NEWS__</span>
+        </div>
+    </div>
+
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
@@ -323,7 +328,11 @@
                             <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
                             <div>
                                 <div class="nm">{{ user.username }}</div>
-                                {% if user.status.name == 'active' %}<span class="st act">فعال</span>{% else %}<span class="st in">غیرفعال</span>{% endif %}
+                                {% if user.status.name == 'active' %}
+                                    <span class="st act">فعال</span>
+                                {% else %}
+                                    <span class="st in">غیرفعال</span>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -363,28 +372,46 @@
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
                     
-                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
+                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">
+                        🚀 اتصال مستقیم (انتخاب اپ)
+                    </button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
-                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">💬 ارتباط با پشتیبانی</a>
+                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">
+                        💬 ارتباط با پشتیبانی
+                    </a>
                 </div>
 
                 <!-- RIGHT COLUMN -->
                 <div style="display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
                         <div class="stats">
-                            <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
-                            <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
-                            <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
-                            <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
+                            <div class="sb">
+                                <div class="sl">انقضا</div>
+                                <div class="sv" id="ed"></div>
+                            </div>
+                            <div class="sb">
+                                <div class="sl">حجم کل</div>
+                                <div class="sv" id="totDisp">...</div>
+                            </div>
+                            <div class="sb">
+                                <div class="sl">مصرف شده</div>
+                                <div class="sv" id="useDisp">...</div>
+                            </div>
+                            <div class="sb">
+                                <div class="sl">باقیمانده</div>
+                                <div class="sv" id="rem" style="color:#3b82f6">...</div>
+                            </div>
                         </div>
+                        
+                        <!-- DOWNLOAD BUTTONS (Triggers) -->
                         <div class="dls">
-                            <a href="__ANDROID__" class="db" id="da"><span>🤖</span>Android</a>
-                            <a href="__IOS__" class="db" id="di"><span>🍏</span>iOS</a>
-                            <a href="__WIN__" class="db" id="dw"><span>💻</span>Windows</a>
+                            <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
+                            <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
+                            <div class="db" id="dw" onclick="om('dl-win')"><span>💻</span>Windows</div>
                         </div>
                     </div>
 
-                    <!-- NEON BREATHING BRAND -->
+                    <!-- NEON BRAND -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
@@ -394,6 +421,8 @@
     </div>
 
     <!-- MODALS -->
+    
+    <!-- 1. Direct Connect Modal -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
             <h3>انتخاب برنامه</h3>
@@ -405,6 +434,45 @@
             </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
+
+    <!-- 2. Android Download Modal -->
+    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
+        <div class="mbox">
+            <h3>دانلود برای اندروید</h3>
+            <div class="app-list">
+                <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank" class="app-btn"><span>v2rayNG</span><span>⚡</span></a>
+                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>🦋</span></a>
+                <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>🛡️</span></a>
+                <a href="https://github.com/Happ-Proxy/Happ/releases" target="_blank" class="app-btn"><span>Happ</span><span>🌐</span></a>
+            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-and')">بستن</button>
+        </div>
+    </div>
+
+    <!-- 3. iOS Download Modal -->
+    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
+        <div class="mbox">
+            <h3>دانلود برای آیفون</h3>
+            <div class="app-list">
+                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>📦</span></a>
+                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>🏴</span></a>
+                <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="app-btn"><span>FoXray</span><span>🦊</span></a>
+                <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="app-btn"><span>Shadowrocket ($)</span><span>🚀</span></a>
+            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-ios')">بستن</button>
+        </div>
+    </div>
+
+    <!-- 4. Windows Download Modal -->
+    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
+        <div class="mbox">
+            <h3>دانلود برای ویندوز</h3>
+            <div class="app-list">
+                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-btn"><span>v2rayN</span><span>💻</span></a>
+                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-btn"><span>Hiddify Desktop</span><span>🦋</span></a>
+                <a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" class="app-btn"><span>NekoRay</span><span>🐱</span></a>
+            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-win')">بستن</button>
+        </div>
+    </div>
+
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:10px;display:inline-block"><img id="qi" src="" width="180"></div><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('qrm')">بستن</button></div></div>
     <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cfm')">بستن</button></div></div>
     <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cpm')">بستن</button></div></div>
@@ -417,23 +485,35 @@
         
         {% raw %}
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        document.getElementById('qi').src =
+            'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        var root = document.documentElement; var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
-        tb.onclick = function() {
-            if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
-            else { root.classList.add('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
+        var root = document.documentElement;
+        var tb = document.getElementById('themeBtn');
+        if (localStorage.getItem('theme') === 'light') {
+            root.classList.add('light'); tb.textContent = '☀️';
+        }
+        tb.onclick = function () {
+            if (root.classList.contains('light')) {
+                root.classList.remove('light');
+                tb.textContent = '🌙';
+                localStorage.setItem('theme', 'dark');
+            } else {
+                root.classList.add('light');
+                tb.textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            }
         };
 
-        var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
-        var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
-        
+        var tot = parseInt(totStr) || 0;
+        var use = parseInt(useStr) || 0;
+        var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
+
         var tPer = 0; var expDate = null; var daysLeft = 'نامحدود'; var daysNum = null;
-        if(expStr && expStr !== 'None' && expStr !== 'null') {
+        if (expStr && expStr !== 'None' && expStr !== 'null') {
             try {
                 expDate = new Date(expStr);
-                if(!isNaN(expDate.getTime())) {
+                if (!isNaN(expDate.getTime())) {
                     var now = new Date();
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
@@ -441,99 +521,169 @@
                     if (days > 30) tPer = 100; else if (days <= 0) { tPer = 0; daysLeft = 'منقضی'; }
                     else { tPer = (days / 30) * 100; daysLeft = Math.ceil(days) + ' روز'; }
                 }
-            } catch(e) {}
+            } catch (e) {}
         } else { tPer = 100; }
-        if(daysLeft === 'نامحدود' && expDate === null) tPer = 100;
+        if (daysLeft === 'نامحدود' && expDate === null) tPer = 100;
 
         var usagePercent = document.getElementById('usagePercent');
-        var usageFill = document.getElementById('usageFill');
-        var usageLabel = document.getElementById('usageLabel');
-        usagePercent.innerText = Math.round(per) + '%';
-        usageFill.style.width = per + '%';
-        
-        function fb(b) { 
-            if(tot===0) return 'نامحدود'; if(b<=0) return '0 B'; 
-            var u=['B','KB','MB','GB','TB']; var i=Math.floor(Math.log(b)/Math.log(1024)); 
-            return parseFloat((b/Math.pow(1024,i)).toFixed(2))+' '+u[i]; 
-        }
-        usageLabel.innerText = fb(use) + ' / ' + fb(tot);
+        var usageFill    = document.getElementById('usageFill');
+        var usageLabel   = document.getElementById('usageLabel');
 
-        if(per>85) usageFill.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
-        else if(per>65) usageFill.style.background = 'linear-gradient(90deg, #f59e0b, #f97316)';
-        else usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
+        usagePercent.innerText = Math.round(per) + '%';
+        usageFill.style.width  = per + '%';
+        
+        function fb(b) {
+            if (tot === 0) return 'نامحدود';
+            if (b <= 0)   return '0 B';
+            var u = ['B', 'KB', 'MB', 'GB', 'TB'];
+            var i = Math.floor(Math.log(b) / Math.log(1024));
+            return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
+        }
+        usageLabel.innerText   = fb(use) + ' / ' + fb(tot);
+
+        if (per > 85)
+            usageFill.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
+        else if (per > 65)
+            usageFill.style.background = 'linear-gradient(90deg, #f59e0b, #f97316)';
+        else
+            usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
 
         var timePercent = document.getElementById('timePercent');
-        var timeFill = document.getElementById('timeFill');
-        var timeLabel = document.getElementById('timeLabel');
-        timePercent.innerText = Math.round(tPer) + '%';
-        timeFill.style.width = Math.max(0, Math.min(tPer, 100)) + '%';
-        timeLabel.innerText = daysLeft;
+        var timeFill    = document.getElementById('timeFill');
+        var timeLabel   = document.getElementById('timeLabel');
 
-        if(daysLeft==='منقضی') timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
-        else if(daysNum!==null && daysNum<3) timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
-        else if(daysNum!==null && daysNum<7) timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
-        else timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
+        timePercent.innerText = Math.round(tPer) + '%';
+        timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
+        timeLabel.innerText   = daysLeft;
+
+        if (daysLeft === 'منقضی')
+            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
+        else if (daysNum !== null && daysNum < 3)
+            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
+        else if (daysNum !== null && daysNum < 7)
+            timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
+        else
+            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
 
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
-        document.getElementById('rem').textContent = fb(tot-use);
+        document.getElementById('rem').textContent    = fb(tot - use);
 
         var ed = document.getElementById('ed');
-        if(ed) {
-            if(!expDate) ed.innerText = 'نامحدود';
+        if (ed) {
+            if (!expDate) ed.innerText = 'نامحدود';
             else {
-                var sh = expDate.toLocaleDateString('fa-IR');
-                var diff = Math.floor((expDate - new Date())/(1000*60*60*24));
-                var txt = diff < 0 ? '(منقضی)' : (diff === 0 ? '(امروز)' : '(' + diff + ' روز)');
-                var c = diff < 0 ? '#ef4444' : (diff === 0 ? '#f59e0b' : '#10b981');
-                ed.innerHTML = sh + '<br><span style="font-size:11px; opacity:0.8; color:' + c + '">' + txt + '</span>';
+                var sh   = expDate.toLocaleDateString('fa-IR');
+                var diff = Math.floor(
+                    (expDate - new Date()) / (1000 * 60 * 60 * 24)
+                );
+                var txt = diff < 0
+                    ? '(منقضی)'
+                    : diff === 0
+                    ? '(امروز)'
+                    : '(' + diff + ' روز)';
+                var c   = diff < 0 ? '#ef4444'
+                        : diff === 0 ? '#f59e0b'
+                                     : '#10b981';
+                ed.innerHTML =
+                    sh +
+                    '<br><span style="font-size:11px; opacity:0.8; color:' +
+                    c + '">' +
+                    txt + '</span>';
             }
         }
 
         function hc(t) {
-            if(!t || t.indexOf('{{') !== -1) t = subUrl;
-            if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(st).catch(function(){fbc(t)});
+            if (!t || t.indexOf('{{') !== -1) t = subUrl;
+            if (navigator.clipboard && window.isSecureContext)
+                navigator.clipboard.writeText(t).then(st).catch(function () {
+                    fbc(t);
+                });
             else fbc(t);
         }
         function fbc(t) {
-            var h = document.getElementById('cph'); h.style.display='block'; h.value=t; h.focus(); h.select();
-            try { if(document.execCommand('copy')) st(); else omc(t); } catch(e){ omc(t); } h.style.display='none';
+            var h = document.getElementById('cph');
+            h.style.display = 'block';
+            h.value = t; h.focus(); h.select();
+            try {
+                if (document.execCommand('copy')) st();
+                else omc(t);
+            } catch (e) { omc(t); }
+            h.style.display = 'none';
         }
-        function omc(t) { document.getElementById('cpi').value = t; om('cpm'); }
-        function st() { var t=document.getElementById('toast'); t.classList.add('sh'); setTimeout(function(){t.classList.remove('sh')},2000); }
-        function om(i) { document.getElementById(i).style.display='flex'; }
-        function cm(i) { document.getElementById(i).style.display='none'; }
+        function omc(t) {
+            document.getElementById('cpi').value = t;
+            om('cpm');
+        }
+        function st() {
+            var t = document.getElementById('toast');
+            t.classList.add('sh');
+            setTimeout(function () { t.classList.remove('sh'); }, 2000);
+        }
+        function om(i) { document.getElementById(i).style.display = 'flex'; }
+        function cm(i) { document.getElementById(i).style.display = 'none'; }
 
         function openApp(app) {
             var t = subUrl; var n = document.title; var link = '';
-            if(app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if(app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if(app === 'v2raytun') link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if(app === 'happ') link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch(e) { link = t; } }
-            window.location.href = link; setTimeout(function(){ cm('appMod'); }, 500);
+            if      (app === 'v2rayng')
+                link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if (app === 'hiddify')
+                link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if (app === 'v2raytun')
+                link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if (app === 'happ')
+                link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else {
+                try {
+                    var b = btoa(t);
+                    link = 'sub://' + b + '#' + encodeURIComponent(n);
+                } catch (e) { link = t; }
+            }
+            window.location.href = link;
+            setTimeout(function () { cm('appMod'); }, 500);
         }
 
         function sc() {
-            om('cfm'); var l=document.getElementById('cl'); l.innerHTML='...';
-            fetch(window.location.pathname+'/links').then(function(r){return r.text()}).then(function(t){
-                if(t){
-                    l.innerHTML='<button class="btn btn-p" style="height:32px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\''+t.replace(/\n/g,'\\n')+'\')">کپی همه</button>';
-                    t.split('\n').forEach(function(x){
-                        var z=x.trim();
-                        if(z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)){
-                            var n='Config'; if(z.indexOf('#')>-1) n=decodeURIComponent(z.split('#')[1]);
-                            l.innerHTML+='<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>'+n+'</span><button class="btn btn-s" style="width:auto;height:24px;padding:0 10px;font-size:11px" onclick="hc(\''+z+'\')">کپی</button></div>';
-                        }
-                    });
-                }
-            }).catch(function(){l.innerHTML='خطا'});
+            om('cfm');
+            var l = document.getElementById('cl');
+            l.innerHTML = '...';
+            fetch(window.location.pathname + '/links')
+                .then(function (r) { return r.text(); })
+                .then(function (t) {
+                    if (t) {
+                        l.innerHTML =
+                            '<button class="btn btn-p" style="height:32px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\'' +
+                            t.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
+                        t.split('\n').forEach(function (x) {
+                            var z = x.trim();
+                            if (z && (
+                                z.indexOf('vmess')===0 ||
+                                z.indexOf('vless')===0 ||
+                                z.indexOf('trojan')===0 ||
+                                z.indexOf('ss://')===0
+                            )) {
+                                var n = 'Config';
+                                if (z.indexOf('#') > -1)
+                                    n = decodeURIComponent(z.split('#')[1]);
+                                l.innerHTML +=
+                                    '<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
+                                    '<span>' + n + '</span>' +
+                                    '<button class="btn btn-s" style="width:auto;height:24px;padding:0 10px;font-size:11px" onclick="hc(\'' +
+                                    z + '\')">کپی</button></div>';
+                            }
+                        });
+                    }
+                })
+                .catch(function () { l.innerHTML = 'خطا'; });
         }
 
         var ua = navigator.userAgent.toLowerCase();
-        if(ua.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
-        else if(ua.indexOf('iphone')>-1||ua.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
-        else if(ua.indexOf('win')>-1) document.getElementById('dw').classList.add('rec');
+        if      (ua.indexOf('android') > -1)
+            document.getElementById('da').classList.add('rec');
+        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1)
+            document.getElementById('di').classList.add('rec');
+        else if (ua.indexOf('win') > -1)
+            document.getElementById('dw').classList.add('rec');
         {% endraw %}
     </script>
 </body>
