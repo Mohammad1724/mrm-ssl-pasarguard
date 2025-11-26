@@ -27,16 +27,15 @@
             font-family: 'Vazirmatn', sans-serif;
             background: var(--bg); color: var(--txt);
             min-height: 100vh;
-            padding: 80px 20px 20px; /* فضای بالای تیکر */
+            padding: 80px 20px 20px;
             transition: 0.3s;
         }
         
-        /* Background Orbs */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
         .o2 { bottom: -150px; left: -100px; background: var(--g2); }
 
-        /* NEWS TICKER */
+        /* TICKER */
         .ticker-wrap {
             position: fixed; top: 0; left: 0; right: 0; height: 55px;
             background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(15px);
@@ -53,29 +52,17 @@
             box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3);
             z-index: 2;
         }
-        .ticker-content {
-            flex: 1; overflow: hidden; white-space: nowrap;
-            position: relative; height: 100%;
-            display: flex; align-items: center;
-        }
+        .ticker-content { flex: 1; overflow: hidden; white-space: nowrap; position: relative; height: 100%; display: flex; align-items: center; }
         .ticker-content span {
-            display: inline-block;
-            font-size: 15px; font-weight: 700;
-            color: #fbbf24;
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
-            padding-left: 100%;
+            display: inline-block; font-size: 15px; font-weight: 700; color: #fbbf24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); padding-left: 100%;
             animation: scroll-left 20s linear infinite;
         }
         :root.light .ticker-content span { color: #d97706; text-shadow: none; }
-
-        @keyframes scroll-left {
-            0%   { transform: translate3d(100%, 0, 0); }
-            100% { transform: translate3d(-150%, 0, 0); }
-        }
+        @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
 
         .con { max-width: 800px; margin: 0 auto; }
         
-        /* HEADER */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
 
@@ -84,282 +71,148 @@
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        :root.light .brand {
-            background: linear-gradient(135deg, #333 0%, #666 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
+        :root.light .brand { background: linear-gradient(135deg, #333 0%, #666 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
         .bot-link {
-            display: inline-flex; align-items: center;
-            font-size: 14px; font-weight: 700;
-            color: white; text-decoration: none;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(12px);
-            padding: 10px 20px;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            transition: 0.3s; width: fit-content;
+            display: inline-flex; align-items: center; font-size: 14px; font-weight: 700;
+            color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px); padding: 10px 20px; border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.15); transition: 0.3s; width: fit-content;
         }
         .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
-        :root.light .bot-link {
-            color: #333;
-            border-color: rgba(0,0,0,0.15);
-            background: rgba(0,0,0,0.05);
-        }
+        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); }
         :root.light .bot-link:hover { background: rgba(0,0,0,0.1); }
 
-        .theme-btn {
-            width: 42px; height: 42px;
-            border-radius: 12px; border: 1px solid var(--brd);
-            background: rgba(255,255,255,0.1);
-            font-size: 20px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: 0.2s; backdrop-filter: blur(5px);
-        }
+        .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
 
-        .card {
-            background: var(--card);
-            border: 1px solid var(--brd);
-            border-radius: 24px;
-            padding: 24px;
-            backdrop-filter: blur(20px);
-            transition: 0.3s;
-        }
-        .grid { display: grid; gap: 30px; }
-        @media (min-width: 768px) {
-            .grid { grid-template-columns: 1fr 1fr; }
-        }
+        .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
+        .grid { display: grid; gap: 30px; } @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
-        /* PROFILE SECTION */
-        .prof-container {
-            display: flex; justify-content: flex-start; align-items: center;
-            margin-bottom: 15px; padding-bottom: 15px;
-            border-bottom: 1px solid var(--brd);
-        }
+        /* PROFILE */
+        .prof-container { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); }
         .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
-
-        .av {
-            width: 60px; height: 60px; border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%);
-            color: #92400e; display: flex; align-items: center; justify-content: center;
-            font-size: 26px; position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
-        }
-        .dot {
-            position: absolute; bottom: 2px; right: 2px;
-            width: 12px; height: 12px; background: #10b981;
-            border-radius: 50%; border: 2px solid white;
-        }
+        .av { width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; display: flex; align-items: center; justify-content: center; font-size: 26px; position: relative; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
+        .dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
         .nm { font-size: 18px; font-weight: 700; }
         .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
-        .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
-        .st.in  { background: rgba(239,68,68,0.2);  color: #f87171; }
+        .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* BAR-STYLE CHART WRAPPER */
+        /* CHART */
         .chart-wrapper {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--brd);
-            border-radius: 20px;
-            padding: 14px 14px 10px;
-            margin-bottom: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+            background: rgba(255, 255, 255, 0.03); border: 1px solid var(--brd);
+            border-radius: 20px; padding: 16px; margin-bottom: 20px;
+            display: flex; flex-direction: column; gap: 15px;
         }
         :root.light .chart-wrapper { background: rgba(0,0,0,0.02); }
 
-        .usage-row { display: flex; flex-direction: column; gap: 6px; }
+        .usage-row { display: flex; flex-direction: column; gap: 8px; }
+        .usage-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .usage-left { display: flex; align-items: center; gap: 12px; }
 
-        .usage-header {
-            display: flex; align-items: center; justify-content: space-between;
-            gap: 8px;
-        }
-        .usage-left { display: flex; align-items: center; gap: 8px; }
-
-        /* آیکن‌های حجم و زمان – هاله‌ی آبی شیشه‌ای بزرگ‌تر */
+        /* --- آیکن‌های بزرگ و اصلاح شده --- */
         .usage-icon {
-            width: 26px; height: 26px;
-            border-radius: 50%;
+            width: 42px; height: 42px; /* سایز بزرگتر */
+            border-radius: 14px; /* کمی مربعی‌تر برای مدرن شدن */
             display: flex; align-items: center; justify-content: center;
-
-            background: radial-gradient(circle at 30% 30%, #0f172a, #020617);
-            border: 1px solid rgba(148, 163, 184, 0.6);
-
-            color: #e5e7eb;
-            font-size: 14px;
-
-            box-shadow:
-                0 0 16px rgba(15, 23, 42, 0.9),
-                0 0 26px rgba(56, 189, 248, 0.85);
+            
+            /* پس‌زمینه شیشه‌ای تیره */
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            
+            color: #38bdf8; /* آیکن آبی روشن */
+            font-size: 20px; /* فونت بزرگتر */
+            
+            /* هاله آبی نئونی */
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.1);
         }
         :root.light .usage-icon {
-            background: radial-gradient(circle at 30% 30%, #f9fafb, #e5e7eb);
-            border: 1px solid rgba(148, 163, 184, 0.7);
-            color: #0f172a;
-            box-shadow:
-                0 0 14px rgba(148, 163, 184, 0.6),
-                0 0 22px rgba(56, 189, 248, 0.5);
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+            border-color: rgba(56, 189, 248, 0.5);
+            color: #0284c7;
+            box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);
         }
 
-        .usage-title { font-size: 12px; font-weight: 700; }
-        .usage-sub { font-size: 11px; color: var(--mute); }
-
-        .usage-percent { font-size: 13px; font-weight: 800; }
+        .usage-title { font-size: 13px; font-weight: 700; }
+        .usage-sub { font-size: 11px; color: var(--mute); margin-top: 2px; }
+        .usage-percent { font-size: 14px; font-weight: 800; }
 
         .usage-bar {
-            width: 100%; height: 8px;
-            border-radius: 999px;
+            width: 100%; height: 10px; /* کمی ضخیم‌تر */
+            border-radius: 99px;
             background: rgba(255,255,255,0.06);
             overflow: hidden;
             border: 1px solid rgba(255,255,255,0.08);
         }
-        :root.light .usage-bar {
-            background: rgba(0,0,0,0.05);
-            border-color: rgba(0,0,0,0.08);
-        }
-        .usage-fill {
-            height: 100%;
-            width: 0%;
-            border-radius: 999px;
-            transition: width 0.8s ease-out, background 0.3s ease-out;
-        }
+        :root.light .usage-bar { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
+        .usage-fill { height: 100%; width: 0%; border-radius: 99px; transition: width 0.8s, background 0.3s; }
 
         /* BUTTONS */
         .btn {
             position: relative; display: flex; align-items: center; justify-content: center;
-            height: 48px; border-radius: 14px;
-            font-size: 13px; font-weight: 600;
+            height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600;
             cursor: pointer; text-decoration: none; overflow: hidden;
             background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1);
             color: var(--txt); transition: 0.3s;
         }
-        .btn:active { transform: scale(0.97); }
-        .btn:hover  { transform: translateY(-2px); }
+        .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
         .btn::before {
             content: ''; position: absolute; inset: 0;
             background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
-        :root.light .btn::before {
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%);
-            opacity: 0.6;
-        }
+        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
 
-        .btn-p {
-            background: rgba(56, 189, 248, 0.05);
-            color: #38bdf8;
-            border: 1px solid rgba(56, 189, 248, 0.15);
-        }
-        .btn-p::before {
-            background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%);
-            opacity: 0.3;
-        }
-        :root.light .btn-p {
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0369a1;
-            border: 1px solid #7dd3fc;
-            box-shadow: 0 4px 12px rgba(14,165,233,0.2);
-        }
-        :root.light .btn-p::before {
-            background: radial-gradient(circle at 50% 0%, rgba(34,197,94,0.8), transparent 70%);
-            opacity: 0.6;
-        }
+        .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
+        .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; }
+        :root.light .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
+        :root.light .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; }
 
-        .btn-s {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-        }
-        :root.light .btn-s {
-            background: rgba(0,0,0,0.03);
-            border: 1px solid rgba(0,0,0,0.15);
-            color: #333;
-        }
-
-        .btn-dark {
-            background: rgba(0,0,0,0.3);
-            font-size: 12px;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        :root.light .btn-dark {
-            background: rgba(0,0,0,0.05);
-            color: #333;
-            border: 1px solid rgba(0,0,0,0.15);
-        }
-
+        .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); }
+        :root.light .btn-s { background: rgba(0,0,0,0.03); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
+        .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; border: 1px solid rgba(255,255,255,0.2); } 
+        :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* STATS & DOWNLOADS */
-        .stats {
-            display: grid; grid-template-columns: 1fr 1fr;
-            gap: 10px; margin-bottom: 15px;
-        }
-        .sb {
-            background: rgba(255,255,255,0.05);
-            padding: 12px; border-radius: 12px;
-            border: 1px solid var(--brd);
-        }
-        :root.light .sb { background: rgba(0,0,0,0.03); }
-        .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; }
-        .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
+        /* STATS */
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
+        .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
-        .dls {
-            display: grid; grid-template-columns: repeat(3, 1fr);
-            gap: 8px; margin-top: 15px;
-            border-top: 1px solid var(--brd); padding-top: 15px;
-        }
-        .db {
-            display: flex; flex-direction: column; align-items: center; gap: 3px;
-            padding: 8px 4px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            text-decoration: none; color: var(--txt);
-            font-size: 10px; border: 1px solid var(--brd);
-            transition: 0.2s;
-        }
-        .db span { font-size: 14px; }
-        :root.light .db { background: rgba(0,0,0,0.03); }
+        .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
+        .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(255,255,255,0.05); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; }
+        .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
-        /* AURORA BRAND (پایین) – بدون استروک در دارک، خیلی ملایم در لایت */
-        .big-brand-box {
-            position: relative;
-            margin-top: 35px;
-            text-align: center;
-            padding: 10px 0;
-        }
+        /* --- JELLY BRAND (Real Liquid Effect) --- */
+        .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
         .big-brand {
-            font-size: 54px;
-            font-weight: 900;
-            letter-spacing: -1.5px;
-            background: linear-gradient(45deg,#38bdf8,#6366f1,#f97316,#fbbf24);
-            background-size: 250% 250%;
+            font-size: 54px; font-weight: 900; letter-spacing: -1.5px;
+            
+            /* گرادینت عمودی برای حس ژله‌ای/مایع */
+            background: linear-gradient(180deg, 
+                #ffffff 0%,           /* بالا: سفید براق */
+                rgba(255,255,255,0.2) 45%, /* وسط: شفاف */
+                #1e40af 55%,          /* پایین: آبی کاربنی غلیظ */
+                #172554 100%
+            );
+            
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            /* در حالت دارک استروک نداریم تا خطوط زبر دیده نشوند */
-            -webkit-text-stroke: 0px transparent;
-            animation: aurora 6s ease infinite;
-            filter:
-                drop-shadow(0 0 18px rgba(56, 189, 248, 0.7))
-                drop-shadow(0 8px 25px rgba(0, 0, 0, 0.8));
-            z-index: 2;
-            position: relative;
-        }
-        @keyframes aurora {
-            0%   { background-position: 0% 50%; }
-            50%  { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+            
+            /* بدون خط دور (Stroke) برای نرمی بیشتر */
+            -webkit-text-stroke: 0;
+            
+            /* نور پس زمینه آبی نئونی */
+            filter: drop-shadow(0 0 20px rgba(37, 99, 235, 0.8));
+            
+            z-index: 2; position: relative;
         }
         :root.light .big-brand {
-            background: linear-gradient(45deg,#0ea5e9,#6366f1,#f97316,#fbbf24);
-            background-size: 250% 250%;
+            background: linear-gradient(180deg, #3b82f6 0%, #1e3a8a 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            /* فقط یک استروک خیلی ظریف برای خوانایی روی زمینه روشن */
-            -webkit-text-stroke: 0.3px rgba(0, 0, 0, 0.35);
-            filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.3));
+            filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.4));
         }
 
         /* MODALS */
@@ -374,17 +227,8 @@
     </style>
 </head>
 <body>
-    <div class="orb o1"></div>
-    <div class="orb o2"></div>
-
-    <!-- NEWS TICKER -->
-    <div class="ticker-wrap">
-        <div class="ticker-icon">📢</div>
-        <div class="ticker-content">
-            <span id="nT">__NEWS__</span>
-        </div>
-    </div>
-
+    <div class="orb o1"></div> <div class="orb o2"></div>
+    <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
@@ -406,18 +250,13 @@
                             <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
                             <div>
                                 <div class="nm">{{ user.username }}</div>
-                                {% if user.status.name == 'active' %}
-                                    <span class="st act">فعال</span>
-                                {% else %}
-                                    <span class="st in">غیرفعال</span>
-                                {% endif %}
+                                {% if user.status.name == 'active' %}<span class="st act">فعال</span>{% else %}<span class="st in">غیرفعال</span>{% endif %}
                             </div>
                         </div>
                     </div>
 
                     <!-- BAR-STYLE CHART -->
                     <div class="chart-wrapper">
-                        <!-- حجم -->
                         <div class="usage-row">
                             <div class="usage-header">
                                 <div class="usage-left">
@@ -429,11 +268,8 @@
                                 </div>
                                 <div class="usage-percent" id="usagePercent">0%</div>
                             </div>
-                            <div class="usage-bar">
-                                <div class="usage-fill" id="usageFill"></div>
-                            </div>
+                            <div class="usage-bar"><div class="usage-fill" id="usageFill"></div></div>
                         </div>
-                        <!-- زمان -->
                         <div class="usage-row">
                             <div class="usage-header">
                                 <div class="usage-left">
@@ -445,47 +281,28 @@
                                 </div>
                                 <div class="usage-percent" id="timePercent">0%</div>
                             </div>
-                            <div class="usage-bar">
-                                <div class="usage-fill" id="timeFill"></div>
-                            </div>
+                            <div class="usage-bar"><div class="usage-fill" id="timeFill"></div></div>
                         </div>
                     </div>
 
-                    <!-- BUTTONS -->
                     <div class="btn-grid">
                         <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
                     
-                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">
-                        🚀 اتصال مستقیم (انتخاب اپ)
-                    </button>
+                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">🚀 اتصال مستقیم (انتخاب اپ)</button>
                     <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
-                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">
-                        💬 ارتباط با پشتیبانی
-                    </a>
+                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">💬 ارتباط با پشتیبانی</a>
                 </div>
 
                 <!-- RIGHT COLUMN -->
                 <div style="display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
                         <div class="stats">
-                            <div class="sb">
-                                <div class="sl">انقضا</div>
-                                <div class="sv" id="ed"></div>
-                            </div>
-                            <div class="sb">
-                                <div class="sl">حجم کل</div>
-                                <div class="sv" id="totDisp">...</div>
-                            </div>
-                            <div class="sb">
-                                <div class="sl">مصرف شده</div>
-                                <div class="sv" id="useDisp">...</div>
-                            </div>
-                            <div class="sb">
-                                <div class="sl">باقیمانده</div>
-                                <div class="sv" id="rem" style="color:#3b82f6">...</div>
-                            </div>
+                            <div class="sb"><div class="sl">انقضا</div><div class="sv" id="ed"></div></div>
+                            <div class="sb"><div class="sl">حجم کل</div><div class="sv" id="totDisp">...</div></div>
+                            <div class="sb"><div class="sl">مصرف شده</div><div class="sv" id="useDisp">...</div></div>
+                            <div class="sb"><div class="sl">باقیمانده</div><div class="sv" id="rem" style="color:#3b82f6">...</div></div>
                         </div>
                         <div class="dls">
                             <a href="__ANDROID__" class="db" id="da"><span>🤖</span>Android</a>
@@ -494,7 +311,6 @@
                         </div>
                     </div>
 
-                    <!-- AURORA BRAND (BOTTOM) -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
@@ -512,39 +328,12 @@
                 <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span>🦋</span></div>
                 <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span>🌐</span></div>
                 <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span>🍏</span></div>
-            </div>
-            <br>
-            <button class="btn btn-s" style="background:#333; color:white" onclick="cm('appMod')">بستن</button>
+            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
-
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
-        <div class="mbox">
-            <h3>اسکن کنید</h3><br>
-            <div style="background:white; padding:10px; border-radius:10px; display:inline-block">
-                <img id="qi" src="" width="180">
-            </div>
-            <br><br>
-            <button class="btn btn-s" style="background:#333; color:white" onclick="cm('qrm')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox">
-            <h3>کانفیگ‌ها</h3><br>
-            <div id="cl" style="text-align:left; max-height:300px; overflow-y:auto; font-size:12px">...</div><br>
-            <button class="btn btn-s" style="background:#333; color:white" onclick="cm('cfm')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')">
-        <div class="mbox">
-            <h3>کپی دستی</h3>
-            <p style="font-size:12px; color:#aaa; margin:10px 0">لینک را انتخاب و کپی کنید:</p>
-            <input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br>
-            <button class="btn btn-s" style="background:#333; color:white" onclick="cm('cpm')">بستن</button>
-        </div>
-    </div>
+    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:10px;display:inline-block"><img id="qi" src="" width="180"></div><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('qrm')">بستن</button></div></div>
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cfm')">بستن</button></div></div>
+    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cpm')">بستن</button></div></div>
 
     <script>
         var subUrl = '{{ subscription_url }}';
@@ -554,214 +343,123 @@
         
         {% raw %}
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        document.getElementById('qi').src =
-            'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        var root = document.documentElement;
-        var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'light') {
-            root.classList.add('light'); tb.textContent = '☀️';
-        }
-        tb.onclick = function () {
-            if (root.classList.contains('light')) {
-                root.classList.remove('light');
-                tb.textContent = '🌙';
-                localStorage.setItem('theme', 'dark');
-            } else {
-                root.classList.add('light');
-                tb.textContent = '☀️';
-                localStorage.setItem('theme', 'light');
-            }
+        var root = document.documentElement; var tb = document.getElementById('themeBtn');
+        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '☀️'; }
+        tb.onclick = function() {
+            if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'dark'); }
+            else { root.classList.add('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'light'); }
         };
 
-        var tot = parseInt(totStr) || 0;
-        var use = parseInt(useStr) || 0;
-        var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
-
-        // TIME PERCENT
-        var tPer = 0;
-        var expDate = null;
-        var daysLeft = 'نامحدود';
-        var daysNum = null;
-        if (expStr && expStr !== 'None' && expStr !== 'null') {
+        var tot = parseInt(totStr)||0; var use = parseInt(useStr)||0;
+        var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
+        
+        var tPer = 0; var expDate = null; var daysLeft = 'نامحدود'; var daysNum = null;
+        if(expStr && expStr !== 'None' && expStr !== 'null') {
             try {
                 expDate = new Date(expStr);
-                if (!isNaN(expDate.getTime())) {
+                if(!isNaN(expDate.getTime())) {
                     var now = new Date();
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-                    if (days > 30)      tPer = 100;
-                    else if (days <= 0) { tPer = 0; daysLeft = 'منقضی'; }
+                    if (days > 30) tPer = 100; else if (days <= 0) { tPer = 0; daysLeft = 'منقضی'; }
                     else { tPer = (days / 30) * 100; daysLeft = Math.ceil(days) + ' روز'; }
                 }
-            } catch (e) {}
-        } else {
-            tPer = 100;
-        }
-        if (daysLeft === 'نامحدود' && expDate === null) tPer = 100;
+            } catch(e) {}
+        } else { tPer = 100; }
+        if(daysLeft === 'نامحدود' && expDate === null) tPer = 100;
 
-        // به‌روزرسانی نوار حجم
         var usagePercent = document.getElementById('usagePercent');
-        var usageFill    = document.getElementById('usageFill');
-        var usageLabel   = document.getElementById('usageLabel');
-
+        var usageFill = document.getElementById('usageFill');
+        var usageLabel = document.getElementById('usageLabel');
         usagePercent.innerText = Math.round(per) + '%';
-        usageFill.style.width  = per + '%';
-        usageLabel.innerText   = fb(use) + ' / ' + fb(tot);
-
-        if (per > 85)
-            usageFill.style.background = 'linear-gradient(90deg, #ef4444, #b91c1c)';
-        else if (per > 65)
-            usageFill.style.background = 'linear-gradient(90deg, #f97316, #f59e0b)';
-        else
-            usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
-
-        // به‌روزرسانی نوار زمان
-        var timePercent = document.getElementById('timePercent');
-        var timeFill    = document.getElementById('timeFill');
-        var timeLabel   = document.getElementById('timeLabel');
-
-        timePercent.innerText = Math.round(tPer) + '%';
-        timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
-        timeLabel.innerText   = daysLeft;
-
-        if (daysLeft === 'منقضی')
-            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
-        else if (daysNum !== null && daysNum < 3)
-            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
-        else if (daysNum !== null && daysNum < 7)
-            timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
-        else
-            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
-
-        function fb(b) {
-            if (tot === 0) return 'نامحدود';
-            if (b <= 0)   return '0 B';
-            var u = ['B', 'KB', 'MB', 'GB', 'TB'];
-            var i = Math.floor(Math.log(b) / Math.log(1024));
-            return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
+        usageFill.style.width = per + '%';
+        
+        function fb(b) { 
+            if(tot===0) return 'نامحدود'; if(b<=0) return '0 B'; 
+            var u=['B','KB','MB','GB','TB']; var i=Math.floor(Math.log(b)/Math.log(1024)); 
+            return parseFloat((b/Math.pow(1024,i)).toFixed(2))+' '+u[i]; 
         }
+        usageLabel.innerText = fb(use) + ' / ' + fb(tot);
+
+        if(per>85) usageFill.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
+        else if(per>65) usageFill.style.background = 'linear-gradient(90deg, #f59e0b, #f97316)';
+        else usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
+
+        var timePercent = document.getElementById('timePercent');
+        var timeFill = document.getElementById('timeFill');
+        var timeLabel = document.getElementById('timeLabel');
+        timePercent.innerText = Math.round(tPer) + '%';
+        timeFill.style.width = Math.max(0, Math.min(tPer, 100)) + '%';
+        timeLabel.innerText = daysLeft;
+
+        if(daysLeft==='منقضی') timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
+        else if(daysNum!==null && daysNum<3) timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
+        else if(daysNum!==null && daysNum<7) timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
+        else timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
 
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
-        document.getElementById('rem').textContent    = fb(tot - use);
+        document.getElementById('rem').textContent = fb(tot-use);
 
         var ed = document.getElementById('ed');
-        if (ed) {
-            if (!expDate) ed.innerText = 'نامحدود';
+        if(ed) {
+            if(!expDate) ed.innerText = 'نامحدود';
             else {
-                var sh   = expDate.toLocaleDateString('fa-IR');
-                var diff = Math.floor(
-                    (expDate - new Date()) / (1000 * 60 * 60 * 24)
-                );
-                var txt = diff < 0
-                    ? '(منقضی)'
-                    : diff === 0
-                    ? '(امروز)'
-                    : '(' + diff + ' روز)';
-                var c   = diff < 0 ? '#ef4444'
-                        : diff === 0 ? '#f59e0b'
-                                     : '#10b981';
-                ed.innerHTML =
-                    sh +
-                    '<br><span style="font-size:11px; opacity:0.8; color:' +
-                    c + '">' +
-                    txt + '</span>';
+                var sh = expDate.toLocaleDateString('fa-IR');
+                var diff = Math.floor((expDate - new Date())/(1000*60*60*24));
+                var txt = diff < 0 ? '(منقضی)' : (diff === 0 ? '(امروز)' : '(' + diff + ' روز)');
+                var c = diff < 0 ? '#ef4444' : (diff === 0 ? '#f59e0b' : '#10b981');
+                ed.innerHTML = sh + '<br><span style="font-size:11px; opacity:0.8; color:' + c + '">' + txt + '</span>';
             }
         }
 
         function hc(t) {
-            if (!t || t.indexOf('{{') !== -1) t = subUrl;
-            if (navigator.clipboard && window.isSecureContext)
-                navigator.clipboard.writeText(t).then(st).catch(function () {
-                    fbc(t);
-                });
+            if(!t || t.indexOf('{{') !== -1) t = subUrl;
+            if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(st).catch(function(){fbc(t)});
             else fbc(t);
         }
         function fbc(t) {
-            var h = document.getElementById('cph');
-            h.style.display = 'block';
-            h.value = t; h.focus(); h.select();
-            try {
-                if (document.execCommand('copy')) st();
-                else omc(t);
-            } catch (e) { omc(t); }
-            h.style.display = 'none';
+            var h = document.getElementById('cph'); h.style.display='block'; h.value=t; h.focus(); h.select();
+            try { if(document.execCommand('copy')) st(); else omc(t); } catch(e){ omc(t); } h.style.display='none';
         }
-        function omc(t) {
-            document.getElementById('cpi').value = t;
-            om('cpm');
-        }
-        function st() {
-            var t = document.getElementById('toast');
-            t.classList.add('sh');
-            setTimeout(function () { t.classList.remove('sh'); }, 2000);
-        }
-        function om(i) { document.getElementById(i).style.display = 'flex'; }
-        function cm(i) { document.getElementById(i).style.display = 'none'; }
+        function omc(t) { document.getElementById('cpi').value = t; om('cpm'); }
+        function st() { var t=document.getElementById('toast'); t.classList.add('sh'); setTimeout(function(){t.classList.remove('sh')},2000); }
+        function om(i) { document.getElementById(i).style.display='flex'; }
+        function cm(i) { document.getElementById(i).style.display='none'; }
 
         function openApp(app) {
             var t = subUrl; var n = document.title; var link = '';
-            if      (app === 'v2rayng')
-                link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'hiddify')
-                link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'v2raytun')
-                link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'happ')
-                link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else {
-                try {
-                    var b = btoa(t);
-                    link = 'sub://' + b + '#' + encodeURIComponent(n);
-                } catch (e) { link = t; }
-            }
-            window.location.href = link;
-            setTimeout(function () { cm('appMod'); }, 500);
+            if(app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'v2raytun') link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if(app === 'happ') link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch(e) { link = t; } }
+            window.location.href = link; setTimeout(function(){ cm('appMod'); }, 500);
         }
 
         function sc() {
-            om('cfm');
-            var l = document.getElementById('cl');
-            l.innerHTML = '...';
-            fetch(window.location.pathname + '/links')
-                .then(function (r) { return r.text(); })
-                .then(function (t) {
-                    if (t) {
-                        l.innerHTML =
-                            '<button class="btn btn-p" style="height:32px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\'' +
-                            t.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
-                        t.split('\n').forEach(function (x) {
-                            var z = x.trim();
-                            if (z && (
-                                z.indexOf('vmess')===0 ||
-                                z.indexOf('vless')===0 ||
-                                z.indexOf('trojan')===0 ||
-                                z.indexOf('ss://')===0
-                            )) {
-                                var n = 'Config';
-                                if (z.indexOf('#') > -1)
-                                    n = decodeURIComponent(z.split('#')[1]);
-                                l.innerHTML +=
-                                    '<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
-                                    '<span>' + n + '</span>' +
-                                    '<button class="btn btn-s" style="width:auto;height:24px;padding:0 10px;font-size:11px" onclick="hc(\'' +
-                                    z + '\')">کپی</button></div>';
-                            }
-                        });
-                    }
-                })
-                .catch(function () { l.innerHTML = 'خطا'; });
+            om('cfm'); var l=document.getElementById('cl'); l.innerHTML='...';
+            fetch(window.location.pathname+'/links').then(function(r){return r.text()}).then(function(t){
+                if(t){
+                    l.innerHTML='<button class="btn btn-p" style="height:32px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\''+t.replace(/\n/g,'\\n')+'\')">کپی همه</button>';
+                    t.split('\n').forEach(function(x){
+                        var z=x.trim();
+                        if(z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)){
+                            var n='Config'; if(z.indexOf('#')>-1) n=decodeURIComponent(z.split('#')[1]);
+                            l.innerHTML+='<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>'+n+'</span><button class="btn btn-s" style="width:auto;height:24px;padding:0 10px;font-size:11px" onclick="hc(\''+z+'\')">کپی</button></div>';
+                        }
+                    });
+                }
+            }).catch(function(){l.innerHTML='خطا'});
         }
 
         var ua = navigator.userAgent.toLowerCase();
-        if      (ua.indexOf('android') > -1)
-            document.getElementById('da').classList.add('rec');
-        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1)
-            document.getElementById('di').classList.add('rec');
-        else if (ua.indexOf('win') > -1)
-            document.getElementById('dw').classList.add('rec');
+        if(ua.indexOf('android')>-1) document.getElementById('da').classList.add('rec');
+        else if(ua.indexOf('iphone')>-1||ua.indexOf('ipad')>-1) document.getElementById('di').classList.add('rec');
+        else if(ua.indexOf('win')>-1) document.getElementById('dw').classList.add('rec');
         {% endraw %}
     </script>
 </body>
