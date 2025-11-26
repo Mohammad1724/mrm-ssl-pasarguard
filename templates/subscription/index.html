@@ -103,56 +103,31 @@
         }
         .chart-val { z-index: 2; font-size: 24px; font-weight: 900; color: var(--txt); text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 
-        /* === BUTTONS (Universal Styles) === */
+        /* === BUTTONS === */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); color: var(--txt); transition: 0.3s; }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
         
-        /* DEFAULT ORANGE LAMP (Applies to all buttons by default) */
+        /* ORANGE LAMP (Default) */
         .btn::before { 
             content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%); /* Orange Top Glow */
+            background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
-        /* Light Mode Orange Lamp */
         :root.light .btn::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); 
-            opacity: 0.6; 
+            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; 
         }
 
-        /* === DIRECT CONNECT BUTTON (Override) === */
-        .btn-p { 
-            background: rgba(56, 189, 248, 0.05); 
-            color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); 
-        }
-        /* OVERRIDE: Green Lamp for Direct Connect */
+        /* DIRECT CONNECT (Green Lamp) */
+        .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
         .btn-p::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); /* Green Glow */
-            opacity: 0.3; 
+            background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; 
         }
-        
-        /* Light Mode Primary */
-        :root.light .btn-p { 
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0369a1; border: 1px solid #7dd3fc; 
-            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
-        }
-        :root.light .btn-p::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); /* Stronger Green */
-            opacity: 0.6; 
-        }
+        :root.light .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
+        :root.light .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; }
 
-        /* SECONDARY BUTTONS - Specifics */
-        .btn-s { 
-            background: rgba(255,255,255,0.05); 
-            border: 1px solid rgba(255, 255, 255, 0.25); 
-        }
-        :root.light .btn-s {
-            background: rgba(0,0,0,0.03);
-            border: 1px solid rgba(0, 0, 0, 0.15); 
-            color: #333;
-        }
+        .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); }
+        :root.light .btn-s { background: rgba(0,0,0,0.03); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
 
-        /* Support Button */
         .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; border: 1px solid rgba(255,255,255,0.2); } 
         :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
 
@@ -168,25 +143,37 @@
         .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
-        /* === BIG TRANSPARENT BRAND === */
+        /* === BIG BRAND: GOLDEN GLOW === */
         .big-brand-box {
             margin-top: 25px;
             text-align: center;
-            padding: 10px 0;
-            opacity: 0.5;
+            padding: 15px 0;
         }
         .big-brand {
-            font-size: 60px; font-weight: 900; letter-spacing: -3px;
-            color: transparent;
-            -webkit-text-stroke: 1px rgba(255, 255, 255, 0.15);
-            background: none;
-            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.1));
+            font-size: 55px; 
+            font-weight: 900; 
+            letter-spacing: -2px;
+            
+            /* Glassy Gradient */
+            background: linear-gradient(180deg, 
+                rgba(255,255,255,0.95) 0%, 
+                rgba(255,255,255,0.1) 45%, 
+                rgba(255,255,255,0.8) 100%);
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent;
+            
+            /* GOLDEN AMBER GLOW (Matches Theme) */
+            filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.8)) 
+                    drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
+            
             transform: skewX(-5deg);
             user-select: none;
         }
+        /* Light Mode */
         :root.light .big-brand {
-            -webkit-text-stroke: 1px rgba(0, 0, 0, 0.1);
-            filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.05));
+            background: linear-gradient(180deg, #1e293b 0%, #64748b 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 15px rgba(245, 158, 11, 0.6));
         }
 
         /* MODALS */
@@ -264,7 +251,7 @@
                         </div>
                     </div>
 
-                    <!-- BIG GLASSY BRAND -->
+                    <!-- BIG BRAND (With Golden Glow) -->
                     <div class="big-brand-box">
                         <div class="big-brand">__BRAND__</div>
                     </div>
