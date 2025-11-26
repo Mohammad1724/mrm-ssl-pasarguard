@@ -5,7 +5,7 @@
 # ==========================================
 
 # 1. تنظیمات
-# لینک فایل HTML خود را در خط زیر جایگزین کنید
+# لینک فایل HTML خود را اینجا بگذارید
 TEMPLATE_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
 
 # مسیرها
@@ -14,16 +14,20 @@ TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
 ENV_FILE="/opt/pasarguard/.env"
 
 # Colors
-CYAN='\033[0;36m'; GREEN='\033[0;32m'; BLUE='\033[0;34m'; RED='\033[0;31m'; NC='\033[0m'
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
 if [ "$EUID" -ne 0 ]; then echo -e "${RED}Error: Please run as root.${NC}"; exit 1; fi
 
-# --- توابع استخراج اطلاعات (هوشمند) ---
+# --- توابع استخراج اطلاعات از HTML فعلی ---
 get_current_val() {
     local match_str=$1
     local sed_pattern=$2
     if [ -f "$TEMPLATE_FILE" ]; then
-        # پیدا کردن خط مورد نظر و استخراج متن
         grep "$match_str" "$TEMPLATE_FILE" | head -n1 | sed -E "$sed_pattern"
     fi
 }
@@ -31,23 +35,19 @@ get_current_val() {
 fetch_defaults() {
     echo -e "${BLUE}Reading current configuration...${NC}"
     
-    # 1. Brand Name: خواندن از داخل تگ با آیدی brandTxt
-    # HTML: <div class="big-brand" id="brandTxt" data-text="NAME">NAME</div>
+    # 1. Brand Name: <div class="big-brand" id="brandTxt" data-text="NAME">NAME</div>
     DEF_BRAND=$(get_current_val 'id="brandTxt"' 's/.*id="brandTxt"[^>]*>([^<]+)<.*/\1/')
     
-    # 2. Bot Username: خواندن از لینک بات
-    # HTML: <a href="https://t.me/BOT" class="bot-link">
+    # 2. Bot Username: <a href="https://t.me/BOT" class="bot-link">
     DEF_BOT=$(get_current_val 'class="bot-link"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
     
-    # 3. Support ID: خواندن از دکمه پشتیبانی
-    # HTML: <a href="https://t.me/SUP" class="btn btn-dark" ...>
+    # 3. Support ID: <a href="https://t.me/SUP" class="btn btn-dark" ...>
     DEF_SUP=$(get_current_val 'class="btn btn-dark"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
     
-    # 4. News Text: خواندن از تیکر
-    # HTML: <span id="nT">NEWS</span>
+    # 4. News Text: <span id="nT">NEWS</span>
     DEF_NEWS=$(get_current_val 'id="nT"' 's/.*id="nT">([^<]+)<.*/\1/')
 
-    # تنظیم پیش‌فرض‌ها اگر چیزی پیدا نشد
+    # پیش‌فرض‌ها اگر چیزی پیدا نشد
     [ -z "$DEF_BRAND" ] && DEF_BRAND="FarsNetVIP"
     [ -z "$DEF_BOT" ] && DEF_BOT="MyBot"
     [ -z "$DEF_SUP" ] && DEF_SUP="Support"
@@ -59,7 +59,7 @@ sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
 clear
 echo -e "${CYAN}=== FarsNetVIP Theme Installer ===${NC}"
 
-# 2. دریافت ورودی‌ها
+# 2. خواندن مقادیر فعلی
 fetch_defaults
 
 echo -e "Enter new values or press ${YELLOW}ENTER${NC} to keep current:"
@@ -91,12 +91,18 @@ else
     exit 1
 fi
 
-# 4. فیکس انکدینگ (جلوگیری از ارور 500 یونیکد)
-python3 -c "import sys; f='$TEMPLATE_FILE'; d=open(f,'rb').read(); open(f,'w',encoding='utf-8').write(d.decode('utf-8','ignore'))"
+# 4. فیکس انکدینگ (جلوگیری از ارور UnicodeDecodeError)
+# نیاز به python3 دارد (در اکثر سیستم‌ها هست)
+python3 - << 'PYEOF'
+import io, sys
+f = sys.argv[1]
+data = open(f, 'rb').read()
+open(f, 'w', encoding='utf-8').write(data.decode('utf-8', 'ignore'))
+PYEOF
+"$TEMPLATE_FILE"
 
 # 5. جایگزینی متغیرها
 echo -e "${BLUE}Applying configurations...${NC}"
-# نکته مهم: برند در دو جا جایگزین می‌شود (متن و data-text برای افکت انعکاس)
 sed -i "s|__BRAND__|$(sed_escape "$IN_BRAND")|g" "$TEMPLATE_FILE"
 sed -i "s|__BOT__|$(sed_escape "$IN_BOT")|g" "$TEMPLATE_FILE"
 sed -i "s|__SUP__|$(sed_escape "$IN_SUP")|g" "$TEMPLATE_FILE"
@@ -107,10 +113,8 @@ sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
 
 # 6. تنظیم کانفیگ پنل
 if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
-# حذف خطوط تکراری احتمالی
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
-# افزودن تنظیمات
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
@@ -122,5 +126,5 @@ else
     systemctl restart pasarguard 2>/dev/null
 fi
 
-echo -e "${GREEN}✔ Theme Installed & Updated Successfully!${NC}"
-echo -e "Brand: $IN_BRAND | Bot: @$IN_BOT"
+echo -e "${GREEN}✔ Theme Installed/Updated Successfully!${NC}"
+echo -e "Brand: $IN_BRAND | Bot: @$IN_BOT | Support: @$IN_SUP"
