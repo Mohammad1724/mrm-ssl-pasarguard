@@ -39,18 +39,33 @@
         
         /* HEADER */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand-box { display: flex; flex-direction: column; gap: 5px; }
+        .brand-box { display: flex; flex-direction: column; gap: 8px; } /* Increased gap */
         
-        /* Header Brand (Small) */
+        /* "Dashboard" Title */
         .brand {
-            font-size: 26px; font-weight: 800;
+            font-size: 28px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         :root.light .brand { background: linear-gradient(135deg, #333 0%, #666 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 12px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); transition: 0.3s; }
-        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.1); }
+        /* BOT LINK - BIGGER NOW */
+        .bot-link { 
+            display: inline-flex; align-items: center; 
+            font-size: 14px; /* Bigger font */
+            font-weight: 700; 
+            color: white; text-decoration: none; 
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(12px); 
+            padding: 10px 20px; /* Bigger padding */
+            border-radius: 16px; /* More rounded */
+            border: 1px solid rgba(255, 255, 255, 0.15); 
+            transition: 0.3s; 
+            width: fit-content;
+        }
+        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
+        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); }
+        :root.light .bot-link:hover { background: rgba(0,0,0,0.1); }
 
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
 
@@ -77,7 +92,7 @@
         .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* === CHART === */
+        /* === BIG DUAL RING CHART === */
         .chart-box { position: relative; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; margin: 10px auto 25px auto; }
         .ring-outer {
             position: absolute; inset: 0; border-radius: 50%;
@@ -105,9 +120,7 @@
             background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
-        :root.light .btn::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; 
-        }
+        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
 
         /* DIRECT CONNECT (Green Lamp) */
         .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
@@ -135,47 +148,28 @@
         .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
-        /* === THE AURORA BRAND (New & Attractive) === */
-        .big-brand-box {
-            position: relative;
-            margin-top: 35px;
-            text-align: center;
-            padding: 10px 0;
-        }
+        /* === AURORA BRAND (Bottom Left) === */
+        .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
         .big-brand {
-            font-size: 50px; 
-            font-weight: 900;
-            letter-spacing: -1px;
-            /* The Aurora Gradient Animation */
+            font-size: 50px; font-weight: 900; letter-spacing: -1px;
             background: linear-gradient(45deg, #38bdf8, #818cf8, #34d399, #fbbf24);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             animation: aurora 6s ease infinite;
             filter: drop-shadow(0 0 15px rgba(56, 189, 248, 0.4));
             z-index: 2; position: relative;
         }
         @keyframes aurora { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
-
-        /* Reflection Effect */
+        /* Reflection */
         .big-brand::after {
-            content: '__BRAND__';
+            content: attr(data-text);
             position: absolute; top: 80%; left: 0; right: 0;
             background: inherit; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            transform: scaleY(-0.4); /* Flipped and squashed */
-            opacity: 0.3; /* Faded */
-            filter: blur(4px); /* Blurry reflection */
-            mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1)); /* Fade out at bottom */
+            transform: scaleY(-0.4); opacity: 0.3; filter: blur(4px);
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1));
             -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1));
             pointer-events: none;
         }
-
-        :root.light .big-brand {
-            /* Darker Aurora for Light Mode */
-            background: linear-gradient(45deg, #0284c7, #7c3aed, #059669, #d97706);
-            background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(0,0,0,0.1));
-        }
+        :root.light .big-brand { background: linear-gradient(45deg, #0284c7, #7c3aed, #059669, #d97706); background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px rgba(0,0,0,0.1)); }
 
         /* MODALS */
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
@@ -197,7 +191,7 @@
     <div class="con">
         <div class="head">
             <div class="brand-box">
-                <div class="brand" id="brandTxt">__BRAND__</div>
+                <div class="brand">Dashboard</div>
                 <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
             <button class="theme-btn" id="themeBtn">🌙</button>
@@ -207,7 +201,6 @@
             <div class="grid">
                 <!-- LEFT COLUMN -->
                 <div style="display:flex; flex-direction:column;">
-                    <!-- PROFILE -->
                     <div class="prof-container">
                         <div class="prof-info">
                             <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
@@ -218,14 +211,12 @@
                         </div>
                     </div>
 
-                    <!-- BIG DUAL CHART -->
                     <div class="chart-box">
                         <div class="ring-outer" id="rOut"></div>
                         <div class="ring-inner" id="rIn"></div>
                         <div class="chart-val" id="chTxt">0%</div>
                     </div>
 
-                    <!-- BUTTONS -->
                     <div class="btn-grid">
                         <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
@@ -252,10 +243,9 @@
                         </div>
                     </div>
 
-                    <!-- THE AURORA BRAND -->
+                    <!-- THE AURORA BRAND (Script updates this ID) -->
                     <div class="big-brand-box">
-                        <!-- The script will auto-replace __BRAND__ here too -->
-                        <div class="big-brand" data-text="__BRAND__">__BRAND__</div>
+                        <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
                 </div>
             </div>
