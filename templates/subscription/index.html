@@ -99,7 +99,7 @@
         
         /* === PRIMARY BUTTON (DIRECT CONNECT) === */
         .btn-p { 
-            /* Dark Mode: Very transparent (5%) - User likes this */
+            /* Dark Mode: 5% Opacity */
             background: rgba(56, 189, 248, 0.05); 
             color: #38bdf8; 
             border: 1px solid rgba(56, 189, 248, 0.1); 
@@ -107,12 +107,14 @@
         .btn-p:hover { background: rgba(56, 189, 248, 0.1); }
         .btn-p::before { display: none; } /* No Orange Glow */
         
-        /* Light Mode: Increased visibility (12%) per request */
+        /* Light Mode: Increased visibility (25%) */
         :root.light .btn-p { 
-            background: rgba(14, 165, 233, 0.12); 
+            background: rgba(14, 165, 233, 0.25); /* Increased Opacity */
             color: #0284c7; 
-            border-color: rgba(14, 165, 233, 0.25); 
+            border: 1px solid rgba(14, 165, 233, 0.4); /* Stronger Border */
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15); /* Blue Shadow */
         }
+        :root.light .btn-p:hover { background: rgba(14, 165, 233, 0.35); }
 
         .btn-s { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); color: var(--txt); }
         .btn-dark { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--txt); font-size: 13px; }
