@@ -62,7 +62,7 @@ restart_panel() {
 install_theme() {
     echo ""
     echo -e "${CYAN}--- Install / Reinstall Theme ---${NC}"
-    
+
     # Check URL
     if [[ "$THEME_SCRIPT_URL" == *"YOUR_USERNAME"* ]]; then
          echo -e "${RED}Error: THEME_SCRIPT_URL is not set in install.sh${NC}"
@@ -73,7 +73,7 @@ install_theme() {
 
     echo -e "${BLUE}Downloading Theme Script...${NC}"
     TMP_SCRIPT=$(mktemp)
-    
+
     if curl -fsSL "$THEME_SCRIPT_URL" -o "$TMP_SCRIPT"; then
         chmod +x "$TMP_SCRIPT"
         bash "$TMP_SCRIPT"
@@ -113,7 +113,7 @@ activate_theme() {
 deactivate_theme() {
     echo ""
     echo -e "${YELLOW}Deactivating Theme (Revert to Default)...${NC}"
-    
+
     if [ -f "$ENV_FILE" ]; then
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
@@ -132,13 +132,13 @@ uninstall_theme() {
     if [[ "$CONFIRM" == "y" ]]; then
         echo -e "${BLUE}Removing files...${NC}"
         rm -rf "$SUB_DIR"
-        
+
         echo -e "${BLUE}Cleaning config...${NC}"
         if [ -f "$ENV_FILE" ]; then
             sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
             sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
         fi
-        
+
         restart_panel
         echo -e "${GREEN}✔ Theme Uninstalled.${NC}"
     else
@@ -183,18 +183,30 @@ edit_theme_menu() {
     done
 }
 
-# Helper for Editing
+# Helper for Editing Brand / News
 _edit_val() {
     local PATTERN=$1
     local NAME=$2
-    # Extract current
-    local CUR=$(grep "$PATTERN" "$HTML_FILE" | head -n1 | sed -E "s/.*$PATTERN>([^<]+)<.*/\1/")
+    local CUR
+
+    if [ "$PATTERN" = 'id="brandTxt"' ]; then
+        # برند: مقدار از data-text خوانده می‌شود
+        CUR=$(grep 'id="brandTxt"' "$HTML_FILE" | head -n1 | sed -E 's/.*data-text="([^"]*)".*/\1/')
+    else
+        # بقیه (مثل id="nT" برای News)
+        CUR=$(grep "$PATTERN" "$HTML_FILE" | head -n1 | sed -E "s/.*$PATTERN>([^<]+)<.*/\1/")
+    fi
+
     echo -e "Current $NAME: ${YELLOW}$CUR${NC}"
     read -p "New $NAME (Enter to skip): " NEW_VAL
-    if [ ! -z "$NEW_VAL" ]; then
-        # Escape special chars
+    if [ -n "$NEW_VAL" ]; then
         local ESC=$(echo "$NEW_VAL" | sed -e 's/[\/&]/\\&/g')
-        sed -i "s|$PATTERN>[^<]*<|$PATTERN>$ESC<|" "$HTML_FILE"
+        if [ "$PATTERN" = 'id="brandTxt"' ]; then
+            # آپدیت هم data-text و هم متن داخل تگ
+            sed -i "s/id=\"brandTxt\" data-text=\"[^\"]*\">[^<]*/id=\"brandTxt\" data-text=\"$ESC\">$ESC/" "$HTML_FILE"
+        else
+            sed -i "s|$PATTERN>[^<]*<|$PATTERN>$ESC<|" "$HTML_FILE"
+        fi
         echo -e "${GREEN}✔ Updated.${NC}"
         sleep 1
     fi
@@ -227,14 +239,13 @@ _edit_bot() {
 }
 
 _edit_sup() {
-    # پیدا کردن یوزرنیم فعلی بر اساس کلاس btn-dark
-    local CUR=$(grep "btn-dark" "$HTML_FILE" | head -n1 | sed -n 's/.*href="https:\/\/t.me\/\([^"]*\)".*/\1/p')
-    echo -e "Current Support ID: ${YELLOW}$CUR${NC}"
-    
-    echo -e "Enter new Support Username (no @)"
-    read -p ">> " NEW_VAL
-    if [ ! -z "$NEW_VAL" ]; then
-        # جایگزینی لینک در دکمه‌ای که کلاس btn-dark دارد
+    # خواندن یوزرنیم فعلی از دکمه پشتیبانی (btn-dark)
+    local CUR=$(grep 'class="btn btn-dark"' "$HTML_FILE" | head -n1 | sed -n 's/.*href="https:\/\/t.me\/\([^"]*\)".*/\1/p')
+    [ -z "$CUR" ] && CUR="Unknown"
+
+    echo -e "Current Support: ${YELLOW}$CUR${NC}"
+    read -p "New Support User (no @): " NEW_VAL
+    if [ -n "$NEW_VAL" ]; then
         sed -i "s|href=\"https://t.me/[^\"]*\" class=\"btn btn-dark\"|href=\"https://t.me/$NEW_VAL\" class=\"btn btn-dark\"|" "$HTML_FILE"
         echo -e "${GREEN}✔ Updated.${NC}"
         sleep 1
@@ -269,20 +280,18 @@ theme_menu() {
 }
 
 # ==========================================
-#       SSL FUNCTIONS (KEPT FROM BEFORE)
+#       SSL FUNCTIONS
 # ==========================================
-# (Simplified for brevity, assuming standard functionality)
 
 generate_ssl() {
-    # [Keeping original logic, shortened for this output]
     echo -e "${CYAN}--- SSL Generator ---${NC}"
     echo -e "Enter Domain:"
     read -p ">> " DOMAIN
     if [ -z "$DOMAIN" ]; then return; fi
-    
+
     echo -e "Enter Email:"
     read -p ">> " EMAIL
-    
+
     echo -e "${BLUE}Stopping web services...${NC}"
     systemctl stop nginx 2>/dev/null
     systemctl stop apache2 2>/dev/null
@@ -300,7 +309,7 @@ generate_ssl() {
     else
         echo -e "${RED}✘ Failed.${NC}"
     fi
-    
+
     systemctl start nginx 2>/dev/null
     read -p "Press Enter..."
 }
@@ -309,6 +318,26 @@ list_certs() {
     echo -e "${CYAN}--- Active Certificates ---${NC}"
     ls -1 /etc/letsencrypt/live 2>/dev/null || echo "No certs found."
     read -p "Press Enter..."
+}
+
+ssl_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}===========================================${NC}"
+        echo -e "${YELLOW}      SSL MANAGEMENT                       ${NC}"
+        echo -e "${BLUE}===========================================${NC}"
+        echo "1) Generate New SSL"
+        echo "2) List Active SSLs"
+        echo "3) Back"
+        echo -e "${BLUE}===========================================${NC}"
+        read -p "Select: " S_OPT
+        case $S_OPT in
+            1) generate_ssl ;;
+            2) list_certs ;;
+            3) return ;;
+            *) ;;
+        esac
+    done
 }
 
 # ==========================================
@@ -321,10 +350,10 @@ set_panel_domain() {
     ls "$DEFAULT_SSL_PATH" 2>/dev/null
     echo ""
     read -p "Enter Domain Name: " DOM
-    
+
     CERT="$DEFAULT_SSL_PATH/$DOM/fullchain.pem"
     KEY="$DEFAULT_SSL_PATH/$DOM/privkey.pem"
-    
+
     if [ -f "$CERT" ]; then
         if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
         # Upsert
@@ -363,26 +392,6 @@ panel_menu() {
             2) restart_panel; read -p "Press Enter..." ;;
             3) nano "$ENV_FILE" ;;
             4) return ;;
-            *) ;;
-        esac
-    done
-}
-
-ssl_menu() {
-    while true; do
-        clear
-        echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}      SSL MANAGEMENT                       ${NC}"
-        echo -e "${BLUE}===========================================${NC}"
-        echo "1) Generate New SSL"
-        echo "2) List Active SSLs"
-        echo "3) Back"
-        echo -e "${BLUE}===========================================${NC}"
-        read -p "Select: " S_OPT
-        case $S_OPT in
-            1) generate_ssl ;;
-            2) list_certs ;;
-            3) return ;;
             *) ;;
         esac
     done
