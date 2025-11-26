@@ -23,49 +23,76 @@
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 60px 20px 20px; transition: 0.3s; }
+        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 80px 20px 20px; transition: 0.3s; } /* Added top padding for new header */
         
         /* Background Orbs */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
         .o2 { bottom: -150px; left: -100px; background: var(--g2); }
 
-        /* Ticker */
-        .ticker { position: fixed; top: 0; left: 0; width: 100%; height: 40px; background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); display: flex; align-items: center; overflow: hidden; z-index: 100; }
-        .ticker span { white-space: nowrap; animation: s 20s linear infinite; color: #fbbf24; font-size: 13px; font-weight: 700; }
-        @keyframes s { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        /* === NEW NEWS TICKER STYLE === */
+        .ticker-wrap {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: 55px; /* Taller */
+            background: rgba(15, 15, 20, 0.85); /* Dark Glass */
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex; align-items: center;
+            z-index: 1000;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        :root.light .ticker-wrap { background: rgba(255, 255, 255, 0.9); border-bottom: 1px solid rgba(0,0,0,0.05); }
+
+        /* Fixed Icon Box */
+        .ticker-icon {
+            width: 55px; height: 100%;
+            background: linear-gradient(135deg, #f59e0b, #d97706); /* Amber Gradient */
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; color: white;
+            box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3);
+            z-index: 2;
+        }
+        
+        /* Scrolling Area */
+        .ticker-content {
+            flex: 1;
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
+            height: 100%;
+            display: flex; align-items: center;
+        }
+        
+        .ticker-content span {
+            display: inline-block;
+            font-size: 15px; font-weight: 700;
+            color: #fbbf24; /* Golden Text */
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+            padding-left: 100%; /* Start from far right */
+            animation: scroll-left 20s linear infinite;
+        }
+        :root.light .ticker-content span { color: #d97706; text-shadow: none; }
+
+        @keyframes scroll-left {
+            0% { transform: translate3d(100%, 0, 0); } /* Start off-screen right */
+            100% { transform: translate3d(-150%, 0, 0); } /* End off-screen left */
+        }
 
         .con { max-width: 800px; margin: 0 auto; }
         
         /* HEADER */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand-box { display: flex; flex-direction: column; gap: 8px; } /* Increased gap */
+        .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
-        /* "Dashboard" Title */
         .brand {
-            font-size: 28px; font-weight: 800;
+            font-size: 26px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         :root.light .brand { background: linear-gradient(135deg, #333 0%, #666 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-        /* BOT LINK - BIGGER NOW */
-        .bot-link { 
-            display: inline-flex; align-items: center; 
-            font-size: 14px; /* Bigger font */
-            font-weight: 700; 
-            color: white; text-decoration: none; 
-            background: rgba(255, 255, 255, 0.1); 
-            backdrop-filter: blur(12px); 
-            padding: 10px 20px; /* Bigger padding */
-            border-radius: 16px; /* More rounded */
-            border: 1px solid rgba(255, 255, 255, 0.15); 
-            transition: 0.3s; 
-            width: fit-content;
-        }
-        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
-        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); }
-        :root.light .bot-link:hover { background: rgba(0,0,0,0.1); }
+        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 12px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); transition: 0.3s; }
+        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.1); }
 
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
 
@@ -74,8 +101,12 @@
 
         /* === PROFILE SECTION === */
         .prof-container { 
-            display: flex; justify-content: flex-start; align-items: center; 
-            margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); 
+            display: flex; 
+            justify-content: flex-start; 
+            align-items: center; 
+            margin-bottom: 15px; 
+            padding-bottom: 15px; 
+            border-bottom: 1px solid var(--brd); 
         }
         .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
         
@@ -93,7 +124,12 @@
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
         /* === BIG DUAL RING CHART === */
-        .chart-box { position: relative; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; margin: 10px auto 25px auto; }
+        .chart-box { 
+            position: relative; 
+            width: 130px; height: 130px; 
+            display: flex; align-items: center; justify-content: center; 
+            margin: 10px auto 25px auto; 
+        }
         .ring-outer {
             position: absolute; inset: 0; border-radius: 50%;
             background: conic-gradient(var(--cData) var(--per), rgba(255,255,255,0.05) 0);
@@ -120,7 +156,9 @@
             background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
             opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
         }
-        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
+        :root.light .btn::before { 
+            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; 
+        }
 
         /* DIRECT CONNECT (Green Lamp) */
         .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
@@ -138,7 +176,7 @@
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* === STATS === */
+        /* === STATS & DOWNLOADS === */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
@@ -148,8 +186,10 @@
         .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
-        /* === AURORA BRAND (Bottom Left) === */
-        .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
+        /* === AURORA BRAND === */
+        .big-brand-box {
+            position: relative; margin-top: 35px; text-align: center; padding: 10px 0;
+        }
         .big-brand {
             font-size: 50px; font-weight: 900; letter-spacing: -1px;
             background: linear-gradient(45deg, #38bdf8, #818cf8, #34d399, #fbbf24);
@@ -159,7 +199,6 @@
             z-index: 2; position: relative;
         }
         @keyframes aurora { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
-        /* Reflection */
         .big-brand::after {
             content: attr(data-text);
             position: absolute; top: 80%; left: 0; right: 0;
@@ -184,7 +223,15 @@
 </head>
 <body>
     <div class="orb o1"></div> <div class="orb o2"></div>
-    <div class="ticker"><span id="nT">__NEWS__</span></div>
+    
+    <!-- NEW NEWS TICKER -->
+    <div class="ticker-wrap">
+        <div class="ticker-icon">📢</div>
+        <div class="ticker-content">
+            <span id="nT">__NEWS__</span>
+        </div>
+    </div>
+
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
@@ -243,7 +290,6 @@
                         </div>
                     </div>
 
-                    <!-- THE AURORA BRAND (Script updates this ID) -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
