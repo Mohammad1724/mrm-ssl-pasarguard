@@ -23,76 +23,51 @@
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 80px 20px 20px; transition: 0.3s; } /* Added top padding for new header */
+        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--txt); min-height: 100vh; padding: 80px 20px 20px; transition: 0.3s; }
         
         /* Background Orbs */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
         .o2 { bottom: -150px; left: -100px; background: var(--g2); }
 
-        /* === NEW NEWS TICKER STYLE === */
+        /* Ticker */
         .ticker-wrap {
-            position: fixed; top: 0; left: 0; right: 0;
-            height: 55px; /* Taller */
-            background: rgba(15, 15, 20, 0.85); /* Dark Glass */
-            backdrop-filter: blur(15px);
+            position: fixed; top: 0; left: 0; right: 0; height: 55px;
+            background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(15px);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            display: flex; align-items: center;
-            z-index: 1000;
+            display: flex; align-items: center; z-index: 1000;
             box-shadow: 0 5px 20px rgba(0,0,0,0.3);
         }
         :root.light .ticker-wrap { background: rgba(255, 255, 255, 0.9); border-bottom: 1px solid rgba(0,0,0,0.05); }
-
-        /* Fixed Icon Box */
         .ticker-icon {
-            width: 55px; height: 100%;
-            background: linear-gradient(135deg, #f59e0b, #d97706); /* Amber Gradient */
+            width: 55px; height: 100%; background: linear-gradient(135deg, #f59e0b, #d97706);
             display: flex; align-items: center; justify-content: center;
-            font-size: 24px; color: white;
-            box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3);
-            z-index: 2;
+            font-size: 24px; color: white; box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3); z-index: 2;
         }
-        
-        /* Scrolling Area */
-        .ticker-content {
-            flex: 1;
-            overflow: hidden;
-            white-space: nowrap;
-            position: relative;
-            height: 100%;
-            display: flex; align-items: center;
-        }
-        
+        .ticker-content { flex: 1; overflow: hidden; white-space: nowrap; position: relative; height: 100%; display: flex; align-items: center; }
         .ticker-content span {
-            display: inline-block;
-            font-size: 15px; font-weight: 700;
-            color: #fbbf24; /* Golden Text */
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
-            padding-left: 100%; /* Start from far right */
+            display: inline-block; font-size: 15px; font-weight: 700; color: #fbbf24;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); padding-left: 100%;
             animation: scroll-left 20s linear infinite;
         }
         :root.light .ticker-content span { color: #d97706; text-shadow: none; }
-
-        @keyframes scroll-left {
-            0% { transform: translate3d(100%, 0, 0); } /* Start off-screen right */
-            100% { transform: translate3d(-150%, 0, 0); } /* End off-screen left */
-        }
+        @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
 
         .con { max-width: 800px; margin: 0 auto; }
         
         /* HEADER */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand-box { display: flex; flex-direction: column; gap: 5px; }
-        
+        .brand-box { display: flex; flex-direction: column; gap: 8px; }
         .brand {
-            font-size: 26px; font-weight: 800;
+            font-size: 28px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
         :root.light .brand { background: linear-gradient(135deg, #333 0%, #666 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
-        .bot-link { display: inline-flex; align-items: center; margin-top: 5px; font-size: 12px; font-weight: 600; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 6px 12px; border-radius: 50px; border: 1px solid rgba(255, 255, 255, 0.1); transition: 0.3s; }
-        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.1); }
+        .bot-link { display: inline-flex; align-items: center; font-size: 14px; font-weight: 700; color: white; text-decoration: none; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(12px); padding: 10px 20px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.15); transition: 0.3s; width: fit-content; }
+        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
+        :root.light .bot-link { color: #333; border-color: rgba(0,0,0,0.15); background: rgba(0,0,0,0.05); }
 
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
 
@@ -100,80 +75,73 @@
         .grid { display: grid; gap: 30px; } @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
         /* === PROFILE SECTION === */
-        .prof-container { 
-            display: flex; 
-            justify-content: flex-start; 
-            align-items: center; 
-            margin-bottom: 15px; 
-            padding-bottom: 15px; 
-            border-bottom: 1px solid var(--brd); 
-        }
+        .prof-container { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); }
         .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
-        
-        .av { 
-            width: 60px; height: 60px; border-radius: 50%; 
-            background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%);
-            color: #92400e; display: flex; align-items: center; justify-content: center; 
-            font-size: 26px; position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); 
-        }
+        .av { width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; display: flex; align-items: center; justify-content: center; font-size: 26px; position: relative; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
         .dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
         .nm { font-size: 18px; font-weight: 700; }
         .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; } .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* === BIG DUAL RING CHART === */
-        .chart-box { 
-            position: relative; 
-            width: 130px; height: 130px; 
-            display: flex; align-items: center; justify-content: center; 
-            margin: 10px auto 25px auto; 
+        /* === CHART CONTAINER WITH LEGEND === */
+        .chart-wrapper {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--brd);
+            border-radius: 20px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
+        :root.light .chart-wrapper { background: rgba(0,0,0,0.02); }
+
+        .chart-box { position: relative; width: 130px; height: 130px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px; }
+        
         .ring-outer {
             position: absolute; inset: 0; border-radius: 50%;
-            background: conic-gradient(var(--cData) var(--per), rgba(255,255,255,0.05) 0);
+            /* Default track color added for better visibility */
+            background: conic-gradient(var(--cData) var(--per), rgba(255,255,255,0.08) 0);
             mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             transition: background 1s;
         }
+        :root.light .ring-outer { background: conic-gradient(var(--cData) var(--per), rgba(0,0,0,0.08) 0); }
+
         .ring-inner {
-            position: absolute; inset: 15px; border-radius: 50%; 
-            background: conic-gradient(var(--cTime) var(--tper), rgba(255,255,255,0.02) 0);
+            position: absolute; inset: 15px; border-radius: 50%;
+            background: conic-gradient(var(--cTime) var(--tper), rgba(255,255,255,0.05) 0);
             mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             transition: background 1s;
         }
-        .chart-val { z-index: 2; font-size: 24px; font-weight: 900; color: var(--txt); text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        :root.light .ring-inner { background: conic-gradient(var(--cTime) var(--tper), rgba(0,0,0,0.05) 0); }
+
+        .chart-val { z-index: 2; font-size: 26px; font-weight: 900; color: var(--txt); text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        :root.light .chart-val { text-shadow: none; }
+
+        /* LEGEND */
+        .chart-legend { width: 100%; display: flex; justify-content: space-between; font-size: 12px; color: var(--mute); }
+        .legend-item { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); padding: 6px 12px; border-radius: 10px; width: 48%; }
+        :root.light .legend-item { background: rgba(0,0,0,0.04); }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .legend-text b { color: var(--txt); display: block; font-size: 13px; }
 
         /* === BUTTONS === */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); color: var(--txt); transition: 0.3s; }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
-        
-        /* ORANGE LAMP (Default) */
-        .btn::before { 
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
-            opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
-        }
-        :root.light .btn::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; 
-        }
+        .btn::before { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%); opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s; }
+        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
 
-        /* DIRECT CONNECT (Green Lamp) */
         .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
-        .btn-p::before { 
-            background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; 
-        }
+        .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; }
         :root.light .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
         :root.light .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; }
 
         .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); }
         :root.light .btn-s { background: rgba(0,0,0,0.03); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
-
         .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; border: 1px solid rgba(255,255,255,0.2); } 
         :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
-
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         /* === STATS & DOWNLOADS === */
@@ -187,26 +155,19 @@
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
         /* === AURORA BRAND === */
-        .big-brand-box {
-            position: relative; margin-top: 35px; text-align: center; padding: 10px 0;
-        }
+        .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
         .big-brand {
             font-size: 50px; font-weight: 900; letter-spacing: -1px;
             background: linear-gradient(45deg, #38bdf8, #818cf8, #34d399, #fbbf24);
             background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            animation: aurora 6s ease infinite;
-            filter: drop-shadow(0 0 15px rgba(56, 189, 248, 0.4));
-            z-index: 2; position: relative;
+            animation: aurora 6s ease infinite; filter: drop-shadow(0 0 15px rgba(56, 189, 248, 0.4)); z-index: 2; position: relative;
         }
         @keyframes aurora { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
         .big-brand::after {
-            content: attr(data-text);
-            position: absolute; top: 80%; left: 0; right: 0;
+            content: attr(data-text); position: absolute; top: 80%; left: 0; right: 0;
             background: inherit; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             transform: scaleY(-0.4); opacity: 0.3; filter: blur(4px);
-            mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1));
-            -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1));
-            pointer-events: none;
+            mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1)); -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,1)); pointer-events: none;
         }
         :root.light .big-brand { background: linear-gradient(45deg, #0284c7, #7c3aed, #059669, #d97706); background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px rgba(0,0,0,0.1)); }
 
@@ -223,15 +184,7 @@
 </head>
 <body>
     <div class="orb o1"></div> <div class="orb o2"></div>
-    
-    <!-- NEW NEWS TICKER -->
-    <div class="ticker-wrap">
-        <div class="ticker-icon">📢</div>
-        <div class="ticker-content">
-            <span id="nT">__NEWS__</span>
-        </div>
-    </div>
-
+    <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
@@ -258,10 +211,24 @@
                         </div>
                     </div>
 
-                    <div class="chart-box">
-                        <div class="ring-outer" id="rOut"></div>
-                        <div class="ring-inner" id="rIn"></div>
-                        <div class="chart-val" id="chTxt">0%</div>
+                    <!-- SMART CHART WRAPPER -->
+                    <div class="chart-wrapper">
+                        <div class="chart-box">
+                            <div class="ring-outer" id="rOut"></div>
+                            <div class="ring-inner" id="rIn"></div>
+                            <div class="chart-val" id="chTxt">0%</div>
+                        </div>
+                        <!-- LEGEND (GUIDE) -->
+                        <div class="chart-legend">
+                            <div class="legend-item">
+                                <div class="legend-dot" id="ldData" style="background:#3b82f6"></div>
+                                <div class="legend-text">حجم <b id="lgData">...</b></div>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-dot" id="ldTime" style="background:#10b981"></div>
+                                <div class="legend-text">زمان <b id="lgTime">...</b></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="btn-grid">
@@ -335,8 +302,7 @@
         var per = tot > 0 ? Math.min((use/tot)*100, 100) : 0;
         
         // DUAL CHART LOGIC
-        var tPer = 0; // Time Percentage
-        var expDate = null;
+        var tPer = 0; var expDate = null; var daysLeft = 'نامحدود';
         if(expStr && expStr !== 'None' && expStr !== 'null') {
             try {
                 expDate = new Date(expStr);
@@ -344,9 +310,9 @@
                     var now = new Date();
                     var diff = expDate - now;
                     var days = diff / (1000 * 60 * 60 * 24);
-                    if (days > 30) tPer = 100;
-                    else if (days <= 0) tPer = 0;
-                    else tPer = (days / 30) * 100;
+                    if (days > 30) tPer = 100; else if (days <= 0) tPer = 0; else tPer = (days / 30) * 100;
+                    daysLeft = Math.ceil(days) + ' روز';
+                    if(days < 0) daysLeft = 'منقضی';
                 }
             } catch(e) {}
         } else { tPer = 100; }
@@ -358,12 +324,18 @@
         // Apply Gradients
         var rOut = document.getElementById('rOut');
         var rIn = document.getElementById('rIn');
-        rOut.style.background = 'conic-gradient('+cData+' '+per+'%, rgba(255,255,255,0.05) 0)';
-        rIn.style.background = 'conic-gradient('+cTime+' '+tPer+'%, rgba(255,255,255,0.02) 0)';
+        rOut.style.background = 'conic-gradient('+cData+' '+per+'%, rgba(255,255,255,0.08) 0)';
+        rIn.style.background = 'conic-gradient('+cTime+' '+tPer+'%, rgba(255,255,255,0.05) 0)';
         rOut.style.setProperty('--cData', cData); rOut.style.setProperty('--per', per+'%');
         rIn.style.setProperty('--cTime', cTime); rIn.style.setProperty('--tper', tPer+'%');
         
         document.getElementById('chTxt').innerText = Math.round(per)+'%';
+        
+        // Update Legend
+        document.getElementById('ldData').style.background = cData;
+        document.getElementById('lgData').innerText = Math.round(per)+'%';
+        document.getElementById('ldTime').style.background = cTime;
+        document.getElementById('lgTime').innerText = daysLeft;
 
         function fb(b) { 
             if(tot===0) return 'نامحدود'; if(b<=0) return '0 B'; 
