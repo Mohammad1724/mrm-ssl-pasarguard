@@ -46,21 +46,17 @@
             font-size: 44px; 
             font-weight: 900; 
             letter-spacing: -1.5px;
-            /* Modern Gradient: White -> Sky Blue -> Hint of Gold */
             background: linear-gradient(135deg, #ffffff 0%, #e0f2fe 40%, #38bdf8 70%, #fbbf24 100%);
             background-size: 200% auto;
             -webkit-background-clip: text; 
             -webkit-text-fill-color: transparent;
-            /* Soft diffuse glow instead of hard shadow */
             filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.3));
-            /* No skew, upright and clean */
             transform: none; 
             animation: shine 5s linear infinite;
         }
         @keyframes shine { to { background-position: 200% center; } }
 
         :root.light .brand {
-            /* Darker gradient for light mode */
             background: linear-gradient(135deg, #1e293b 0%, #0ea5e9 60%, #d97706 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.2));
@@ -101,19 +97,22 @@
         :root.light .btn::before { background: radial-gradient(ellipse, rgba(255, 100, 0, 0.8), transparent 70%); opacity: 0.7; filter: blur(6px); }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(0,0,0,0.35); }
         
-        /* === SUPER FAINT PRIMARY BUTTON === */
+        /* === PRIMARY BUTTON (DIRECT CONNECT) === */
         .btn-p { 
-            /* 5% Opacity Blue - Very Transparent */
+            /* Dark Mode: Very transparent (5%) - User likes this */
             background: rgba(56, 189, 248, 0.05); 
-            color: #38bdf8; /* Bright Blue Text to be readable */
-            border: 1px solid rgba(56, 189, 248, 0.1); /* Very faint border */
+            color: #38bdf8; 
+            border: 1px solid rgba(56, 189, 248, 0.1); 
         }
-        .btn-p:hover {
-            background: rgba(56, 189, 248, 0.1); /* Slightly more visible on hover */
-        }
-        .btn-p::before { display: none; /* Remove orange glow completely from this button to keep it clean blue */ }
+        .btn-p:hover { background: rgba(56, 189, 248, 0.1); }
+        .btn-p::before { display: none; } /* No Orange Glow */
         
-        :root.light .btn-p { background: rgba(14, 165, 233, 0.08); color: #0284c7; border-color: rgba(14, 165, 233, 0.2); }
+        /* Light Mode: Increased visibility (12%) per request */
+        :root.light .btn-p { 
+            background: rgba(14, 165, 233, 0.12); 
+            color: #0284c7; 
+            border-color: rgba(14, 165, 233, 0.25); 
+        }
 
         .btn-s { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); color: var(--txt); }
         .btn-dark { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1); color: var(--txt); font-size: 13px; }
