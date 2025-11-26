@@ -243,21 +243,12 @@
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
         .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
-        .db {
-            display: flex; flex-direction: column; align-items: center; gap: 3px;
-            padding: 8px 4px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            text-decoration: none; color: var(--txt);
-            font-size: 10px; border: 1px solid var(--brd);
-            transition: 0.2s; cursor: pointer; /* Clickable */
-        }
-        .db span { font-size: 14px; }
-        :root.light .db { background: rgba(0,0,0,0.03); }
+        .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(255,255,255,0.05); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
+        .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
         .db:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
 
-        /* NEON BREATHING BRAND (Bottom Left) */
+        /* NEON BREATHING BRAND */
         .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
         .big-brand {
             font-size: 54px; font-weight: 900; letter-spacing: -1.5px;
@@ -296,17 +287,8 @@
     </style>
 </head>
 <body>
-    <div class="orb o1"></div>
-    <div class="orb o2"></div>
-
-    <!-- NEWS TICKER -->
-    <div class="ticker-wrap">
-        <div class="ticker-icon">📢</div>
-        <div class="ticker-content">
-            <span id="nT">__NEWS__</span>
-        </div>
-    </div>
-
+    <div class="orb o1"></div> <div class="orb o2"></div>
+    <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
@@ -403,7 +385,7 @@
                             </div>
                         </div>
                         
-                        <!-- DOWNLOAD BUTTONS (Triggers) -->
+                        <!-- DOWNLOAD BUTTONS -->
                         <div class="dls">
                             <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
                             <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
@@ -431,7 +413,7 @@
                 <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span>🦋</span></div>
                 <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span>🌐</span></div>
                 <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span>🍏</span></div>
-            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('appMod')">بستن</button>
+            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
@@ -444,7 +426,7 @@
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>🦋</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>🛡️</span></a>
                 <a href="https://github.com/Happ-Proxy/Happ/releases" target="_blank" class="app-btn"><span>Happ</span><span>🌐</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-and')">بستن</button>
+            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
 
@@ -457,7 +439,7 @@
                 <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>🏴</span></a>
                 <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="app-btn"><span>FoXray</span><span>🦊</span></a>
                 <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="app-btn"><span>Shadowrocket ($)</span><span>🚀</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-ios')">بستن</button>
+            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-ios')">بستن</button>
         </div>
     </div>
 
@@ -469,13 +451,16 @@
                 <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-btn"><span>v2rayN</span><span>💻</span></a>
                 <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-btn"><span>Hiddify Desktop</span><span>🦋</span></a>
                 <a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" class="app-btn"><span>NekoRay</span><span>🐱</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('dl-win')">بستن</button>
+            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-win')">بستن</button>
         </div>
     </div>
 
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:10px;display:inline-block"><img id="qi" src="" width="180"></div><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('qrm')">بستن</button></div></div>
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cfm')">بستن</button></div></div>
-    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white" onclick="cm('cpm')">بستن</button></div></div>
+    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:10px;display:inline-block"><img id="qi" src="" width="180"></div><br><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('qrm')">بستن</button></div></div>
+    
+    <!-- Config Modal (Improved Copy Buttons) -->
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('cfm')">بستن</button></div></div>
+    
+    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('cpm')">بستن</button></div></div>
 
     <script>
         var subUrl = '{{ subscription_url }}';
@@ -668,7 +653,7 @@
                                 l.innerHTML +=
                                     '<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
                                     '<span>' + n + '</span>' +
-                                    '<button class="btn btn-s" style="width:auto;height:24px;padding:0 10px;font-size:11px" onclick="hc(\'' +
+                                    '<button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px;background:rgba(0,0,0,0.3)" onclick="hc(\'' +
                                     z + '\')">کپی</button></div>';
                             }
                         });
