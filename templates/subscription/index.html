@@ -41,7 +41,6 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 5px; }
         
-        /* Small Header Brand */
         .brand {
             font-size: 26px; font-weight: 800;
             background: linear-gradient(135deg, #fff 0%, #ccc 100%);
@@ -60,7 +59,7 @@
         /* === PROFILE SECTION === */
         .prof-container { 
             display: flex; 
-            justify-content: flex-start; /* Align left */
+            justify-content: flex-start; 
             align-items: center; 
             margin-bottom: 15px; 
             padding-bottom: 15px; 
@@ -84,9 +83,9 @@
         /* === BIG DUAL RING CHART === */
         .chart-box { 
             position: relative; 
-            width: 130px; height: 130px; /* BIG SIZE */
+            width: 130px; height: 130px; 
             display: flex; align-items: center; justify-content: center; 
-            margin: 10px auto 25px auto; /* Center it with spacing */
+            margin: 10px auto 25px auto; 
         }
         .ring-outer {
             position: absolute; inset: 0; border-radius: 50%;
@@ -96,7 +95,7 @@
             transition: background 1s;
         }
         .ring-inner {
-            position: absolute; inset: 15px; border-radius: 50%; /* Adjusted for size */
+            position: absolute; inset: 15px; border-radius: 50%; 
             background: conic-gradient(var(--cTime) var(--tper), rgba(255,255,255,0.02) 0);
             mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
             -webkit-mask: radial-gradient(farthest-side, transparent 78%, #000 80%);
@@ -110,7 +109,6 @@
         
         /* DIRECT CONNECT BUTTON */
         .btn-p { 
-            /* Dark Mode: Very transparent */
             background: rgba(56, 189, 248, 0.05); 
             color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); 
         }
@@ -131,8 +129,20 @@
             opacity: 0.6; filter: blur(8px);
         }
 
-        .btn-s { background: rgba(255,255,255,0.05); }
-        .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; } :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; }
+        /* SECONDARY BUTTONS (Copy, QR, Configs) - FIXED BORDERS */
+        .btn-s { 
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid rgba(255, 255, 255, 0.25); /* Visible border in Dark Mode */
+        }
+        :root.light .btn-s {
+            background: rgba(0,0,0,0.03);
+            border: 1px solid rgba(0, 0, 0, 0.15); /* Visible border in Light Mode */
+            color: #333;
+        }
+
+        /* Support Button */
+        .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; border: 1px solid rgba(255,255,255,0.2); } 
+        :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
@@ -146,7 +156,7 @@
         .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
 
-        /* === BIG TRANSPARENT BRAND (BOTTOM RIGHT) === */
+        /* === BIG TRANSPARENT BRAND === */
         .big-brand-box {
             margin-top: 25px;
             text-align: center;
@@ -208,14 +218,14 @@
                         </div>
                     </div>
 
-                    <!-- BIG DUAL CHART (Centered Below Profile) -->
+                    <!-- BIG DUAL CHART -->
                     <div class="chart-box">
                         <div class="ring-outer" id="rOut"></div>
                         <div class="ring-inner" id="rIn"></div>
                         <div class="chart-val" id="chTxt">0%</div>
                     </div>
 
-                    <!-- BUTTONS (Pushed Down) -->
+                    <!-- BUTTONS -->
                     <div class="btn-grid">
                         <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
@@ -242,7 +252,7 @@
                         </div>
                     </div>
 
-                    <!-- BIG GLASSY BRAND (Bottom Right) -->
+                    <!-- BIG GLASSY BRAND -->
                     <div class="big-brand-box">
                         <div class="big-brand">__BRAND__</div>
                     </div>
