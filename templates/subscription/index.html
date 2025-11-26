@@ -95,20 +95,36 @@
         
         /* === PRIMARY BUTTON (DIRECT CONNECT) === */
         .btn-p { 
-            /* DARK MODE: 5% Opacity (Keep as is) */
+            /* Dark Mode: Very transparent */
             background: rgba(56, 189, 248, 0.05); 
             color: #38bdf8; 
             border: 1px solid rgba(56, 189, 248, 0.1); 
         }
-        .btn-p::before { display: none; } 
         
-        /* LIGHT MODE: SOLID GRADIENT (To ensure visibility) */
-        :root.light .btn-p { 
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); /* Solid Ice Blue */
-            color: #0369a1; /* Dark Blue Text */
-            border: 1px solid #7dd3fc; /* Visible Border */
-            box-shadow: 0 4px 10px rgba(14, 165, 233, 0.2); /* Soft Blue Shadow */
+        /* *** NEW GREEN LAMP EFFECT *** */
+        .btn-p::before { 
+            display: block;
+            /* Electric Green Gradient */
+            background: radial-gradient(ellipse, rgba(74, 222, 128, 0.7), transparent 70%);
+            opacity: 0.3; /* Subtle in dark mode */
+            filter: blur(10px);
         }
+
+        /* Light Mode Styles */
+        :root.light .btn-p { 
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0369a1; 
+            border: 1px solid #7dd3fc; 
+            box-shadow: 0 4px 10px rgba(14, 165, 233, 0.2); 
+        }
+        
+        /* Stronger Green Glow in Light Mode */
+        :root.light .btn-p::before {
+            background: radial-gradient(ellipse, rgba(34, 197, 94, 0.8), transparent 70%); /* Vivid Green */
+            opacity: 0.5;
+            filter: blur(8px);
+        }
+
         :root.light .btn-p:hover { 
             background: linear-gradient(135deg, #bae6fd 0%, #7dd3fc 100%);
             box-shadow: 0 6px 15px rgba(14, 165, 233, 0.3);
