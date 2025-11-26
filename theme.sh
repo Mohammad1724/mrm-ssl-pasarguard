@@ -32,7 +32,7 @@ fetch_defaults() {
     DEF_BOT=$(get_current_val 'class="bot-link"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
     
     # 3. Support ID (FIXED: Search for class attribute specifically)
-    DEF_SUP=$(get_current_val 'class="btn btn-dark"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
+    DEF_SUP=$(get_current_val 'class="btn-dark"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
     
     # 4. News Text
     DEF_NEWS=$(get_current_val 'class="ticker"' 's/.*<span.*>([^<]+)<\/span>.*/\1/')
