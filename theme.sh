@@ -1,14 +1,11 @@
 #!/bin/bash
 
 # ==========================================
-# THEME INSTALLER (Compatible with New UI)
+# THEME INSTALLER (Python-Based Replacement - UTF8 Safe)
 # ==========================================
 
 # 1. تنظیمات
-# لینک فایل HTML خود را اینجا بگذارید
 TEMPLATE_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
-
-# مسیرها
 TEMPLATE_DIR="/var/lib/pasarguard/templates/subscription"
 TEMPLATE_FILE="$TEMPLATE_DIR/index.html"
 ENV_FILE="/opt/pasarguard/.env"
@@ -23,43 +20,43 @@ NC='\033[0m'
 
 if [ "$EUID" -ne 0 ]; then echo -e "${RED}Error: Please run as root.${NC}"; exit 1; fi
 
-# --- توابع استخراج اطلاعات از HTML فعلی ---
-get_current_val() {
-    local match_str=$1
-    local sed_pattern=$2
-    if [ -f "$TEMPLATE_FILE" ]; then
-        grep "$match_str" "$TEMPLATE_FILE" | head -n1 | sed -E "$sed_pattern"
-    fi
+# --- تابع استخراج امن با پایتون (برای جلوگیری از خطای sed) ---
+get_val_py() {
+    python3 -c "
+import re
+try:
+    with open('$TEMPLATE_FILE', 'r', encoding='utf-8', errors='ignore') as f:
+        c = f.read()
+    m = re.search(r'$1', c)
+    print(m.group(1) if m else '')
+except: pass
+"
 }
 
 fetch_defaults() {
     echo -e "${BLUE}Reading current configuration...${NC}"
     
-    # 1. Brand Name: <div class="big-brand" id="brandTxt" data-text="NAME">NAME</div>
-    DEF_BRAND=$(get_current_val 'id="brandTxt"' 's/.*id="brandTxt"[^>]*>([^<]+)<.*/\1/')
-    
-    # 2. Bot Username: <a href="https://t.me/BOT" class="bot-link">
-    DEF_BOT=$(get_current_val 'class="bot-link"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
-    
-    # 3. Support ID: <a href="https://t.me/SUP" class="btn btn-dark" ...>
-    DEF_SUP=$(get_current_val 'class="btn btn-dark"' 's/.*href="https:\/\/t\.me\/([^"]+)".*/\1/')
-    
-    # 4. News Text: <span id="nT">NEWS</span>
-    DEF_NEWS=$(get_current_val 'id="nT"' 's/.*id="nT">([^<]+)<.*/\1/')
+    if [ -f "$TEMPLATE_FILE" ]; then
+        # استفاده از Regex پایتون برای خواندن مقادیر قبلی
+        DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*data-text="([^"]+)"')
+        if [ -z "$DEF_BRAND" ]; then DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*>([^<]+)<'); fi
+        
+        DEF_BOT=$(get_val_py 'class="bot-link".*href="https:\/\/t\.me\/([^"]+)"')
+        DEF_SUP=$(get_val_py 'class="btn btn-dark".*href="https:\/\/t\.me\/([^"]+)"')
+        DEF_NEWS=$(get_val_py 'id="nT">([^<]+)<')
+    fi
 
-    # پیش‌فرض‌ها اگر چیزی پیدا نشد
+    # Defaults
     [ -z "$DEF_BRAND" ] && DEF_BRAND="FarsNetVIP"
     [ -z "$DEF_BOT" ] && DEF_BOT="MyBot"
     [ -z "$DEF_SUP" ] && DEF_SUP="Support"
-    [ -z "$DEF_NEWS" ] && DEF_NEWS="خوش آمدید به پنل کاربری"
+    [ -z "$DEF_NEWS" ] && DEF_NEWS="خوش آمدید"
 }
 
-sed_escape() { printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'; }
-
 clear
-echo -e "${CYAN}=== FarsNetVIP Theme Installer ===${NC}"
+echo -e "${CYAN}=== FarsNetVIP Theme Installer (UTF-8 Safe) ===${NC}"
 
-# 2. خواندن مقادیر فعلی
+# 2. خواندن مقادیر
 fetch_defaults
 
 echo -e "Enter new values or press ${YELLOW}ENTER${NC} to keep current:"
@@ -75,12 +72,12 @@ read -p "News Text [$DEF_NEWS]: " IN_NEWS
 [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
 [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
 
-# لینک‌های ثابت دانلود
+# Links
 LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
 LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
 LNK_WIN="https://github.com/2dust/v2rayN/releases"
 
-# 3. دانلود تم جدید
+# 3. دانلود
 echo -e "\n${BLUE}Downloading template...${NC}"
 mkdir -p "$TEMPLATE_DIR"
 
@@ -91,34 +88,53 @@ else
     exit 1
 fi
 
-# 4. فیکس انکدینگ (جلوگیری از ارور UnicodeDecodeError)
-# نیاز به python3 دارد (در اکثر سیستم‌ها هست)
-python3 - << 'PYEOF'
-import io, sys
-f = sys.argv[1]
-data = open(f, 'rb').read()
-open(f, 'w', encoding='utf-8').write(data.decode('utf-8', 'ignore'))
-PYEOF
-"$TEMPLATE_FILE"
+# 4. جایگزینی امن با پایتون (Anti-Crash)
+echo -e "${BLUE}Applying configurations (Safe Mode)...${NC}"
 
-# 5. جایگزینی متغیرها
-echo -e "${BLUE}Applying configurations...${NC}"
-sed -i "s|__BRAND__|$(sed_escape "$IN_BRAND")|g" "$TEMPLATE_FILE"
-sed -i "s|__BOT__|$(sed_escape "$IN_BOT")|g" "$TEMPLATE_FILE"
-sed -i "s|__SUP__|$(sed_escape "$IN_SUP")|g" "$TEMPLATE_FILE"
-sed -i "s|__NEWS__|$(sed_escape "$IN_NEWS")|g" "$TEMPLATE_FILE"
-sed -i "s|__ANDROID__|$LNK_AND|g" "$TEMPLATE_FILE"
-sed -i "s|__IOS__|$LNK_IOS|g" "$TEMPLATE_FILE"
-sed -i "s|__WIN__|$LNK_WIN|g" "$TEMPLATE_FILE"
+export IN_BRAND IN_BOT IN_SUP IN_NEWS LNK_AND LNK_IOS LNK_WIN
+python3 - << 'EOF'
+import os
 
-# 6. تنظیم کانفیگ پنل
+file_path = "/var/lib/pasarguard/templates/subscription/index.html"
+brand = os.environ.get('IN_BRAND', 'FarsNetVIP')
+bot = os.environ.get('IN_BOT', 'MyBot')
+sup = os.environ.get('IN_SUP', 'Support')
+news = os.environ.get('IN_NEWS', 'Welcome')
+l_and = os.environ.get('LNK_AND', '#')
+l_ios = os.environ.get('LNK_IOS', '#')
+l_win = os.environ.get('LNK_WIN', '#')
+
+try:
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        content = f.read()
+
+    # جایگزینی‌ها
+    content = content.replace('__BRAND__', brand)
+    content = content.replace('__BOT__', bot)
+    content = content.replace('__SUP__', sup)
+    content = content.replace('__NEWS__', news)
+    content = content.replace('__ANDROID__', l_and)
+    content = content.replace('__IOS__', l_ios)
+    content = content.replace('__WIN__', l_win)
+
+    # ذخیره با فرمت صحیح UTF-8
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    print("Template updated successfully with UTF-8 encoding.")
+except Exception as e:
+    print(f"Error updating template: {e}")
+    exit(1)
+EOF
+
+# 5. کانفیگ پنل
 if [ ! -f "$ENV_FILE" ]; then touch "$ENV_FILE"; fi
 sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$ENV_FILE"
 sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$ENV_FILE"
 echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$ENV_FILE"
 echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$ENV_FILE"
 
-# 7. ریستارت پنل
+# 6. ریستارت
 echo -e "${BLUE}Restarting panel...${NC}"
 if command -v pasarguard &> /dev/null; then
     pasarguard restart
@@ -126,5 +142,4 @@ else
     systemctl restart pasarguard 2>/dev/null
 fi
 
-echo -e "${GREEN}✔ Theme Installed/Updated Successfully!${NC}"
-echo -e "Brand: $IN_BRAND | Bot: @$IN_BOT | Support: @$IN_SUP"
+echo -e "${GREEN}✔ Done! Your panel works with Persian text now.${NC}"
