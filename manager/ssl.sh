@@ -4,16 +4,8 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 _get_cert_action() {
-    local DOMAINS_ARRAY=("${@}") # Receive array of domains
-    local EMAIL=$1 # The first argument is actually email in the calling logic below, wait... 
-    # Correction: I will pass email separately or handle it differently.
-    # Let's redefine arguments: $1=EMAIL, $2...=DOMAINS
-}
-
-# Actual Action Function (Corrected)
-_run_certbot() {
     local EMAIL=$1
-    shift # Remove email from args, rest are domains
+    shift # Remove email, rest are domains
     local DOMAINS=("${@}")
     
     echo -e "${BLUE}Opening Port 80 temporarily...${NC}"
@@ -24,7 +16,7 @@ _run_certbot() {
     systemctl stop apache2 2>/dev/null
     fuser -k 80/tcp 2>/dev/null
 
-    # Build -d flags
+    # Build domain flags
     local DOM_FLAGS=""
     for D in "${DOMAINS[@]}"; do
         DOM_FLAGS="$DOM_FLAGS -d $D"
@@ -60,12 +52,15 @@ _process_panel() {
         
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         
-        echo -e "${BLUE}Updating Panel .env...${NC}"
+        echo -e "${BLUE}Cleaning up old config in .env...${NC}"
+        # Remove any existing lines (commented or not) for these variables
         sed -i '/UVICORN_SSL_CERTFILE/d' "$PANEL_ENV"
         sed -i '/UVICORN_SSL_KEYFILE/d' "$PANEL_ENV"
         
-        echo "UVICORN_SSL_CERTFILE=\"$C_FILE\"" >> "$PANEL_ENV"
-        echo "UVICORN_SSL_KEYFILE=\"$K_FILE\"" >> "$PANEL_ENV"
+        echo -e "${BLUE}Writing new SSL paths...${NC}"
+        # Add new lines in standard format
+        echo "UVICORN_SSL_CERTFILE = \"$C_FILE\"" >> "$PANEL_ENV"
+        echo "UVICORN_SSL_KEYFILE = \"$K_FILE\"" >> "$PANEL_ENV"
         
         restart_service "panel"
         echo -e "${GREEN}✔ Panel SSL Updated.${NC}"
@@ -92,6 +87,7 @@ _process_node() {
     local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
     
+    # Copy with Node naming convention
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"
     
@@ -99,12 +95,12 @@ _process_node() {
     local K_FILE="$TARGET_DIR/server.key"
     
     if [ -f "$NODE_ENV" ]; then
-        echo -e "${BLUE}Updating Node .env...${NC}"
+        echo -e "${BLUE}Cleaning up Node config...${NC}"
         sed -i '/SSL_CERT_FILE/d' "$NODE_ENV"
         sed -i '/SSL_KEY_FILE/d' "$NODE_ENV"
         
-        echo "SSL_CERT_FILE=\"$C_FILE\"" >> "$NODE_ENV"
-        echo "SSL_KEY_FILE=\"$K_FILE\"" >> "$NODE_ENV"
+        echo "SSL_CERT_FILE = \"$C_FILE\"" >> "$NODE_ENV"
+        echo "SSL_KEY_FILE = \"$K_FILE\"" >> "$NODE_ENV"
         
         restart_service "node"
         echo -e "${GREEN}✔ Node SSL Updated.${NC}"
@@ -122,6 +118,7 @@ _process_config() {
     mkdir -p "$TARGET_DIR"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"
+    
     chmod -R 755 "$PANEL_DEF_CERTS"
     
     echo -e "${GREEN}✔ Files Saved.${NC}"
@@ -149,7 +146,7 @@ ssl_wizard() {
             DOMAIN_LIST+=("$D_INPUT")
         else
             echo -e "${RED}Domain cannot be empty.${NC}"
-            i=$((i-1)) # retry
+            i=$((i-1))
         fi
     done
     
@@ -157,10 +154,9 @@ ssl_wizard() {
     
     read -p "Enter Email: " MAIL
     
-    # The first domain is the primary one for folder naming
     local PRIMARY_DOM=${DOMAIN_LIST[0]}
     
-    _run_certbot "$MAIL" "${DOMAIN_LIST[@]}"
+    _get_cert_action "$MAIL" "${DOMAIN_LIST[@]}"
     
     if [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
