@@ -4,8 +4,17 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 _get_cert_action() {
-    local DOMAINS=$1  # Can be multiple domains separated by space
-    local EMAIL=$2
+    local DOMAINS_ARRAY=("${@}") # Receive array of domains
+    local EMAIL=$1 # The first argument is actually email in the calling logic below, wait... 
+    # Correction: I will pass email separately or handle it differently.
+    # Let's redefine arguments: $1=EMAIL, $2...=DOMAINS
+}
+
+# Actual Action Function (Corrected)
+_run_certbot() {
+    local EMAIL=$1
+    shift # Remove email from args, rest are domains
+    local DOMAINS=("${@}")
     
     echo -e "${BLUE}Opening Port 80 temporarily...${NC}"
     ufw allow 80/tcp > /dev/null 2>&1
@@ -15,9 +24,9 @@ _get_cert_action() {
     systemctl stop apache2 2>/dev/null
     fuser -k 80/tcp 2>/dev/null
 
-    # Prepare domain flags (-d domain1 -d domain2 ...)
+    # Build -d flags
     local DOM_FLAGS=""
-    for D in $DOMAINS; do
+    for D in "${DOMAINS[@]}"; do
         DOM_FLAGS="$DOM_FLAGS -d $D"
     done
 
@@ -83,7 +92,6 @@ _process_node() {
     local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
     
-    # Copy with Node naming convention (server.crt/key)
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"
     
@@ -110,13 +118,10 @@ _process_config() {
     local PRIMARY_DOM=$1
     echo -e "\n${ORANGE}--- Config SSL (Inbounds) ---${NC}"
     
-    # Always save to Panel Certs folder structure so Xray can see it
     local TARGET_DIR="$PANEL_DEF_CERTS/$PRIMARY_DOM"
-    
     mkdir -p "$TARGET_DIR"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"
-    
     chmod -R 755 "$PANEL_DEF_CERTS"
     
     echo -e "${GREEN}✔ Files Saved.${NC}"
@@ -131,16 +136,31 @@ ssl_wizard() {
     echo -e "${YELLOW}         SSL GENERATION WIZARD               ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
-    echo -e "Enter Domain(s). Separate multiple domains with SPACE."
-    read -p "Domains: " DOMAINS
-    if [ -z "$DOMAINS" ]; then return; fi
+    read -p "How many domains? (e.g. 1, 2): " COUNT
+    if [[ ! "$COUNT" =~ ^[0-9]+$ ]] || [ "$COUNT" -lt 1 ]; then
+        echo -e "${RED}Invalid number.${NC}"
+        pause; return
+    fi
     
-    # Extract the first domain as the "Primary Name" for folders
-    local PRIMARY_DOM=$(echo $DOMAINS | awk '{print $1}')
+    declare -a DOMAIN_LIST
+    for (( i=1; i<=COUNT; i++ )); do
+        read -p "Enter Domain $i: " D_INPUT
+        if [ -n "$D_INPUT" ]; then
+            DOMAIN_LIST+=("$D_INPUT")
+        else
+            echo -e "${RED}Domain cannot be empty.${NC}"
+            i=$((i-1)) # retry
+        fi
+    done
+    
+    if [ ${#DOMAIN_LIST[@]} -eq 0 ]; then return; fi
     
     read -p "Enter Email: " MAIL
     
-    _get_cert_action "$DOMAINS" "$MAIL"
+    # The first domain is the primary one for folder naming
+    local PRIMARY_DOM=${DOMAIN_LIST[0]}
+    
+    _run_certbot "$MAIL" "${DOMAIN_LIST[@]}"
     
     if [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
@@ -205,10 +225,9 @@ show_detailed_paths() {
     pause
 }
 
-# --- VIEW FILE CONTENT (UPDATED WITH NUMBER SELECTION) ---
 view_cert_content() {
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       VIEW CERTIFICATE CONTENT              ${NC}"
+    echo -e "${YELLOW}       VIEW CERTIFICATE FILES                ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
     if [ ! -d "$PANEL_DEF_CERTS" ]; then
@@ -219,7 +238,6 @@ view_cert_content() {
 
     echo -e "${BLUE}Available Domains:${NC}"
     
-    # Store domains in an array
     local i=1
     declare -a domains
     for dir in "$PANEL_DEF_CERTS"/*; do
@@ -290,8 +308,8 @@ ssl_menu() {
         echo -e "${YELLOW}      SSL MANAGEMENT                       ${NC}"
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Request New SSL (Multi-Domain Wizard)"
-        echo "2) Show Exact File Paths"
-        echo "3) View Certificate Content (Interactive)"
+        echo "2) Show SSL File Paths"
+        echo "3) View Certificate Files"
         echo "4) Domain List (LetsEncrypt)"
         echo "5) Back"
         echo -e "${BLUE}===========================================${NC}"
