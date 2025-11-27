@@ -58,12 +58,12 @@ install_deps
 while true; do
     clear
     echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM MANAGER v5.6 (Final)              ${NC}"
+    echo -e "${YELLOW}     MRM MANAGER v1.0. (Final)              ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) SSL Certificates Menu"
     echo "2) Panel & Node Configuration"
     echo "3) Theme Manager"
-    echo -e "4) Update Center ${GREEN}(NEW)${NC}"
+    echo "4) Update Center"
     echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select: " OPTION
