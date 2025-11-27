@@ -4,7 +4,7 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 # ==========================================
-# 1. INSTALL / UPDATE 
+# 1. INSTALL / UPDATE
 # ==========================================
 install_theme_wizard() {
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
