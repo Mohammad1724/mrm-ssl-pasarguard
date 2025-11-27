@@ -1,15 +1,10 @@
 #!/bin/bash
 
-# Load Modules (Order matters)
+# Load Modules
 source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/node.sh
-
-install_theme_wrapper() {
-    echo -e "${BLUE}Downloading Theme Script...${NC}"
-    bash <(curl -s "$THEME_SCRIPT_URL")
-    pause
-}
+source /opt/mrm-manager/theme.sh  # <--- این خط اضافه شد
 
 # Main Loop
 check_root
@@ -18,7 +13,7 @@ install_deps
 while true; do
     clear
     echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM MANAGER v5.2 (Modular)            ${NC}"
+    echo -e "${YELLOW}     MRM MANAGER v5.3 (Full Menu)          ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) SSL Certificates Menu"
     echo "2) Theme Manager"
@@ -29,7 +24,7 @@ while true; do
 
     case $OPTION in
         1) ssl_menu ;;
-        2) install_theme_wrapper ;;
+        2) theme_menu ;;  # <--- قبلاً install_theme_wrapper بود، الان شد theme_menu
         3) settings_menu ;;
         4) exit 0 ;;
         *) ;;
