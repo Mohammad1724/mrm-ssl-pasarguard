@@ -45,11 +45,11 @@ install_deps
 while true; do
     clear
     echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM MANAGER v5.4 (Final)              ${NC}"
+    echo -e "${YELLOW}     MRM MANAGER v5.5 (Final)              ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) SSL Certificates Menu"
-    echo "2) Theme Manager"
-    echo "3) Settings & Node Connector"
+    echo "2) Settings & Node Connector"
+    echo "3) Theme Manager"
     echo -e "4) Update Center ${GREEN}(NEW)${NC}"
     echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
@@ -57,8 +57,8 @@ while true; do
 
     case $OPTION in
         1) ssl_menu ;;
-        2) theme_menu ;;
-        3) settings_menu ;;
+        2) settings_menu ;;
+        3) theme_menu ;;
         4) 
             echo -e "\n${CYAN}--- Update Center ---${NC}"
             echo "1) Update This Script (MRM Manager)"
