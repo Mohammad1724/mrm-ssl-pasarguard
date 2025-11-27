@@ -4,10 +4,9 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 # ==========================================
-# 1. INSTALL / UPDATE WIZARD (Smart Mode)
+# 1. INSTALL / UPDATE WIZARD (Smart Inputs)
 # ==========================================
 install_theme_wizard() {
-    # مسیر فایل در سرور
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
     
@@ -26,9 +25,9 @@ except: pass
         fi
     }
 
-    echo -e "${BLUE}Checking existing configuration...${NC}"
+    echo -e "${BLUE}Reading configuration...${NC}"
 
-    # استخراج اطلاعات اگر فایل وجود دارد
+    # 1. استخراج مقادیر فعلی (اگر نصب باشد)
     if [ -s "$TEMPLATE_FILE" ]; then
         DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*data-text="([^"]+)"')
         if [ -z "$DEF_BRAND" ]; then DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*>([^<]+)<'); fi
@@ -37,57 +36,36 @@ except: pass
         DEF_NEWS=$(get_val_py 'id="nT">([^<]+)<')
     fi
 
-    # مقادیر پیش‌فرض اگر چیزی پیدا نشد
+    # 2. تنظیم پیش‌فرض اگر چیزی پیدا نشد (نصب بار اول)
     [ -z "$DEF_BRAND" ] && DEF_BRAND="FarsNetVIP"
     [ -z "$DEF_BOT" ] && DEF_BOT="MyBot"
     [ -z "$DEF_SUP" ] && DEF_SUP="Support"
     [ -z "$DEF_NEWS" ] && DEF_NEWS="خوش آمدید"
 
-    # --- منوی انتخاب حالت نصب ---
-    echo -e "${CYAN}=== Theme Installer ===${NC}"
-    
-    if [ -s "$TEMPLATE_FILE" ]; then
-        echo -e "Current Brand: ${GREEN}$DEF_BRAND${NC}"
-        echo ""
-        echo "1) Quick Update (Keep current settings)"
-        echo "2) Modify Settings & Reinstall"
-        echo "3) Cancel"
-        read -p "Select: " MODE_OPT
-    else
-        MODE_OPT="2" # اگر نصب نیست، مستقیم برو سراغ پرسش‌ها
-    fi
+    # 3. دریافت ورودی از کاربر (Smart Input)
+    echo -e "${CYAN}=== Theme Settings ===${NC}"
+    echo -e "Press ${YELLOW}ENTER${NC} to accept the current value [in brackets]."
+    echo ""
 
-    if [[ "$MODE_OPT" == "3" ]]; then return; fi
+    read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
+    # اگر خالی بود (اینتر زد)، مقدار پیش‌فرض را بگذار
+    [ -z "$IN_BRAND" ] && IN_BRAND="$DEF_BRAND"
 
-    # --- دریافت ورودی‌ها ---
-    if [[ "$MODE_OPT" == "2" ]]; then
-        echo ""
-        echo -e "Enter new values or press ${YELLOW}ENTER${NC} to keep current:"
-        
-        read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
-        read -p "Bot Username (No @) [$DEF_BOT]: " IN_BOT
-        read -p "Support ID (No @) [$DEF_SUP]: " IN_SUP
-        read -p "News Text [$DEF_NEWS]: " IN_NEWS
+    read -p "Bot Username (No @) [$DEF_BOT]: " IN_BOT
+    [ -z "$IN_BOT" ] && IN_BOT="$DEF_BOT"
 
-        [ -z "$IN_BRAND" ] && IN_BRAND="$DEF_BRAND"
-        [ -z "$IN_BOT" ] && IN_BOT="$DEF_BOT"
-        [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
-        [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
-    else
-        # حالت Quick Update: استفاده از مقادیر قبلی
-        echo -e "${YELLOW}Using existing settings...${NC}"
-        IN_BRAND="$DEF_BRAND"
-        IN_BOT="$DEF_BOT"
-        IN_SUP="$DEF_SUP"
-        IN_NEWS="$DEF_NEWS"
-    fi
+    read -p "Support ID (No @) [$DEF_SUP]: " IN_SUP
+    [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
 
-    # لینک‌های ثابت
+    read -p "News Text [$DEF_NEWS]: " IN_NEWS
+    [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
+
+    # Links
     LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
     LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
     LNK_WIN="https://github.com/2dust/v2rayN/releases"
 
-    # --- دانلود فایل جدید ---
+    # 4. دانلود فایل جدید
     echo -e "\n${BLUE}Downloading latest template...${NC}"
     mkdir -p "$TEMPLATE_DIR"
     local TEMP_DL="/tmp/index_dl.html"
@@ -106,7 +84,7 @@ except: pass
         pause; return
     fi
 
-    # --- اعمال تغییرات با پایتون ---
+    # 5. اعمال تغییرات
     echo -e "${BLUE}Applying configurations...${NC}"
 
     export IN_BRAND IN_BOT IN_SUP IN_NEWS LNK_AND LNK_IOS LNK_WIN TEMPLATE_FILE
@@ -131,7 +109,6 @@ try:
     if not content:
         sys.exit(1)
 
-    # Replace placeholders
     content = content.replace('__BRAND__', brand)
     content = content.replace('__BOT__', bot)
     content = content.replace('__SUP__', sup)
