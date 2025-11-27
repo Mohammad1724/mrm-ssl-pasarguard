@@ -1,15 +1,19 @@
 #!/bin/bash
 
 # --- Configuration & Paths ---
+# مسیرهای اصلی پنل
 export PANEL_DIR="/opt/pasarguard"
 export PANEL_ENV="$PANEL_DIR/.env"
+# مسیر سرتیفیکیت‌ها (که Xray داخل داکر می‌بیند)
 export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
 
+# مسیرهای نود
 export NODE_DIR="/opt/pg-node"
 export NODE_ENV="$NODE_DIR/.env"
 export NODE_DEF_CERTS="/var/lib/pg-node/certs"
 
-export THEME_SCRIPT_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/theme.sh"
+# لینک فایل HTML خام در گیت‌هاب
+export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
 
 # --- Colors ---
 export RED='\033[0;31m'
@@ -31,19 +35,20 @@ check_root() {
 }
 
 install_deps() {
-    # Check if essential tools exist
-    if ! command -v certbot &> /dev/null || ! command -v nano &> /dev/null || ! command -v curl &> /dev/null; then
-        echo -e "${BLUE}[INFO] Installing dependencies (certbot, curl, nano, etc)...${NC}"
+    # چک کردن پکیج‌های مورد نیاز (اضافه شدن python3)
+    if ! command -v certbot &> /dev/null || ! command -v nano &> /dev/null || ! command -v python3 &> /dev/null; then
+        echo -e "${BLUE}[INFO] Installing dependencies (certbot, python3, curl, etc)...${NC}"
         apt-get update -qq > /dev/null
-        apt-get install -y certbot lsof curl nano socat tar -qq > /dev/null
+        apt-get install -y certbot lsof curl nano socat tar python3 -qq > /dev/null
     fi
 }
 
 pause() {
+    echo ""
     read -p "Press Enter to continue..."
 }
 
-# Helper to restart services safely
+# تابع ریستارت سرویس‌ها
 restart_service() {
     local SERVICE=$1
     if [ "$SERVICE" == "panel" ]; then
