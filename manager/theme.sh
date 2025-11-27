@@ -1,16 +1,20 @@
 #!/bin/bash
 
+# Load Utils if run standalone
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
-# === INSTALL WIZARD (PYTHON SAFE) ===
+# ==========================================
+# 1. INSTALL / UPDATE WIZARD (Smart Mode)
+# ==========================================
 install_theme_wizard() {
-    # Standard path for Marzban/Pasarguard subscription templates
+    # مسیر فایل در سرور
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
     
-    # Helper to extract values using Python (Safe)
+    # --- تابع استخراج امن مقادیر فعلی ---
     get_val_py() {
-        python3 -c "
+        if [ -s "$TEMPLATE_FILE" ]; then
+            python3 -c "
 import re
 try:
     with open('$TEMPLATE_FILE', 'r', encoding='utf-8', errors='ignore') as f:
@@ -19,63 +23,97 @@ try:
     print(m.group(1) if m else '')
 except: pass
 "
+        fi
     }
 
-    echo -e "${BLUE}Reading current configuration...${NC}"
+    echo -e "${BLUE}Checking existing configuration...${NC}"
 
-    if [ -f "$TEMPLATE_FILE" ]; then
-        # Read existing values
+    # استخراج اطلاعات اگر فایل وجود دارد
+    if [ -s "$TEMPLATE_FILE" ]; then
         DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*data-text="([^"]+)"')
         if [ -z "$DEF_BRAND" ]; then DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*>([^<]+)<'); fi
-
         DEF_BOT=$(get_val_py 'class="bot-link".*href="https:\/\/t\.me\/([^"]+)"')
         DEF_SUP=$(get_val_py 'class="btn btn-dark".*href="https:\/\/t\.me\/([^"]+)"')
         DEF_NEWS=$(get_val_py 'id="nT">([^<]+)<')
     fi
 
+    # مقادیر پیش‌فرض اگر چیزی پیدا نشد
     [ -z "$DEF_BRAND" ] && DEF_BRAND="FarsNetVIP"
     [ -z "$DEF_BOT" ] && DEF_BOT="MyBot"
     [ -z "$DEF_SUP" ] && DEF_SUP="Support"
     [ -z "$DEF_NEWS" ] && DEF_NEWS="خوش آمدید"
 
-    echo -e "${CYAN}=== Theme Installer Wizard ===${NC}"
-    echo -e "Enter new values or press ${YELLOW}ENTER${NC} to keep current:"
-    echo ""
+    # --- منوی انتخاب حالت نصب ---
+    echo -e "${CYAN}=== Theme Installer ===${NC}"
+    
+    if [ -s "$TEMPLATE_FILE" ]; then
+        echo -e "Current Brand: ${GREEN}$DEF_BRAND${NC}"
+        echo ""
+        echo "1) Quick Update (Keep current settings)"
+        echo "2) Modify Settings & Reinstall"
+        echo "3) Cancel"
+        read -p "Select: " MODE_OPT
+    else
+        MODE_OPT="2" # اگر نصب نیست، مستقیم برو سراغ پرسش‌ها
+    fi
 
-    read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
-    read -p "Bot Username (No @) [$DEF_BOT]: " IN_BOT
-    read -p "Support ID (No @) [$DEF_SUP]: " IN_SUP
-    read -p "News Text [$DEF_NEWS]: " IN_NEWS
+    if [[ "$MODE_OPT" == "3" ]]; then return; fi
 
-    [ -z "$IN_BRAND" ] && IN_BRAND="$DEF_BRAND"
-    [ -z "$IN_BOT" ] && IN_BOT="$DEF_BOT"
-    [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
-    [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
+    # --- دریافت ورودی‌ها ---
+    if [[ "$MODE_OPT" == "2" ]]; then
+        echo ""
+        echo -e "Enter new values or press ${YELLOW}ENTER${NC} to keep current:"
+        
+        read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
+        read -p "Bot Username (No @) [$DEF_BOT]: " IN_BOT
+        read -p "Support ID (No @) [$DEF_SUP]: " IN_SUP
+        read -p "News Text [$DEF_NEWS]: " IN_NEWS
 
-    # Fixed Links
+        [ -z "$IN_BRAND" ] && IN_BRAND="$DEF_BRAND"
+        [ -z "$IN_BOT" ] && IN_BOT="$DEF_BOT"
+        [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
+        [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
+    else
+        # حالت Quick Update: استفاده از مقادیر قبلی
+        echo -e "${YELLOW}Using existing settings...${NC}"
+        IN_BRAND="$DEF_BRAND"
+        IN_BOT="$DEF_BOT"
+        IN_SUP="$DEF_SUP"
+        IN_NEWS="$DEF_NEWS"
+    fi
+
+    # لینک‌های ثابت
     LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
     LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
     LNK_WIN="https://github.com/2dust/v2rayN/releases"
 
-    echo -e "\n${BLUE}Downloading template...${NC}"
+    # --- دانلود فایل جدید ---
+    echo -e "\n${BLUE}Downloading latest template...${NC}"
     mkdir -p "$TEMPLATE_DIR"
+    local TEMP_DL="/tmp/index_dl.html"
+    rm -f "$TEMP_DL"
 
-    # Download HTML from GitHub
-    if curl -fsSL "$THEME_HTML_URL" -o "$TEMPLATE_FILE"; then
-        echo -e "${GREEN}✔ Download successful.${NC}"
+    if curl -L -o "$TEMP_DL" "$THEME_HTML_URL"; then
+        if [ -s "$TEMP_DL" ]; then
+            mv "$TEMP_DL" "$TEMPLATE_FILE"
+            echo -e "${GREEN}✔ Download successful.${NC}"
+        else
+            echo -e "${RED}✘ Downloaded file is empty! Check URL.${NC}"
+            pause; return
+        fi
     else
-        echo -e "${RED}✘ Download failed! Check Internet.${NC}"
-        pause
-        return
+        echo -e "${RED}✘ Download failed! Connection error.${NC}"
+        pause; return
     fi
 
-    echo -e "${BLUE}Applying configurations (Python Safe Mode)...${NC}"
+    # --- اعمال تغییرات با پایتون ---
+    echo -e "${BLUE}Applying configurations...${NC}"
 
-    # Export variables for Python
     export IN_BRAND IN_BOT IN_SUP IN_NEWS LNK_AND LNK_IOS LNK_WIN TEMPLATE_FILE
     
     python3 - << 'EOF'
 import os
+import sys
 
 file_path = os.environ.get('TEMPLATE_FILE')
 brand = os.environ.get('IN_BRAND', 'FarsNetVIP')
@@ -90,6 +128,9 @@ try:
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
 
+    if not content:
+        sys.exit(1)
+
     # Replace placeholders
     content = content.replace('__BRAND__', brand)
     content = content.replace('__BOT__', bot)
@@ -99,40 +140,58 @@ try:
     content = content.replace('__IOS__', l_ios)
     content = content.replace('__WIN__', l_win)
 
-    # Save with correct encoding
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(content)
     
-    print("Template updated successfully with UTF-8 encoding.")
+    print("Template updated successfully.")
 except Exception as e:
-    print(f"Error updating template: {e}")
-    exit(1)
+    print(f"Python Error: {e}")
+    sys.exit(1)
 EOF
 
-    # Enable in .env
-    if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
-    sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
-    sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-    echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
-    echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
+    if [ $? -eq 0 ]; then
+        # فعال‌سازی در کانفیگ
+        if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
+        sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
+        sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
+        echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
+        echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
 
-    restart_service "panel"
-    echo -e "${GREEN}✔ Theme Installed & Activated.${NC}"
+        restart_service "panel"
+        echo -e "${GREEN}✔ Theme Installed & Updated.${NC}"
+    else
+        echo -e "${RED}✘ Error applying config.${NC}"
+    fi
+    
     pause
 }
 
+# ==========================================
+# 2. ACTIVATE THEME
+# ==========================================
 activate_theme() {
     echo -e "${BLUE}Activating Theme...${NC}"
+    local T_FILE="/var/lib/pasarguard/templates/subscription/index.html"
+    
+    if [ ! -s "$T_FILE" ]; then
+        echo -e "${RED}Theme file missing. Install first.${NC}"
+        pause; return
+    fi
+
     if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
     sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
     sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
     echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
     echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
+
     restart_service "panel"
     echo -e "${GREEN}✔ Theme Activated.${NC}"
     pause
 }
 
+# ==========================================
+# 3. DEACTIVATE THEME
+# ==========================================
 deactivate_theme() {
     echo -e "${YELLOW}Deactivating Theme...${NC}"
     if [ -f "$PANEL_ENV" ]; then
@@ -144,21 +203,21 @@ deactivate_theme() {
     pause
 }
 
+# ==========================================
+# 4. UNINSTALL THEME
+# ==========================================
 uninstall_theme() {
     echo -e "${RED}--- Uninstall Theme ---${NC}"
-    read -p "Delete theme files? (y/n): " CONFIRM
+    read -p "Delete files? (y/n): " CONFIRM
     if [[ "$CONFIRM" == "y" ]]; then
         rm -rf "/var/lib/pasarguard/templates/subscription"
-        if [ -f "$PANEL_ENV" ]; then
-            sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
-            sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-        fi
-        restart_service "panel"
+        deactivate_theme
         echo -e "${GREEN}✔ Files removed.${NC}"
     fi
     pause
 }
 
+# === MENU ===
 theme_menu() {
     while true; do
         clear
