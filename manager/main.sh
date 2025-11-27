@@ -50,7 +50,7 @@ while true; do
     echo "1) SSL Certificates Menu"
     echo "2) Settings & Node Connector"
     echo "3) Theme Manager"
-    echo -e "4) Update Center ${GREEN}(NEW)${NC}"
+    echo "4) Update Center"
     echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select: " OPTION
