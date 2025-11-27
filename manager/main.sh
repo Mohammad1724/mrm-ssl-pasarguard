@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# لود کردن ماژول‌ها
+# Load Modules (Order matters)
 source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/node.sh
