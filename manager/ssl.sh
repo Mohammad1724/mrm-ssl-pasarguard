@@ -4,7 +4,7 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 _get_cert_action() {
-    local DOMAIN=$1
+    local DOMAINS=$1  # Can be multiple domains separated by space
     local EMAIL=$2
     
     echo -e "${BLUE}Opening Port 80 temporarily...${NC}"
@@ -15,17 +15,23 @@ _get_cert_action() {
     systemctl stop apache2 2>/dev/null
     fuser -k 80/tcp 2>/dev/null
 
-    certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
+    # Prepare domain flags (-d domain1 -d domain2 ...)
+    local DOM_FLAGS=""
+    for D in $DOMAINS; do
+        DOM_FLAGS="$DOM_FLAGS -d $D"
+    done
+
+    certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" $DOM_FLAGS
     
     systemctl start nginx 2>/dev/null
 }
 
 _process_panel() {
-    local DOM=$1
+    local PRIMARY_DOM=$1
     echo -e "\n${CYAN}--- Configuring Panel SSL ---${NC}"
     
     echo "Where to save certificates?"
-    echo "1) Default Path ($PANEL_DEF_CERTS/$DOM)"
+    echo "1) Default Path ($PANEL_DEF_CERTS/$PRIMARY_DOM)"
     echo "2) Custom Path"
     read -p "Select: " PATH_OPT
     
@@ -34,11 +40,11 @@ _process_panel() {
         read -p "Enter Custom Base Directory: " BASE_DIR
     fi
     
-    local TARGET_DIR="$BASE_DIR/$DOM"
+    local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
     
-    if cp -L "/etc/letsencrypt/live/$DOM/fullchain.pem" "$TARGET_DIR/" && \
-       cp -L "/etc/letsencrypt/live/$DOM/privkey.pem" "$TARGET_DIR/"; then
+    if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/" && \
+       cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"; then
        
         local C_FILE="$TARGET_DIR/fullchain.pem"
         local K_FILE="$TARGET_DIR/privkey.pem"
@@ -61,11 +67,11 @@ _process_panel() {
 }
 
 _process_node() {
-    local DOM=$1
+    local PRIMARY_DOM=$1
     echo -e "\n${PURPLE}--- Configuring Node SSL ---${NC}"
     
     echo "Where to save certificates?"
-    echo "1) Default Path ($NODE_DEF_CERTS/$DOM)"
+    echo "1) Default Path ($NODE_DEF_CERTS/$PRIMARY_DOM)"
     echo "2) Custom Path"
     read -p "Select: " PATH_OPT
     
@@ -74,12 +80,12 @@ _process_node() {
         read -p "Enter Custom Base Directory: " BASE_DIR
     fi
     
-    local TARGET_DIR="$BASE_DIR/$DOM"
+    local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
     
     # Copy with Node naming convention (server.crt/key)
-    cp -L "/etc/letsencrypt/live/$DOM/fullchain.pem" "$TARGET_DIR/server.crt"
-    cp -L "/etc/letsencrypt/live/$DOM/privkey.pem" "$TARGET_DIR/server.key"
+    cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt"
+    cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"
     
     local C_FILE="$TARGET_DIR/server.crt"
     local K_FILE="$TARGET_DIR/server.key"
@@ -101,15 +107,15 @@ _process_node() {
 }
 
 _process_config() {
-    local DOM=$1
+    local PRIMARY_DOM=$1
     echo -e "\n${ORANGE}--- Config SSL (Inbounds) ---${NC}"
     
     # Always save to Panel Certs folder structure so Xray can see it
-    local TARGET_DIR="$PANEL_DEF_CERTS/$DOM"
+    local TARGET_DIR="$PANEL_DEF_CERTS/$PRIMARY_DOM"
     
     mkdir -p "$TARGET_DIR"
-    cp -L "/etc/letsencrypt/live/$DOM/fullchain.pem" "$TARGET_DIR/"
-    cp -L "/etc/letsencrypt/live/$DOM/privkey.pem" "$TARGET_DIR/"
+    cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/"
+    cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"
     
     chmod -R 755 "$PANEL_DEF_CERTS"
     
@@ -125,35 +131,39 @@ ssl_wizard() {
     echo -e "${YELLOW}         SSL GENERATION WIZARD               ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
-    read -p "Enter Domain: " DOM
-    if [ -z "$DOM" ]; then return; fi
+    echo -e "Enter Domain(s). Separate multiple domains with SPACE."
+    read -p "Domains: " DOMAINS
+    if [ -z "$DOMAINS" ]; then return; fi
+    
+    # Extract the first domain as the "Primary Name" for folders
+    local PRIMARY_DOM=$(echo $DOMAINS | awk '{print $1}')
+    
     read -p "Enter Email: " MAIL
     
-    _get_cert_action "$DOM" "$MAIL"
+    _get_cert_action "$DOMAINS" "$MAIL"
     
-    if [ ! -d "/etc/letsencrypt/live/$DOM" ]; then
+    if [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
         pause
         return
     fi
     
-    echo -e "${GREEN}✔ Success! What is this for?${NC}"
+    echo -e "${GREEN}✔ Success! Primary Domain: $PRIMARY_DOM${NC}"
     echo "1) Main Panel"
     echo "2) Node Server"
     echo "3) Config Domain"
     read -p "Select: " TYPE_OPT
     
     case $TYPE_OPT in
-        1) _process_panel "$DOM" ;;
-        2) _process_node "$DOM" ;;
-        3) _process_config "$DOM" ;;
+        1) _process_panel "$PRIMARY_DOM" ;;
+        2) _process_node "$PRIMARY_DOM" ;;
+        3) _process_config "$PRIMARY_DOM" ;;
         *) echo -e "${RED}Invalid.${NC}";;
     esac
     
     pause
 }
 
-# --- SHOW EXACT PATHS (UPDATED) ---
 show_detailed_paths() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -195,7 +205,7 @@ show_detailed_paths() {
     pause
 }
 
-# --- VIEW FILE CONTENT ---
+# --- VIEW FILE CONTENT (UPDATED WITH NUMBER SELECTION) ---
 view_cert_content() {
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}       VIEW CERTIFICATE CONTENT              ${NC}"
@@ -208,21 +218,39 @@ view_cert_content() {
     fi
 
     echo -e "${BLUE}Available Domains:${NC}"
-    ls -1 "$PANEL_DEF_CERTS"
+    
+    # Store domains in an array
+    local i=1
+    declare -a domains
+    for dir in "$PANEL_DEF_CERTS"/*; do
+        if [ -d "$dir" ]; then
+            dom=$(basename "$dir")
+            domains[$i]=$dom
+            echo -e "${GREEN}$i)${NC} $dom"
+            ((i++))
+        fi
+    done
+    
+    if [ $i -eq 1 ]; then
+        echo "No domains found."
+        pause
+        return
+    fi
+
     echo ""
+    read -p "Select Number: " NUM
+    local SELECTED_DOM=${domains[$NUM]}
     
-    read -p "Enter Domain Name to view: " DOM
-    if [ -z "$DOM" ]; then return; fi
-    
-    local TARGET_DIR="$PANEL_DEF_CERTS/$DOM"
-    
-    if [ ! -d "$TARGET_DIR" ]; then
-        echo -e "${RED}Folder not found for $DOM${NC}"
+    if [ -z "$SELECTED_DOM" ]; then
+        echo -e "${RED}Invalid selection.${NC}"
         pause
         return
     fi
     
+    local TARGET_DIR="$PANEL_DEF_CERTS/$SELECTED_DOM"
+    
     echo ""
+    echo -e "Selected: ${CYAN}$SELECTED_DOM${NC}"
     echo "Which file?"
     echo "1) Fullchain (Public Key)"
     echo "2) Private Key"
@@ -261,10 +289,10 @@ ssl_menu() {
         echo -e "${BLUE}===========================================${NC}"
         echo -e "${YELLOW}      SSL MANAGEMENT                       ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        echo "1) Request New SSL (Wizard)"
+        echo "1) Request New SSL (Multi-Domain Wizard)"
         echo "2) Show Exact File Paths"
-        echo "3) View Certificate Content (View/Copy)"
-        echo "4) List LetsEncrypt Certs"
+        echo "3) View Certificate Content (Interactive)"
+        echo "4) Domain List (LetsEncrypt)"
         echo "5) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " S_OPT
