@@ -211,7 +211,7 @@ theme_menu() {
     while true; do
         clear
         echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}      THEME MANAGER                        ${NC}"
+        echo -e "${YELLOW}      THEME MANAGER  v 1.0                        ${NC}"
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Install / Update Theme (Wizard)"
         echo "2) Activate Theme"
