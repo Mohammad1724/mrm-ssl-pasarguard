@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ensure utils are loaded if run standalone (for safety)
+# Load utils safely
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 _get_cert_action() {
@@ -17,7 +17,6 @@ _get_cert_action() {
 
     certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN"
     
-    # Try to start nginx back if it was there
     systemctl start nginx 2>/dev/null
 }
 
@@ -105,7 +104,7 @@ _process_config() {
     local DOM=$1
     echo -e "\n${ORANGE}--- Config SSL (Inbounds) ---${NC}"
     
-    # Always save to Panel Certs so Xray can see it
+    # Always save to Panel Certs folder structure so Xray can see it
     local TARGET_DIR="$PANEL_DEF_CERTS/$DOM"
     
     mkdir -p "$TARGET_DIR"
