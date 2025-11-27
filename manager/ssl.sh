@@ -153,21 +153,26 @@ ssl_wizard() {
     pause
 }
 
+# --- SHOW EXACT PATHS (UPDATED) ---
 show_detailed_paths() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       EXISTING SSL CERTIFICATES             ${NC}"
+    echo -e "${YELLOW}       EXISTING SSL PATHS                    ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
     echo -e "${ORANGE}--- Panel & Config Domains ---${NC}"
     if [ -d "$PANEL_DEF_CERTS" ]; then
         for dir in "$PANEL_DEF_CERTS"/*; do
             if [ -d "$dir" ]; then
-                echo -e "${GREEN}Domain: $(basename "$dir")${NC}"
-                echo -e "  Path: ${BLUE}$dir/${NC}"
+                dom=$(basename "$dir")
+                echo -e "${GREEN}Domain: $dom${NC}"
+                echo -e "  ${YELLOW}Fullchain:${NC} ${CYAN}$dir/fullchain.pem${NC}"
+                echo -e "  ${YELLOW}Privkey:${NC}   ${CYAN}$dir/privkey.pem${NC}"
                 echo "--------------------------------------------"
             fi
         done
+    else
+        echo "Directory not found."
     fi
     
     echo ""
@@ -175,23 +180,27 @@ show_detailed_paths() {
     if [ -d "$NODE_DEF_CERTS" ]; then
         for dir in "$NODE_DEF_CERTS"/*; do
             if [ -d "$dir" ]; then
-                echo -e "${GREEN}Domain: $(basename "$dir")${NC}"
-                echo -e "  Path: ${BLUE}$dir/${NC}"
+                dom=$(basename "$dir")
+                echo -e "${GREEN}Domain: $dom${NC}"
+                echo -e "  ${YELLOW}Cert:${NC}      ${CYAN}$dir/server.crt${NC}"
+                echo -e "  ${YELLOW}Key:${NC}       ${CYAN}$dir/server.key${NC}"
                 echo "--------------------------------------------"
             fi
         done
+    else
+        echo "Directory not found."
     fi
+    
     echo ""
     pause
 }
 
-# --- NEW FUNCTION: VIEW FILE CONTENT ---
+# --- VIEW FILE CONTENT ---
 view_cert_content() {
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}       VIEW CERTIFICATE CONTENT              ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
-    # List available domains in Panel Certs (Most common place)
     if [ ! -d "$PANEL_DEF_CERTS" ]; then
         echo -e "${RED}No certificates directory found at $PANEL_DEF_CERTS${NC}"
         pause
