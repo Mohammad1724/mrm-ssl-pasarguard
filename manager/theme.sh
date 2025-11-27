@@ -4,68 +4,13 @@
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 # ==========================================
-# 1. INSTALL / UPDATE WIZARD (Smart Inputs)
+# 1. INSTALL / UPDATE WIZARD (Python Input Mode)
 # ==========================================
 install_theme_wizard() {
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
     
-    # --- تابع استخراج امن مقادیر فعلی ---
-    get_val_py() {
-        if [ -s "$TEMPLATE_FILE" ]; then
-            python3 -c "
-import re
-try:
-    with open('$TEMPLATE_FILE', 'r', encoding='utf-8', errors='ignore') as f:
-        c = f.read()
-    m = re.search(r'$1', c)
-    print(m.group(1) if m else '')
-except: pass
-"
-        fi
-    }
-
-    echo -e "${BLUE}Reading configuration...${NC}"
-
-    # 1. استخراج مقادیر فعلی (اگر نصب باشد)
-    if [ -s "$TEMPLATE_FILE" ]; then
-        DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*data-text="([^"]+)"')
-        if [ -z "$DEF_BRAND" ]; then DEF_BRAND=$(get_val_py 'id="brandTxt"[^>]*>([^<]+)<'); fi
-        DEF_BOT=$(get_val_py 'class="bot-link".*href="https:\/\/t\.me\/([^"]+)"')
-        DEF_SUP=$(get_val_py 'class="btn btn-dark".*href="https:\/\/t\.me\/([^"]+)"')
-        DEF_NEWS=$(get_val_py 'id="nT">([^<]+)<')
-    fi
-
-    # 2. تنظیم پیش‌فرض اگر چیزی پیدا نشد (نصب بار اول)
-    [ -z "$DEF_BRAND" ] && DEF_BRAND="FarsNetVIP"
-    [ -z "$DEF_BOT" ] && DEF_BOT="MyBot"
-    [ -z "$DEF_SUP" ] && DEF_SUP="Support"
-    [ -z "$DEF_NEWS" ] && DEF_NEWS="خوش آمدید"
-
-    # 3. دریافت ورودی از کاربر (Smart Input)
-    echo -e "${CYAN}=== Theme Settings ===${NC}"
-    echo -e "Press ${YELLOW}ENTER${NC} to accept the current value [in brackets]."
-    echo ""
-
-    read -p "Brand Name [$DEF_BRAND]: " IN_BRAND
-    # اگر خالی بود (اینتر زد)، مقدار پیش‌فرض را بگذار
-    [ -z "$IN_BRAND" ] && IN_BRAND="$DEF_BRAND"
-
-    read -p "Bot Username (No @) [$DEF_BOT]: " IN_BOT
-    [ -z "$IN_BOT" ] && IN_BOT="$DEF_BOT"
-
-    read -p "Support ID (No @) [$DEF_SUP]: " IN_SUP
-    [ -z "$IN_SUP" ] && IN_SUP="$DEF_SUP"
-
-    read -p "News Text [$DEF_NEWS]: " IN_NEWS
-    [ -z "$IN_NEWS" ] && IN_NEWS="$DEF_NEWS"
-
-    # Links
-    LNK_AND="https://play.google.com/store/apps/details?id=com.v2ray.ang"
-    LNK_IOS="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690"
-    LNK_WIN="https://github.com/2dust/v2rayN/releases"
-
-    # 4. دانلود فایل جدید
+    # 1. دانلود فایل جدید (اول دانلود می‌کنیم که روی فایل جدید کار کنیم)
     echo -e "\n${BLUE}Downloading latest template...${NC}"
     mkdir -p "$TEMPLATE_DIR"
     local TEMP_DL="/tmp/index_dl.html"
@@ -73,6 +18,13 @@ except: pass
 
     if curl -L -o "$TEMP_DL" "$THEME_HTML_URL"; then
         if [ -s "$TEMP_DL" ]; then
+            # اگر فایل قبلی هست، نگهش دار برای خواندن مقادیر
+            if [ -f "$TEMPLATE_FILE" ]; then
+                cp "$TEMPLATE_FILE" "/tmp/index_old.html"
+            else
+                echo "" > "/tmp/index_old.html" # فایل خالی بساز
+            fi
+            
             mv "$TEMP_DL" "$TEMPLATE_FILE"
             echo -e "${GREEN}✔ Download successful.${NC}"
         else
@@ -84,50 +36,98 @@ except: pass
         pause; return
     fi
 
-    # 5. اعمال تغییرات
-    echo -e "${BLUE}Applying configurations...${NC}"
-
-    export IN_BRAND IN_BOT IN_SUP IN_NEWS LNK_AND LNK_IOS LNK_WIN TEMPLATE_FILE
+    # 2. اجرای اسکریپت پایتون برای دریافت ورودی و جایگزینی
+    # (این روش مشکل کاراکترهای خاص مثل • را حل می‌کند)
     
-    python3 - << 'EOF'
+    export TEMPLATE_FILE
+    
+    python3 -c "
 import os
-import sys
+import re
+
+# رنگ‌ها برای خروجی پایتون
+CYAN = '\033[0;36m'
+YELLOW = '\033[1;33m'
+GREEN = '\033[0;32m'
+NC = '\033[0m'
 
 file_path = os.environ.get('TEMPLATE_FILE')
-brand = os.environ.get('IN_BRAND', 'FarsNetVIP')
-bot = os.environ.get('IN_BOT', 'MyBot')
-sup = os.environ.get('IN_SUP', 'Support')
-news = os.environ.get('IN_NEWS', 'Welcome')
-l_and = os.environ.get('LNK_AND', '#')
-l_ios = os.environ.get('LNK_IOS', '#')
-l_win = os.environ.get('LNK_WIN', '#')
+old_file_path = '/tmp/index_old.html'
 
+# مقادیر پیش‌فرض
+defaults = {
+    'brand': 'FarsNetVIP',
+    'bot': 'MyBot',
+    'sup': 'Support',
+    'news': 'خوش آمدید • Welcome',
+    'l_and': 'https://play.google.com/store/apps/details?id=com.v2ray.ang',
+    'l_ios': 'https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690',
+    'l_win': 'https://github.com/2dust/v2rayN/releases'
+}
+
+# تلاش برای خواندن مقادیر قبلی از فایل قدیمی
+try:
+    with open(old_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        old_content = f.read()
+        
+    # استخراج هوشمند
+    m_brand = re.search(r'id=\"brandTxt\"[^>]*data-text=\"([^\"]+)\"', old_content)
+    if m_brand: defaults['brand'] = m_brand.group(1)
+    
+    m_bot = re.search(r'class=\"bot-link\".*href=\"https:\/\/t\.me\/([^\"]+)\"', old_content)
+    if m_bot: defaults['bot'] = m_bot.group(1)
+    
+    m_sup = re.search(r'class=\"btn btn-dark\".*href=\"https:\/\/t\.me\/([^\"]+)\"', old_content)
+    if m_sup: defaults['sup'] = m_sup.group(1)
+    
+    m_news = re.search(r'id=\"nT\">([^<]+)<', old_content)
+    if m_news: defaults['news'] = m_news.group(1)
+
+except:
+    pass
+
+# --- دریافت ورودی از کاربر ---
+print(f'{CYAN}=== Theme Settings (UTF-8 Safe) ==={NC}')
+print(f'Press {YELLOW}ENTER{NC} to accept the current value [in brackets].\n')
+
+def get_input(label, key):
+    val = input(f'{label} [{defaults[key]}]: ').strip()
+    if not val:
+        return defaults[key]
+    return val
+
+new_brand = get_input('Brand Name', 'brand')
+new_bot = get_input('Bot Username (No @)', 'bot')
+new_sup = get_input('Support ID (No @)', 'sup')
+new_news = get_input('News Text', 'news')
+
+# --- اعمال تغییرات روی فایل جدید ---
 try:
     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
         content = f.read()
 
-    if not content:
-        sys.exit(1)
-
-    content = content.replace('__BRAND__', brand)
-    content = content.replace('__BOT__', bot)
-    content = content.replace('__SUP__', sup)
-    content = content.replace('__NEWS__', news)
-    content = content.replace('__ANDROID__', l_and)
-    content = content.replace('__IOS__', l_ios)
-    content = content.replace('__WIN__', l_win)
+    content = content.replace('__BRAND__', new_brand)
+    content = content.replace('__BOT__', new_bot)
+    content = content.replace('__SUP__', new_sup)
+    content = content.replace('__NEWS__', new_news)
+    
+    # لینک‌ها ثابت هستند (یا می‌توانستیم بپرسیم)
+    content = content.replace('__ANDROID__', defaults['l_and'])
+    content = content.replace('__IOS__', defaults['l_ios'])
+    content = content.replace('__WIN__', defaults['l_win'])
 
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(content)
-    
-    print("Template updated successfully.")
-except Exception as e:
-    print(f"Python Error: {e}")
-    sys.exit(1)
-EOF
+        
+    print(f'\n{GREEN}✔ Configuration applied successfully.{NC}')
 
+except Exception as e:
+    print(f'\nError: {e}')
+    exit(1)
+"
+
+    # بررسی موفقیت پایتون
     if [ $? -eq 0 ]; then
-        # فعال‌سازی در کانفیگ
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
@@ -137,9 +137,11 @@ EOF
         restart_service "panel"
         echo -e "${GREEN}✔ Theme Installed & Updated.${NC}"
     else
-        echo -e "${RED}✘ Error applying config.${NC}"
+        echo -e "${RED}✘ Python Script Failed.${NC}"
     fi
     
+    # پاک کردن فایل موقت
+    rm -f "/tmp/index_old.html"
     pause
 }
 
