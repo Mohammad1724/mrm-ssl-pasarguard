@@ -1,22 +1,21 @@
 #!/bin/bash
 
-# مسیر نصب
+# Installer for Modular MRM Manager
 INSTALL_DIR="/opt/mrm-manager"
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
-# ایجاد پوشه
+echo "Installing/Updating MRM Manager..."
+
 mkdir -p "$INSTALL_DIR"
 
-echo "Updating Manager..."
-
-# دانلود ماژول‌ها
+# Download Modules
 curl -s -o "$INSTALL_DIR/utils.sh" "$REPO_URL/utils.sh"
 curl -s -o "$INSTALL_DIR/ssl.sh" "$REPO_URL/ssl.sh"
 curl -s -o "$INSTALL_DIR/node.sh" "$REPO_URL/node.sh"
 curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh"
 
-# پرمیشن اجرا
+# Make executable
 chmod +x "$INSTALL_DIR/"*.sh
 
-# اجرای منوی اصلی
+# Run
 bash "$INSTALL_DIR/main.sh"
