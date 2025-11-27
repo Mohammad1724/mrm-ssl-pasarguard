@@ -53,12 +53,10 @@ _process_panel() {
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         
         echo -e "${BLUE}Cleaning up old config in .env...${NC}"
-        # Remove any existing lines (commented or not) for these variables
         sed -i '/UVICORN_SSL_CERTFILE/d' "$PANEL_ENV"
         sed -i '/UVICORN_SSL_KEYFILE/d' "$PANEL_ENV"
         
         echo -e "${BLUE}Writing new SSL paths...${NC}"
-        # Add new lines in standard format
         echo "UVICORN_SSL_CERTFILE = \"$C_FILE\"" >> "$PANEL_ENV"
         echo "UVICORN_SSL_KEYFILE = \"$K_FILE\"" >> "$PANEL_ENV"
         
@@ -87,7 +85,7 @@ _process_node() {
     local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
     
-    # Copy with Node naming convention
+    # Copy with Node naming convention (server.crt/key)
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt"
     cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"
     
@@ -96,9 +94,12 @@ _process_node() {
     
     if [ -f "$NODE_ENV" ]; then
         echo -e "${BLUE}Cleaning up Node config...${NC}"
+        # Remove old lines to keep file clean
         sed -i '/SSL_CERT_FILE/d' "$NODE_ENV"
         sed -i '/SSL_KEY_FILE/d' "$NODE_ENV"
         
+        echo -e "${BLUE}Writing new SSL paths...${NC}"
+        # Write in standard format
         echo "SSL_CERT_FILE = \"$C_FILE\"" >> "$NODE_ENV"
         echo "SSL_KEY_FILE = \"$K_FILE\"" >> "$NODE_ENV"
         
