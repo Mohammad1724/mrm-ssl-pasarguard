@@ -185,6 +185,67 @@ show_detailed_paths() {
     pause
 }
 
+# --- NEW FUNCTION: VIEW FILE CONTENT ---
+view_cert_content() {
+    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${YELLOW}       VIEW CERTIFICATE CONTENT              ${NC}"
+    echo -e "${CYAN}=============================================${NC}"
+    
+    # List available domains in Panel Certs (Most common place)
+    if [ ! -d "$PANEL_DEF_CERTS" ]; then
+        echo -e "${RED}No certificates directory found at $PANEL_DEF_CERTS${NC}"
+        pause
+        return
+    fi
+
+    echo -e "${BLUE}Available Domains:${NC}"
+    ls -1 "$PANEL_DEF_CERTS"
+    echo ""
+    
+    read -p "Enter Domain Name to view: " DOM
+    if [ -z "$DOM" ]; then return; fi
+    
+    local TARGET_DIR="$PANEL_DEF_CERTS/$DOM"
+    
+    if [ ! -d "$TARGET_DIR" ]; then
+        echo -e "${RED}Folder not found for $DOM${NC}"
+        pause
+        return
+    fi
+    
+    echo ""
+    echo "Which file?"
+    echo "1) Fullchain (Public Key)"
+    echo "2) Private Key"
+    read -p "Select: " F_OPT
+    
+    local FILE=""
+    local HEADER=""
+    
+    if [ "$F_OPT" == "1" ]; then 
+        FILE="fullchain.pem"
+        HEADER="FULLCHAIN / PUBLIC KEY"
+    elif [ "$F_OPT" == "2" ]; then 
+        FILE="privkey.pem"
+        HEADER="PRIVATE KEY (Keep Secret)"
+    else 
+        return 
+    fi
+    
+    if [ -f "$TARGET_DIR/$FILE" ]; then
+        clear
+        echo -e "${YELLOW}--- START OF $HEADER ---${NC}"
+        echo -e "${GREEN}"
+        cat "$TARGET_DIR/$FILE"
+        echo -e "${NC}"
+        echo -e "${YELLOW}--- END OF $HEADER ---${NC}"
+        echo -e "\n(Select and copy the content above)"
+    else
+        echo -e "${RED}File $FILE not found in $TARGET_DIR${NC}"
+    fi
+    pause
+}
+
 ssl_menu() {
     while true; do
         clear
@@ -193,15 +254,17 @@ ssl_menu() {
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Request New SSL (Wizard)"
         echo "2) Show Exact File Paths"
-        echo "3) List LetsEncrypt Certs"
-        echo "4) Back"
+        echo "3) View Certificate Content (View/Copy)"
+        echo "4) List LetsEncrypt Certs"
+        echo "5) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " S_OPT
         case $S_OPT in
             1) ssl_wizard ;;
             2) show_detailed_paths ;;
-            3) ls -1 /etc/letsencrypt/live 2>/dev/null; pause ;;
-            4) return ;;
+            3) view_cert_content ;;
+            4) ls -1 /etc/letsencrypt/live 2>/dev/null; pause ;;
+            5) return ;;
             *) ;;
         esac
     done
