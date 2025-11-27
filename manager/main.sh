@@ -38,6 +38,19 @@ update_panel() {
     pause
 }
 
+update_node() {
+    echo -e "${PURPLE}Updating Node Service...${NC}"
+    if [ -d "$NODE_DIR" ]; then
+        cd "$NODE_DIR"
+        docker compose pull
+        docker compose up -d
+        echo -e "${GREEN}✔ Node Updated & Restarted.${NC}"
+    else
+        echo -e "${RED}Node directory not found at $NODE_DIR${NC}"
+    fi
+    pause
+}
+
 # --- MAIN LOOP ---
 check_root
 install_deps
@@ -45,12 +58,12 @@ install_deps
 while true; do
     clear
     echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM MANAGER v5.5 (Final)              ${NC}"
+    echo -e "${YELLOW}     MRM MANAGER v5.6 (Final)              ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) SSL Certificates Menu"
-    echo "2) Settings & Node Connector"
+    echo "2) Panel & Node Configuration"
     echo "3) Theme Manager"
-    echo "4) Update Center"
+    echo -e "4) Update Center ${GREEN}(NEW)${NC}"
     echo "5) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select: " OPTION
@@ -63,11 +76,13 @@ while true; do
             echo -e "\n${CYAN}--- Update Center ---${NC}"
             echo "1) Update This Script (MRM Manager)"
             echo "2) Update Pasarguard Panel (Core)"
-            echo "3) Back"
+            echo "3) Update Node Service"
+            echo "4) Back"
             read -p "Select: " U_OPT
             case $U_OPT in
                 1) update_script ;;
                 2) update_panel ;;
+                3) update_node ;;
                 *) ;;
             esac
             ;;
