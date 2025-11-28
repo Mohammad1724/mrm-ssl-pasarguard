@@ -65,7 +65,8 @@ while true; do
     echo "2) Panel & Node Configuration"
     echo "3) Theme Manager"
     echo "4) Update Center"
-    echo "5) Exit"
+    echo "5) Inbound Wizard"
+    echo "6) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select: " OPTION
 
@@ -74,6 +75,7 @@ while true; do
         2) settings_menu ;;
         3) theme_menu ;;
         4) 
+bv      5) inbound_menu ;;
             echo -e "\n${CYAN}--- Update Center ---${NC}"
             echo "1) Update This Script (MRM Manager)"
             echo "2) Update Pasarguard Panel (Core)"
@@ -87,7 +89,7 @@ while true; do
                 *) ;;
             esac
             ;;
-        5) exit 0 ;;
+        6) exit 0 ;;
         *) ;;
     esac
 done
