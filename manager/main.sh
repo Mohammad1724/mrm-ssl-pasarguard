@@ -66,6 +66,7 @@ update_node() {
 # --- MAIN LOOP ---
 check_root
 install_deps
+check_installation
 
 while true; do
     clear
