@@ -14,6 +14,7 @@ curl -s -o "$INSTALL_DIR/ssl.sh" "$REPO_URL/ssl.sh"
 curl -s -o "$INSTALL_DIR/node.sh" "$REPO_URL/node.sh"
 curl -s -o "$INSTALL_DIR/theme.sh" "$REPO_URL/theme.sh"
 curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh"
+curl -s -o "$INSTALL_DIR/inbound.sh" "$REPO_URL/inbound.sh"
 
 # Make executable
 chmod +x "$INSTALL_DIR/"*.sh
