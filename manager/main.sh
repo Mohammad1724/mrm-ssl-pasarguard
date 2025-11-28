@@ -5,6 +5,7 @@ source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/node.sh
 source /opt/mrm-manager/theme.sh
+source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/inbound.sh
 
 # --- UPDATE FUNCTIONS ---
@@ -12,14 +13,16 @@ update_script() {
     echo -e "${BLUE}Updating MRM Manager Scripts...${NC}"
     local INSTALL_DIR="/opt/mrm-manager"
     local REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
-    
+
     # Re-download files
     curl -s -o "$INSTALL_DIR/utils.sh" "$REPO_URL/utils.sh"
     curl -s -o "$INSTALL_DIR/ssl.sh" "$REPO_URL/ssl.sh"
     curl -s -o "$INSTALL_DIR/node.sh" "$REPO_URL/node.sh"
     curl -s -o "$INSTALL_DIR/theme.sh" "$REPO_URL/theme.sh"
+    curl -s -o "$INSTALL_DIR/site.sh" "$REPO_URL/site.sh"
+    curl -s -o "$INSTALL_DIR/inbound.sh" "$REPO_URL/inbound.sh"
     curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh"
-    
+
     chmod +x "$INSTALL_DIR/"*.sh
     echo -e "${GREEN}✔ Script Updated Successfully! Reloading...${NC}"
     sleep 1
@@ -59,14 +62,15 @@ install_deps
 while true; do
     clear
     echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v1.0              ${NC}"
+    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v2.0              ${NC}"
     echo -e "${BLUE}===========================================${NC}"
     echo "1) SSL Certificates Menu"
     echo "2) Panel & Node Configuration"
-    echo "3) Theme Manager"
-    echo "4) Update Center"
+    echo "3) Theme Manager (Subscription)"
+    echo "4) Fake Site / Camouflage"
     echo "5) Inbound Wizard"
-    echo "6) Exit"
+    echo "6) Update Center"
+    echo "7) Exit"
     echo -e "${BLUE}===========================================${NC}"
     read -p "Select: " OPTION
 
@@ -74,8 +78,9 @@ while true; do
         1) ssl_menu ;;
         2) settings_menu ;;
         3) theme_menu ;;
-        4) 
-bv      5) inbound_menu ;;
+        4) site_menu ;;
+        5) inbound_menu ;;
+        6) 
             echo -e "\n${CYAN}--- Update Center ---${NC}"
             echo "1) Update This Script (MRM Manager)"
             echo "2) Update Pasarguard Panel (Core)"
@@ -89,7 +94,7 @@ bv      5) inbound_menu ;;
                 *) ;;
             esac
             ;;
-        6) exit 0 ;;
+        7) exit 0 ;;
         *) ;;
     esac
 done
