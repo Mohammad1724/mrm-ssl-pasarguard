@@ -5,6 +5,7 @@ source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/node.sh
 source /opt/mrm-manager/theme.sh
+source /opt/mrm-manager/inbound.sh
 
 # --- UPDATE FUNCTIONS ---
 update_script() {
