@@ -10,15 +10,14 @@ source /opt/mrm-manager/inbound.sh
 source /opt/mrm-manager/backup.sh
 source /opt/mrm-manager/monitor.sh
 source /opt/mrm-manager/nodelink.sh
-source /opt/mrm-manager/cloudflare.sh  # New
+source /opt/mrm-manager/cloudflare.sh
 
-# --- UPDATE FUNCTIONS ---
+# --- UPDATE FUNCTION ---
 update_script() {
-    echo -e "${BLUE}Updating MRM Manager Scripts...${NC}"
+    echo -e "${BLUE}Updating MRM Manager...${NC}"
     local INSTALL_DIR="/opt/mrm-manager"
     local REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
-    # Download all
     curl -s -o "$INSTALL_DIR/utils.sh" "$REPO_URL/utils.sh"
     curl -s -o "$INSTALL_DIR/ssl.sh" "$REPO_URL/ssl.sh"
     curl -s -o "$INSTALL_DIR/node.sh" "$REPO_URL/node.sh"
@@ -37,81 +36,79 @@ update_script() {
     exec bash "$INSTALL_DIR/main.sh"
 }
 
-update_panel() {
-    echo -e "${BLUE}Updating Pasarguard Core...${NC}"
-    if [ -d "$PANEL_DIR" ]; then
-        cd "$PANEL_DIR"
-        docker compose pull
-        docker compose up -d
-        echo -e "${GREEN}✔ Panel Updated.${NC}"
-    else
-        echo -e "${RED}Panel directory not found.${NC}"
-    fi
-    pause
-}
-
-update_node() {
-    echo -e "${PURPLE}Updating Node Service...${NC}"
-    if [ -d "$NODE_DIR" ]; then
-        cd "$NODE_DIR"
-        docker compose pull
-        docker compose up -d
-        echo -e "${GREEN}✔ Node Updated.${NC}"
-    else
-        echo -e "${RED}Node directory not found.${NC}"
-    fi
-    pause
+# --- TOOLS MENU (Sub-menu) ---
+tools_menu() {
+    while true; do
+        clear
+        echo -e "${BLUE}===========================================${NC}"
+        echo -e "${YELLOW}      TOOLS & UTILITIES                    ${NC}"
+        echo -e "${BLUE}===========================================${NC}"
+        echo "1) Fake Site / Camouflage (Nginx)"
+        echo "2) Cloudflare DNS Manager"
+        echo "3) Theme Manager (Subscription Page)"
+        echo "4) Inbound Wizard"
+        echo "5) Back"
+        echo -e "${BLUE}===========================================${NC}"
+        read -p "Select: " T_OPT
+        case $T_OPT in
+            1) site_menu ;;
+            2) cloudflare_menu ;;
+            3) theme_menu ;;
+            4) inbound_menu ;;
+            5) return ;;
+            *) ;;
+        esac
+    done
 }
 
 # --- MAIN LOOP ---
 check_root
 install_deps
-check_installation
 
 while true; do
     clear
-    echo -e "${BLUE}===========================================${NC}"
-    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v2.5              ${NC}"
-    echo -e "${BLUE}===========================================${NC}"
-    echo "1) SSL Certificates Menu"
-    echo "2) Panel & Node Configuration"
-    echo "3) Theme Manager"
-    echo "4) Fake Site / Camouflage"
-    echo "5) Inbound Wizard"
-    echo "6) Backup & Restore"
-    echo "7) Monitoring & Status"
-    echo "8) Node Connection"
-    echo "9) Cloudflare Manager"
-    echo "10) Update Center"
-    echo "11) Exit"
-    echo -e "${BLUE}===========================================${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v3.0           ${NC}"
+    echo -e "${CYAN}===========================================${NC}"
+    echo ""
+    echo "  1) SSL Certificates"
+    echo "  2) Node Management"
+    echo "  3) Backup & Restore"
+    echo "  4) Monitoring"
+    echo "  5) Tools"
+    echo "  6) Update Script"
+    echo ""
+    echo "  0) Exit"
+    echo ""
+    echo -e "${CYAN}===========================================${NC}"
     read -p "Select: " OPTION
 
     case $OPTION in
         1) ssl_menu ;;
-        2) settings_menu ;;
-        3) theme_menu ;;
-        4) site_menu ;;
-        5) inbound_menu ;;
-        6) backup_menu ;;
-        7) monitor_menu ;;
-        8) nodelink_menu ;;
-        9) cloudflare_menu ;;
-        10) 
-            echo -e "\n${CYAN}--- Update Center ---${NC}"
-            echo "1) Update Manager Script"
-            echo "2) Update Panel Core"
-            echo "3) Update Node"
-            echo "4) Back"
-            read -p "Select: " U_OPT
-            case $U_OPT in
-                1) update_script ;;
-                2) update_panel ;;
-                3) update_node ;;
-                *) ;;
-            esac
+        2) 
+            while true; do
+                clear
+                echo -e "${BLUE}===========================================${NC}"
+                echo -e "${YELLOW}      NODE MANAGEMENT                      ${NC}"
+                echo -e "${BLUE}===========================================${NC}"
+                echo "1) Panel & Node Configuration"
+                echo "2) Node Connection (Token/Install)"
+                echo "3) Back"
+                echo -e "${BLUE}===========================================${NC}"
+                read -p "Select: " N_OPT
+                case $N_OPT in
+                    1) settings_menu ;;
+                    2) nodelink_menu ;;
+                    3) break ;;
+                    *) ;;
+                esac
+            done
             ;;
-        11) exit 0 ;;
+        3) backup_menu ;;
+        4) monitor_menu ;;
+        5) tools_menu ;;
+        6) update_script ;;
+        0) exit 0 ;;
         *) ;;
     esac
 done
