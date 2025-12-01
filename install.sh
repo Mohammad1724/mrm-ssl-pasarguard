@@ -20,3 +20,4 @@ curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh"
 
 chmod +x "$INSTALL_DIR/"*.sh
 bash "$INSTALL_DIR/main.sh"
+ln -sf /opt/mrm-manager/main.sh /usr/local/bin/mrm
