@@ -7,9 +7,20 @@ if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 # 1. INSTALL / UPDATE
 # ==========================================
 install_theme_wizard() {
+    clear
+    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${YELLOW}      THEME INSTALLATION WIZARD              ${NC}"
+    echo -e "${CYAN}=============================================${NC}"
+
+    # Check python3
+    if ! command -v python3 &> /dev/null; then
+        echo -e "${RED}Python3 is required but not installed.${NC}"
+        pause; return
+    fi
+
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
-    
+
     # 1. تهیه بکاپ برای خواندن تنظیمات قبلی
     if [ -s "$TEMPLATE_FILE" ]; then
         cp "$TEMPLATE_FILE" "/tmp/index_old.html"
@@ -23,24 +34,24 @@ install_theme_wizard() {
     local TEMP_DL="/tmp/index_dl.html"
     rm -f "$TEMP_DL"
 
-    if curl -L -o "$TEMP_DL" "$THEME_HTML_URL"; then
+    if curl -sL -o "$TEMP_DL" "$THEME_HTML_URL"; then
         if [ ! -s "$TEMP_DL" ]; then
             echo -e "${RED}✘ Downloaded file is empty! Check URL.${NC}"
             pause; return
         fi
+        echo -e "${GREEN}✔ Downloaded.${NC}"
     else
         echo -e "${RED}✘ Download failed! Connection error.${NC}"
         pause; return
     fi
 
     # 3. اجرای پایتون (Extraction + Input + Replacement)
-    # استفاده از 'EOF' باعث می‌شود که Bash در کدهای Regex دخالت نکند
     echo -e "${BLUE}Processing configuration...${NC}"
 
     export OLD_FILE="/tmp/index_old.html"
     export NEW_FILE="/tmp/index_dl.html"
     export FINAL_FILE="$TEMPLATE_FILE"
-    
+
     python3 - << 'EOF'
 import os
 import re
@@ -72,31 +83,24 @@ try:
     with open(old_path, 'r', encoding='utf-8', errors='ignore') as f:
         old_content = f.read()
         
-    # Regex دقیق برای استخراج اطلاعات از فایل HTML قبلی
-    
-    # Brand: id="brandTxt" data-text="..."
     m_brand = re.search(r'id="brandTxt"[^>]*data-text="([^"]+)"', old_content)
     if m_brand: defaults['brand'] = m_brand.group(1)
     
-    # Bot: class="bot-link" ... href="https://t.me/..."
-    # (چک کردن هر دو ترتیب احتمالی ویژگی‌ها)
     m_bot = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="bot-link"', old_content)
     if not m_bot:
         m_bot = re.search(r'class="bot-link"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
     if m_bot: defaults['bot'] = m_bot.group(1)
     
-    # Support: class="btn btn-dark" ... href="https://t.me/..."
     m_sup = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="btn btn-dark"', old_content)
     if not m_sup:
         m_sup = re.search(r'class="btn btn-dark"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
     if m_sup: defaults['sup'] = m_sup.group(1)
     
-    # News: <span id="nT">...</span>
     m_news = re.search(r'id="nT">\s*([^<]+)\s*<', old_content)
     if m_news: defaults['news'] = m_news.group(1).strip()
 
 except Exception as e:
-    pass # اگر فایل قدیمی مشکلی داشت، از پیش‌فرض‌ها استفاده می‌شود
+    pass
 
 # --- 2. دریافت ورودی از کاربر ---
 print(f'\n{CYAN}=== Theme Settings ==={NC}')
@@ -123,12 +127,10 @@ try:
     content = content.replace('__SUP__', new_sup)
     content = content.replace('__NEWS__', new_news)
     
-    # لینک‌های دانلود ثابت (یا از پیش‌فرض)
     content = content.replace('__ANDROID__', defaults['l_and'])
     content = content.replace('__IOS__', defaults['l_ios'])
     content = content.replace('__WIN__', defaults['l_win'])
 
-    # ذخیره نهایی
     with open(final_path, 'w', encoding='utf-8') as f:
         f.write(content)
         
@@ -149,13 +151,13 @@ EOF
 
         restart_service "panel"
         echo -e "${GREEN}✔ Theme Updated & Restarted.${NC}"
-        
+
         # پاکسازی
         rm -f "/tmp/index_old.html" "/tmp/index_dl.html"
     else
         echo -e "${RED}✘ Script Failed.${NC}"
     fi
-    
+
     pause
 }
 
@@ -163,9 +165,10 @@ EOF
 # 2. ACTIVATE THEME
 # ==========================================
 activate_theme() {
+    clear
     echo -e "${BLUE}Activating Theme...${NC}"
     local T_FILE="/var/lib/pasarguard/templates/subscription/index.html"
-    
+
     if [ ! -s "$T_FILE" ]; then
         echo -e "${RED}Theme file missing. Install first.${NC}"
         pause; return
@@ -186,6 +189,7 @@ activate_theme() {
 # 3. DEACTIVATE THEME
 # ==========================================
 deactivate_theme() {
+    clear
     echo -e "${YELLOW}Deactivating Theme...${NC}"
     if [ -f "$PANEL_ENV" ]; then
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
@@ -200,14 +204,32 @@ deactivate_theme() {
 # 4. UNINSTALL THEME
 # ==========================================
 uninstall_theme() {
+    clear
     echo -e "${RED}--- Uninstall Theme ---${NC}"
-    read -p "Delete files? (y/n): " CONFIRM
+    read -p "Delete theme files? (y/n): " CONFIRM
     if [[ "$CONFIRM" == "y" ]]; then
         rm -rf "/var/lib/pasarguard/templates/subscription"
-        deactivate_theme
-        echo -e "${GREEN}✔ Files removed.${NC}"
+        
+        # Deactivate without pause
+        if [ -f "$PANEL_ENV" ]; then
+            sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
+            sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
+            restart_service "panel"
+        fi
+        
+        echo -e "${GREEN}✔ Theme removed & deactivated.${NC}"
+    else
+        echo "Cancelled."
     fi
     pause
+}
+
+# Helper: Check if theme is active
+is_theme_active() {
+    if grep -q "SUBSCRIPTION_PAGE_TEMPLATE" "$PANEL_ENV" 2>/dev/null; then
+        return 0
+    fi
+    return 1
 }
 
 # === MENU ===
@@ -215,13 +237,23 @@ theme_menu() {
     while true; do
         clear
         echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}      THEME MANAGER v1.0                        ${NC}"
+        echo -e "${YELLOW}      THEME MANAGER                        ${NC}"
         echo -e "${BLUE}===========================================${NC}"
+        
+        # Show status
+        if is_theme_active; then
+            echo -e "Status: ${GREEN}● Active${NC}"
+        else
+            echo -e "Status: ${RED}● Inactive${NC}"
+        fi
+        echo ""
+        
         echo "1) Install / Update Theme (Wizard)"
         echo "2) Activate Theme"
         echo "3) Deactivate Theme"
         echo "4) Uninstall Theme"
         echo "5) Back"
+        echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " T_OPT
         case $T_OPT in
             1) install_theme_wizard ;;
