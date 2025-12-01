@@ -183,49 +183,42 @@ show_panel_stats() {
     echo -e "${YELLOW}      PANEL STATISTICS                       ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
-    
+
+    # Check for SQLite (may not exist if using PostgreSQL/TimescaleDB)
     local DB_FILE="/var/lib/pasarguard/db.sqlite3"
-    
-    if [ ! -f "$DB_FILE" ]; then
-        echo -e "${RED}Database not found!${NC}"
-        pause
-        return
-    fi
-    
-    # Total Users
+
     echo -e "${BLUE}User Statistics:${NC}"
-    local TOTAL_USERS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "N/A")
-    local ACTIVE_USERS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM users WHERE status='active';" 2>/dev/null || echo "N/A")
-    local EXPIRED_USERS=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM users WHERE status='expired';" 2>/dev/null || echo "N/A")
-    
-    echo -e "  Total Users:   ${CYAN}$TOTAL_USERS${NC}"
-    echo -e "  Active:        ${GREEN}$ACTIVE_USERS${NC}"
-    echo -e "  Expired:       ${RED}$EXPIRED_USERS${NC}"
-    echo ""
-    
-    # Inbounds
-    echo -e "${BLUE}Inbound Statistics:${NC}"
-    local CONFIG_FILE="/var/lib/pasarguard/config.json"
-    if [ -f "$CONFIG_FILE" ]; then
-        local INBOUND_COUNT=$(python3 -c "import json; f=open('$CONFIG_FILE'); d=json.load(f); print(len(d.get('inbounds',[])))" 2>/dev/null || echo "N/A")
-        echo -e "  Total Inbounds: ${CYAN}$INBOUND_COUNT${NC}"
+    if [ -f "$DB_FILE" ]; then
+        local TOTAL=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "?")
+        local ACTIVE=$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM users WHERE status='active';" 2>/dev/null || echo "?")
+        echo -e "  Total: ${CYAN}$TOTAL${NC}  |  Active: ${GREEN}$ACTIVE${NC}"
+    else
+        echo -e "  ${YELLOW}Using external database (PostgreSQL/TimescaleDB)${NC}"
+        echo -e "  ${YELLOW}Check panel dashboard for user stats.${NC}"
     fi
     echo ""
-    
+
+    # Inbounds
+    echo -e "${BLUE}Inbound Count:${NC}"
+    local CONFIG="/var/lib/pasarguard/config.json"
+    if [ -f "$CONFIG" ]; then
+        local COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG')).get('inbounds',[])))" 2>/dev/null || echo "?")
+        echo -e "  ${CYAN}$COUNT${NC} inbounds configured"
+    fi
+    echo ""
+
     # Last Backup
     echo -e "${BLUE}Last Backup:${NC}"
-    local LAST_BACKUP=$(ls -1t /root/mrm-backups/*.tar.gz 2>/dev/null | head -1)
-    if [ -n "$LAST_BACKUP" ]; then
-        local BACKUP_DATE=$(stat -c %y "$LAST_BACKUP" | cut -d' ' -f1,2 | cut -d'.' -f1)
-        echo -e "  ${CYAN}$BACKUP_DATE${NC}"
+    local LAST=$(ls -1t /root/mrm-backups/*.tar.gz 2>/dev/null | head -1)
+    if [ -n "$LAST" ]; then
+        echo -e "  ${CYAN}$(basename $LAST)${NC}"
     else
-        echo -e "  ${YELLOW}No backups found${NC}"
+        echo -e "  ${YELLOW}No backups${NC}"
     fi
     echo ""
-    
+
     pause
 }
-
 live_monitor() {
     while true; do
         clear
