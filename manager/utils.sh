@@ -31,10 +31,24 @@ check_root() {
 }
 
 install_deps() {
-    if ! command -v certbot &> /dev/null || ! command -v nginx &> /dev/null || ! command -v python3 &> /dev/null || ! command -v sqlite3 &> /dev/null; then
+    local NEED_INSTALL=false
+    
+    command -v certbot &> /dev/null || NEED_INSTALL=true
+    command -v nginx &> /dev/null || NEED_INSTALL=true
+    command -v python3 &> /dev/null || NEED_INSTALL=true
+    command -v sqlite3 &> /dev/null || NEED_INSTALL=true
+    command -v docker &> /dev/null || NEED_INSTALL=true
+    
+    if [ "$NEED_INSTALL" = true ]; then
         echo -e "${BLUE}[INFO] Installing dependencies...${NC}"
         apt-get update -qq > /dev/null
         apt-get install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 -qq > /dev/null
+        
+        # Install Docker if missing
+        if ! command -v docker &> /dev/null; then
+            echo -e "${BLUE}[INFO] Installing Docker...${NC}"
+            curl -fsSL https://get.docker.com | sh > /dev/null 2>&1
+        fi
     fi
 }
 
