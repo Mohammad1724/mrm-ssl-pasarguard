@@ -4,6 +4,8 @@
 INSTALL_DIR="/opt/mrm-manager"
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
+ln -sf /opt/mrm-manager/main.sh /usr/local/bin/mrm
+
 echo "Installing/Updating MRM Manager..."
 mkdir -p "$INSTALL_DIR"
 
@@ -20,4 +22,3 @@ curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh"
 
 chmod +x "$INSTALL_DIR/"*.sh
 bash "$INSTALL_DIR/main.sh"
-ln -sf /opt/mrm-manager/main.sh /usr/local/bin/mrm
