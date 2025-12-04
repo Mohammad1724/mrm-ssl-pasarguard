@@ -462,12 +462,12 @@
     
     <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('cpm')">بستن</button></div></div>
 
-    <script>
+        <script>
         var subUrl = '{{ subscription_url }}';
         var totStr = '{{ user.data_limit }}';
         var useStr = '{{ user.used_traffic }}';
         var expStr = '{{ user.expire }}';
-        
+
         {% raw %}
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src =
@@ -494,8 +494,13 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        var tPer = 0; var expDate = null; var daysLeft = 'نامحدود'; var daysNum = null;
-        if (expStr && expStr !== 'None' && expStr !== 'null') {
+        // --- BUG FIX START ---
+        var tPer = 0; 
+        var expDate = null; 
+        var daysLeftText = 'نامحدود'; 
+        var daysNum = null;
+
+        if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
                 if (!isNaN(expDate.getTime())) {
@@ -503,12 +508,23 @@
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-                    if (days > 30) tPer = 100; else if (days <= 0) { tPer = 0; daysLeft = 'منقضی'; }
-                    else { tPer = (days / 30) * 100; daysLeft = Math.ceil(days) + ' روز'; }
+
+                    if (days <= 0) { 
+                        tPer = 0; 
+                        daysLeftText = 'منقضی'; 
+                    } else {
+                        // محاسبه درصد (فرض بر این است که دوره ۱ ماهه بوده، اگر بیشتر بود درصد ۱۰۰ می‌ماند)
+                        // اما متن روز همیشه دقیق نمایش داده می‌شود
+                        tPer = Math.min((days / 30) * 100, 100); 
+                        daysLeftText = Math.ceil(days) + ' روز';
+                    }
                 }
             } catch (e) {}
-        } else { tPer = 100; }
-        if (daysLeft === 'نامحدود' && expDate === null) tPer = 100;
+        } else { 
+            tPer = 100; 
+            daysLeftText = 'نامحدود';
+        }
+        // --- BUG FIX END ---
 
         var usagePercent = document.getElementById('usagePercent');
         var usageFill    = document.getElementById('usageFill');
@@ -516,7 +532,7 @@
 
         usagePercent.innerText = Math.round(per) + '%';
         usageFill.style.width  = per + '%';
-        
+
         function fb(b) {
             if (tot === 0) return 'نامحدود';
             if (b <= 0)   return '0 B';
@@ -537,18 +553,26 @@
         var timeFill    = document.getElementById('timeFill');
         var timeLabel   = document.getElementById('timeLabel');
 
-        timePercent.innerText = Math.round(tPer) + '%';
-        timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
-        timeLabel.innerText   = daysLeft;
+        // اگر نامحدود بود، درصد را ۱۰۰ و سبز نشان بده
+        if (daysLeftText === 'نامحدود') {
+            timePercent.innerText = '∞';
+            timeFill.style.width = '100%';
+            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
+        } else {
+            timePercent.innerText = Math.round(tPer) + '%';
+            timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
+        }
+        
+        timeLabel.innerText = daysLeftText;
 
-        if (daysLeft === 'منقضی')
+        if (daysLeftText === 'منقضی')
             timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
         else if (daysNum !== null && daysNum < 3)
             timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
         else if (daysNum !== null && daysNum < 7)
             timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
-        else
-            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
+        else if (daysLeftText !== 'نامحدود')
+            timeFill.style.background = 'linear-gradient(90deg,#3b82f6, #6366f1)'; // آبی برای زمان زیاد
 
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
@@ -559,16 +583,14 @@
             if (!expDate) ed.innerText = 'نامحدود';
             else {
                 var sh   = expDate.toLocaleDateString('fa-IR');
-                var diff = Math.floor(
-                    (expDate - new Date()) / (1000 * 60 * 60 * 24)
-                );
+                var diff = Math.ceil(daysNum);
                 var txt = diff < 0
                     ? '(منقضی)'
                     : diff === 0
                     ? '(امروز)'
                     : '(' + diff + ' روز)';
                 var c   = diff < 0 ? '#ef4444'
-                        : diff === 0 ? '#f59e0b'
+                        : diff < 3 ? '#f59e0b'
                                      : '#10b981';
                 ed.innerHTML =
                     sh +
