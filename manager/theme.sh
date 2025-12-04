@@ -45,14 +45,15 @@ install_theme_wizard() {
         pause; return
     fi
 
-    # 3. اجرای پایتون (Extraction + Input + Replacement)
+    # 3. اجرای پایتون (Write to file first to fix EOFError)
     echo -e "${BLUE}Processing configuration...${NC}"
 
     export OLD_FILE="/tmp/index_old.html"
     export NEW_FILE="/tmp/index_dl.html"
     export FINAL_FILE="$TEMPLATE_FILE"
-
-    python3 - << 'EOF'
+    
+    # Write python script to temp file
+    cat > /tmp/mrm_theme_logic.py << 'PYEOF'
 import os
 import re
 import sys
@@ -107,10 +108,13 @@ print(f'\n{CYAN}=== Theme Settings ==={NC}')
 print(f'Press {YELLOW}ENTER{NC} to keep the current value [in brackets].\n')
 
 def get_input(label, key):
-    val = input(f'{label} [{defaults[key]}]: ').strip()
-    if not val:
+    try:
+        val = input(f'{label} [{defaults[key]}]: ').strip()
+        if not val:
+            return defaults[key]
+        return val
+    except EOFError:
         return defaults[key]
-    return val
 
 new_brand = get_input('Brand Name', 'brand')
 new_bot = get_input('Bot Username (No @)', 'bot')
@@ -139,10 +143,17 @@ try:
 except Exception as e:
     print(f'\nError processing file: {e}')
     sys.exit(1)
-EOF
+PYEOF
+
+    # Run the python script interactively
+    python3 /tmp/mrm_theme_logic.py
+    PY_EXIT_CODE=$?
+    
+    # Cleanup python script
+    rm -f /tmp/mrm_theme_logic.py
 
     # 4. بررسی نتیجه و تنظیمات پنل
-    if [ $? -eq 0 ]; then
+    if [ $PY_EXIT_CODE -eq 0 ]; then
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
