@@ -22,13 +22,12 @@ _get_cert_action() {
         DOM_FLAGS="$DOM_FLAGS -d $D"
     done
 
-    certbot certonly --standalone --non-interactive --agree-tos --email "$EMAIL" $DOM_FLAGS
+    # Added --expand to fix the error
+    certbot certonly --standalone --non-interactive --agree-tos --expand --email "$EMAIL" $DOM_FLAGS
     local CERTBOT_RESULT=$?
 
-    # Restart nginx
     systemctl start nginx 2>/dev/null
 
-    # Close port 80 if not needed
     if ! systemctl is-active --quiet nginx; then
         ufw delete allow 80/tcp > /dev/null 2>&1
     fi
@@ -73,7 +72,7 @@ _process_panel() {
         echo -e "${GREEN}✔ Panel SSL Updated.${NC}"
         echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
     else
-        echo -e "${RED}Error copying files.${NC}"
+        echo -e "${RED}Error copying files. (Certbot failed?)${NC}"
     fi
 }
 
@@ -94,7 +93,6 @@ _process_node() {
     local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
 
-    # Copy with Node naming convention (server.crt/key)
     if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt" && \
        cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"; then
 
@@ -113,8 +111,7 @@ _process_node() {
             restart_service "node"
             echo -e "${GREEN}✔ Node SSL Updated.${NC}"
         else
-            echo -e "${YELLOW}Node .env not found at $NODE_ENV${NC}"
-            echo -e "${GREEN}✔ Files copied. Configure manually.${NC}"
+            echo -e "${YELLOW}Node .env not found.${NC}"
         fi
         echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
     else
@@ -178,10 +175,10 @@ ssl_wizard() {
     local PRIMARY_DOM=${DOMAIN_LIST[0]}
 
     _get_cert_action "$MAIL" "${DOMAIN_LIST[@]}"
+    local RES=$?
 
-    if [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
+    if [ $RES -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
-        echo -e "${YELLOW}Check: Does the domain point to this server?${NC}"
         pause
         return
     fi
