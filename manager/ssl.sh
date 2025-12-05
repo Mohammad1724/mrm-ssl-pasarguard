@@ -144,7 +144,7 @@ _process_config() {
 ssl_wizard() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}         SSL GENERATION WIZARD               ${NC}"
+    echo -e "${YELLOW}         SSL GENERATION WIZARD  v1.0             ${NC}"
     echo -e "${CYAN}=============================================${NC}"
 
     read -p "How many domains? (e.g. 1, 2): " COUNT
