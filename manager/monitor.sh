@@ -2,7 +2,7 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
-# --- MONITORING FUNCTIONS ---
+CONFIG_FILE="/var/lib/pasarguard/config.json"
 
 show_service_status() {
     clear
@@ -186,7 +186,6 @@ show_panel_stats() {
     echo -e "${CYAN}=============================================${NC}"
     echo ""
 
-    # Check for SQLite (may not exist if using PostgreSQL/TimescaleDB)
     local DB_FILE="/var/lib/pasarguard/db.sqlite3"
 
     echo -e "${BLUE}User Statistics:${NC}"
@@ -202,10 +201,11 @@ show_panel_stats() {
 
     # Inbounds
     echo -e "${BLUE}Inbound Count:${NC}"
-    local CONFIG="/var/lib/pasarguard/config.json"
-    if [ -f "$CONFIG" ]; then
-        local COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG')).get('inbounds',[])))" 2>/dev/null || echo "?")
+    if [ -f "$CONFIG_FILE" ]; then
+        local COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG_FILE')).get('inbounds',[])))" 2>/dev/null || echo "?")
         echo -e "  ${CYAN}$COUNT${NC} inbounds configured"
+    else
+        echo -e "  ${RED}Config file not found ($CONFIG_FILE)${NC}"
     fi
     echo ""
 
@@ -264,12 +264,19 @@ live_monitor() {
     done
 }
 
-# --- NEW FEATURE: LOG WATCHER ---
+# --- NEW FEATURE: LOG WATCHER (FIXED) ---
 live_log_watcher() {
     clear
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}      LIVE TRAFFIC WATCHER (Sniffer)         ${NC}"
     echo -e "${CYAN}=============================================${NC}"
+    
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo -e "${RED}Config file not found at: $CONFIG_FILE${NC}"
+        echo -e "${YELLOW}Cannot change log level.${NC}"
+        pause
+        return
+    fi
     
     echo "How do you want to watch logs?"
     echo "1) Watch here in Terminal"
@@ -285,8 +292,9 @@ live_log_watcher() {
     
     if [ "$EN_LOG" == "y" ]; then
         # Backup & Change Config
-        cp /var/lib/pasarguard/config.json /tmp/config_backup.json
-        sed -i 's/"loglevel": "warning"/"loglevel": "info"/' /var/lib/pasarguard/config.json
+        cp "$CONFIG_FILE" /tmp/config_backup.json
+        sed -i 's/"loglevel": "warning"/"loglevel": "info"/' "$CONFIG_FILE"
+        
         echo -e "${BLUE}Restarting panel to apply log level...${NC}"
         restart_service "panel"
         
@@ -295,17 +303,19 @@ live_log_watcher() {
         echo ""
         
         if [ "$L_OPT" == "1" ]; then
-            # Watch in Terminal (Filter only destinations)
+            # Watch in Terminal
+            trap 'echo -e "\n${YELLOW}Restoring...${NC}"; sed -i "s/\"loglevel\": \"info\"/\"loglevel\": \"warning\"/" "$CONFIG_FILE"; restart_service "panel"; exit' SIGINT
+            
             docker logs -f --tail 10 pasarguard | grep --line-buffered "common/log: access" | grep --line-buffered "accepted"
         
         elif [ "$L_OPT" == "2" ]; then
-            # Telegram Setup
             read -p "Bot Token: " TG_TOKEN
             read -p "Chat ID: " TG_CHAT
             
+            trap 'echo -e "\n${YELLOW}Restoring...${NC}"; sed -i "s/\"loglevel\": \"info\"/\"loglevel\": \"warning\"/" "$CONFIG_FILE"; restart_service "panel"; exit' SIGINT
+            
             echo -e "${BLUE}Sending logs to Telegram...${NC}"
             docker logs -f --tail 0 pasarguard | grep --line-buffered "common/log: access" | while read line; do
-                # Extract domain
                 DOMAIN=$(echo "$line" | grep -oP 'tcp:\K[^:]+')
                 if [ -n "$DOMAIN" ]; then
                     curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
@@ -314,16 +324,12 @@ live_log_watcher() {
                 fi
             done
         fi
-        
-        # Restore Config (When user stops with Ctrl+C)
-        # Note: This part only runs if loop breaks gracefully, which Ctrl+C doesn't do easily in bash scripts
-        # Ideally user should manually revert or we trap the signal
     fi
     
-    # Revert Logic (Simple Approach)
+    # Revert Logic (If loop finishes normally)
     echo ""
     echo -e "${YELLOW}Restoring Log Level to WARNING...${NC}"
-    sed -i 's/"loglevel": "info"/"loglevel": "warning"/' /var/lib/pasarguard/config.json
+    sed -i 's/"loglevel": "info"/"loglevel": "warning"/' "$CONFIG_FILE"
     restart_service "panel"
     echo -e "${GREEN}✔ Log level restored.${NC}"
     pause
