@@ -5,28 +5,34 @@ if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 BACKUP_DIR="/root/mrm-backups"
 MAX_BACKUPS=10
 
-# --- CRITICAL PATHS (Check carefully) ---
-# 1. Panel Data & Xray Config
+# --- CONFIGURABLE PATHS ---
 PATH_DATA="/var/lib/pasarguard"
-# 2. Database Data (TimescaleDB/Postgres)
 PATH_DB="/var/lib/postgresql/pasarguard"
-# 3. Docker Files (.env, docker-compose.yml)
 PATH_OPT="/opt/pasarguard"
-# 4. Nginx Configs (Sub Link Separation)
-PATH_NGINX="/etc/nginx"
-# 5. SSL Certificates (Certbot)
 PATH_LE="/etc/letsencrypt"
-# 6. Node Paths (If exists)
 PATH_NODE_ENV="/opt/pg-node/.env"
 PATH_NODE_CERTS="/var/lib/pg-node/certs"
+
+# Detect Docker Compose Command
+if command -v docker-compose &> /dev/null; then
+    D_COMPOSE="docker-compose"
+else
+    D_COMPOSE="docker compose"
+fi
 
 create_backup() {
     clear
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}      CREATE FULL SERVER BACKUP              ${NC}"
     echo -e "${CYAN}=============================================${NC}"
-    echo "This will backup ALL critical data (DB, SSL, Nginx, Panel)."
-    echo ""
+    
+    # Check Disk Space (Need approx 2x DB size space)
+    local FREE_SPACE=$(df -k /root | awk 'NR==2 {print $4}')
+    if [ "$FREE_SPACE" -lt 512000 ]; then # 500MB min
+        echo -e "${RED}Warning: Low disk space. Backup might fail.${NC}"
+        read -p "Continue anyway? (y/n): " CONT
+        [ "$CONT" != "y" ] && return
+    fi
 
     mkdir -p "$BACKUP_DIR"
     local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -35,23 +41,22 @@ create_backup() {
 
     mkdir -p "$TEMP_PATH"
 
-    echo -e "${YELLOW}Stopping services to ensure DB integrity...${NC}"
+    echo -e "${YELLOW}Stopping services (Ensuring Data Integrity)...${NC}"
     
-    # Stop Services (Crucial for DB)
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose stop > /dev/null 2>&1
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose stop > /dev/null 2>&1
+    # Stop Services
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && $D_COMPOSE stop > /dev/null 2>&1
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && $D_COMPOSE stop > /dev/null 2>&1
     systemctl stop nginx > /dev/null 2>&1
 
-    echo -e "${BLUE}Backing up files (Preserving permissions)...${NC}"
+    echo -e "${BLUE}Backing up data...${NC}"
 
     # 1. Panel Data
     if [ -d "$PATH_DATA" ]; then
         mkdir -p "$TEMP_PATH/var_lib_pasarguard"
         cp -a "$PATH_DATA/." "$TEMP_PATH/var_lib_pasarguard/"
-        echo -e "${GREEN}✔ Panel Data Saved${NC}"
     fi
 
-    # 2. Database (Postgres)
+    # 2. Database (Safe Copy)
     if [ -d "$PATH_DB" ]; then
         mkdir -p "$TEMP_PATH/var_lib_postgresql"
         cp -a "$PATH_DB/." "$TEMP_PATH/var_lib_postgresql/"
@@ -64,21 +69,23 @@ create_backup() {
     if [ -d "$PATH_OPT" ]; then
         mkdir -p "$TEMP_PATH/opt_pasarguard"
         cp -a "$PATH_OPT/." "$TEMP_PATH/opt_pasarguard/"
-        echo -e "${GREEN}✔ Docker Configs Saved${NC}"
     fi
 
-    # 4. Nginx & SSL
-    if [ -d "$PATH_NGINX" ]; then
-        mkdir -p "$TEMP_PATH/etc_nginx"
-        cp -a "$PATH_NGINX/." "$TEMP_PATH/etc_nginx/"
-    fi
+    # 4. SSL Certificates
     if [ -d "$PATH_LE" ]; then
         mkdir -p "$TEMP_PATH/etc_letsencrypt"
         cp -a "$PATH_LE/." "$TEMP_PATH/etc_letsencrypt/"
+        echo -e "${GREEN}✔ SSL Certificates Saved${NC}"
     fi
-    echo -e "${GREEN}✔ Nginx & SSL Saved${NC}"
 
-    # 5. Node Configs
+    # 5. Nginx Configs (ONLY User Configs, not System)
+    mkdir -p "$TEMP_PATH/nginx_backup"
+    [ -d "/etc/nginx/conf.d" ] && cp -a "/etc/nginx/conf.d" "$TEMP_PATH/nginx_backup/"
+    [ -d "/etc/nginx/sites-available" ] && cp -a "/etc/nginx/sites-available" "$TEMP_PATH/nginx_backup/"
+    [ -d "/etc/nginx/sites-enabled" ] && cp -a "/etc/nginx/sites-enabled" "$TEMP_PATH/nginx_backup/"
+    echo -e "${GREEN}✔ Nginx Configs Saved${NC}"
+
+    # 6. Node Configs
     if [ -f "$PATH_NODE_ENV" ]; then
         mkdir -p "$TEMP_PATH/opt_pgnode"
         cp -a "$PATH_NODE_ENV" "$TEMP_PATH/opt_pgnode/.env"
@@ -88,30 +95,27 @@ create_backup() {
         cp -a "$PATH_NODE_CERTS/." "$TEMP_PATH/var_lib_pgnode_certs/"
     fi
 
-    # Restart Services ASAP
+    # Restart Services
     echo -e "${YELLOW}Restarting services...${NC}"
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose up -d > /dev/null 2>&1
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose up -d > /dev/null 2>&1
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && $D_COMPOSE up -d > /dev/null 2>&1
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && $D_COMPOSE up -d > /dev/null 2>&1
     systemctl start nginx > /dev/null 2>&1
 
     # Compress
-    echo -e "${BLUE}Compressing backup...${NC}"
+    echo -e "${BLUE}Compressing archive...${NC}"
     cd "$BACKUP_DIR"
-    if tar -czf "${BACKUP_NAME}.tar.gz" "$BACKUP_NAME"; then
+    if tar -czf "${BACKUP_NAME}.tar.gz" "$BACKUP_NAME" 2>/dev/null; then
         rm -rf "$TEMP_PATH"
-        
-        local FINAL_FILE="$BACKUP_DIR/${BACKUP_NAME}.tar.gz"
-        local SIZE=$(du -h "$FINAL_FILE" | cut -f1)
-
+        local SIZE=$(du -h "${BACKUP_NAME}.tar.gz" | cut -f1)
         echo ""
         echo -e "${GREEN}✔ BACKUP SUCCESSFUL!${NC}"
-        echo -e "File: ${CYAN}$FINAL_FILE${NC}"
+        echo -e "File: ${CYAN}$BACKUP_DIR/${BACKUP_NAME}.tar.gz${NC}"
         echo -e "Size: ${CYAN}$SIZE${NC}"
     else
-        echo -e "${RED}✘ Compression Failed!${NC}"
+        echo -e "${RED}✘ Compression Failed! Check disk space.${NC}"
     fi
 
-    # Rotate (Delete old backups)
+    # Rotate
     ls -1t "$BACKUP_DIR"/*.tar.gz | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -f 2>/dev/null
 
     pause
@@ -142,7 +146,7 @@ restore_backup() {
     [ -z "$FILE" ] && return
 
     echo ""
-    echo -e "${RED}⚠ DANGER: This will DELETE current data and RESTORE from backup.${NC}"
+    echo -e "${RED}⚠ DANGER: This will WIPE current data and RESTORE from backup.${NC}"
     read -p "Are you sure? (yes/no): " CONF
     [ "$CONF" != "yes" ] && return
 
@@ -152,7 +156,7 @@ restore_backup() {
     mkdir -p "$TEMP_DIR"
     
     if ! tar -xzf "$FILE" -C "$TEMP_DIR"; then
-        echo -e "${RED}✘ Backup file is corrupted! Aborting restore.${NC}"
+        echo -e "${RED}✘ Backup file is corrupted! Aborting.${NC}"
         rm -rf "$TEMP_DIR"
         pause; return
     fi
@@ -161,25 +165,26 @@ restore_backup() {
 
     # 2. Stop Services
     echo -e "${YELLOW}Stopping services...${NC}"
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose down
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose down
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && $D_COMPOSE down
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && $D_COMPOSE down
     systemctl stop nginx
 
     echo -e "${BLUE}Restoring files...${NC}"
 
-    # 3. Restore with Sync (Cleaner than rm && cp)
+    # 3. Restore Data (Using 'cp -a' for permissions)
+    
     # Panel Data
     if [ -d "$ROOT/var_lib_pasarguard" ]; then
         mkdir -p "$PATH_DATA"
         cp -a "$ROOT/var_lib_pasarguard/." "$PATH_DATA/"
     fi
     
-    # Database (Crucial)
+    # Database (Critical: Wipe old DB first)
     if [ -d "$ROOT/var_lib_postgresql" ]; then
         mkdir -p "$PATH_DB"
-        # Wipe old DB to prevent conflicts
-        rm -rf "$PATH_DB:?/"* 
+        rm -rf "${PATH_DB:?}/"*  # Safe delete
         cp -a "$ROOT/var_lib_postgresql/." "$PATH_DB/"
+        echo -e "${GREEN}✔ Database Restored${NC}"
     fi
 
     # Docker Configs
@@ -188,17 +193,22 @@ restore_backup() {
         cp -a "$ROOT/opt_pasarguard/." "$PATH_OPT/"
     fi
 
-    # Nginx & SSL
-    if [ -d "$ROOT/etc_nginx" ]; then
-        rm -rf "$PATH_NGINX"
-        cp -a "$ROOT/etc_nginx" "/etc/"
-    fi
+    # SSL Certificates
     if [ -d "$ROOT/etc_letsencrypt" ]; then
         rm -rf "$PATH_LE"
         cp -a "$ROOT/etc_letsencrypt" "/etc/"
+        echo -e "${GREEN}✔ SSL Restored${NC}"
+    fi
+
+    # Nginx Configs (Surgical Restore)
+    if [ -d "$ROOT/nginx_backup" ]; then
+        [ -d "$ROOT/nginx_backup/conf.d" ] && cp -a "$ROOT/nginx_backup/conf.d/." "/etc/nginx/conf.d/"
+        [ -d "$ROOT/nginx_backup/sites-available" ] && cp -a "$ROOT/nginx_backup/sites-available/." "/etc/nginx/sites-available/"
+        [ -d "$ROOT/nginx_backup/sites-enabled" ] && cp -a "$ROOT/nginx_backup/sites-enabled/." "/etc/nginx/sites-enabled/"
+        echo -e "${GREEN}✔ Nginx Configs Restored${NC}"
     fi
     
-    # Node
+    # Node Restore
     if [ -d "$ROOT/opt_pgnode" ]; then
         mkdir -p "$(dirname $PATH_NODE_ENV)"
         cp -a "$ROOT/opt_pgnode/.env" "$PATH_NODE_ENV"
@@ -210,8 +220,8 @@ restore_backup() {
 
     # 4. Restart
     echo -e "${YELLOW}Restarting services...${NC}"
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose up -d
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose up -d
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && $D_COMPOSE up -d
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && $D_COMPOSE up -d
     systemctl restart nginx
 
     rm -rf "$TEMP_DIR"
