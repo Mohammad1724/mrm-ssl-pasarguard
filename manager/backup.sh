@@ -80,7 +80,6 @@ create_backup() {
             read -p "Continue? (y/n): " CONT
             [ "$CONT" != "y" ] && return
         else
-            # In auto mode, abort if space is critical
             return
         fi
     fi
@@ -94,7 +93,7 @@ create_backup() {
 
     if [ "$1" != "auto" ]; then echo -e "${YELLOW}Stopping services...${NC}"; fi
     
-    # Stop Services (Essential for DB consistency)
+    # Stop Services
     [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && $D_COMPOSE stop > /dev/null 2>&1
     [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && $D_COMPOSE stop > /dev/null 2>&1
     systemctl stop nginx > /dev/null 2>&1
@@ -158,15 +157,24 @@ create_backup() {
 restore_backup() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}      RESTORE FULL SERVER BACKUP             ${NC}"
+    echo -e "${YELLOW}      RESTORE BACKUP                         ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
+    # Check if backups exist
     if [ -z "$(ls -A $BACKUP_DIR/*.tar.gz 2>/dev/null)" ]; then
-        echo -e "${RED}No backups found in $BACKUP_DIR${NC}"
-        pause; return
+        echo -e "${RED}No backups found in local directory!${NC}"
+        echo ""
+        echo -e "${YELLOW}--- HOW TO RESTORE FROM EXTERNAL FILE ---${NC}"
+        echo -e "1. Upload your .tar.gz backup file to this server."
+        echo -e "2. Place it in this folder: ${GREEN}$BACKUP_DIR${NC}"
+        echo -e "   (Run: mkdir -p $BACKUP_DIR)"
+        echo -e "3. Come back here and try again."
+        echo ""
+        pause
+        return
     fi
 
-    echo "Select backup to restore:"
+    echo -e "${BLUE}Available Backups in ${GREEN}$BACKUP_DIR${NC}:"
     local i=1
     declare -a backups
     for file in $(ls -1t "$BACKUP_DIR"/*.tar.gz); do
@@ -175,7 +183,11 @@ restore_backup() {
         ((i++))
     done
 
-    read -p "Select: " SEL
+    echo ""
+    echo -e "${YELLOW}Tip: To restore a file from Telegram, upload it to ${GREEN}$BACKUP_DIR${YELLOW} first.${NC}"
+    echo ""
+
+    read -p "Select backup to restore (0 to cancel): " SEL
     local FILE="${backups[$SEL]}"
     [ -z "$FILE" ] && return
 
