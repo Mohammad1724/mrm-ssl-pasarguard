@@ -2,7 +2,39 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
+# Default Path
 CONFIG_FILE="/var/lib/pasarguard/config.json"
+
+# --- HELPER TO FIND CONFIG ---
+ensure_config_exists() {
+    # 1. Check default path
+    if [ -f "$CONFIG_FILE" ]; then return 0; fi
+
+    # 2. Check if file exists inside docker and copy it out
+    echo -e "${YELLOW}Config file missing on host. Trying to fetch from container...${NC}"
+    
+    if docker ps | grep -q "pasarguard"; then
+        mkdir -p "$(dirname $CONFIG_FILE)"
+        # Try standard path inside container
+        docker cp pasarguard:/var/lib/pasarguard/config.json "$CONFIG_FILE" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then 
+            echo -e "${GREEN}✔ Config recovered from container.${NC}"
+            return 0
+        fi
+        
+        # Try alternative path (etc/xray)
+        docker cp pasarguard:/etc/xray/config.json "$CONFIG_FILE" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then 
+            echo -e "${GREEN}✔ Config recovered from container (alt path).${NC}"
+            return 0
+        fi
+    fi
+
+    # 3. Fail if still missing
+    echo -e "${RED}Error: config.json not found anywhere.${NC}"
+    echo -e "Please ensure Pasarguard is running and installed correctly."
+    return 1
+}
 
 show_service_status() {
     clear
@@ -200,12 +232,13 @@ show_panel_stats() {
     echo ""
 
     # Inbounds
+    ensure_config_exists > /dev/null 2>&1 # Try to fix config path silently
     echo -e "${BLUE}Inbound Count:${NC}"
     if [ -f "$CONFIG_FILE" ]; then
         local COUNT=$(python3 -c "import json; print(len(json.load(open('$CONFIG_FILE')).get('inbounds',[])))" 2>/dev/null || echo "?")
         echo -e "  ${CYAN}$COUNT${NC} inbounds configured"
     else
-        echo -e "  ${RED}Config file not found ($CONFIG_FILE)${NC}"
+        echo -e "  ${RED}Config file not found${NC}"
     fi
     echo ""
 
@@ -271,9 +304,8 @@ live_log_watcher() {
     echo -e "${YELLOW}      LIVE TRAFFIC WATCHER (Sniffer)         ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo -e "${RED}Config file not found at: $CONFIG_FILE${NC}"
-        echo -e "${YELLOW}Cannot change log level.${NC}"
+    # Try to find or recover config file
+    if ! ensure_config_exists; then
         pause
         return
     fi
@@ -306,6 +338,7 @@ live_log_watcher() {
             # Watch in Terminal
             trap 'echo -e "\n${YELLOW}Restoring...${NC}"; sed -i "s/\"loglevel\": \"info\"/\"loglevel\": \"warning\"/" "$CONFIG_FILE"; restart_service "panel"; exit' SIGINT
             
+            # Use docker logs, and also ensure we filter correctly
             docker logs -f --tail 10 pasarguard | grep --line-buffered "common/log: access" | grep --line-buffered "accepted"
         
         elif [ "$L_OPT" == "2" ]; then
