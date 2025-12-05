@@ -46,6 +46,8 @@ setup_domain_separation() {
         
     if [ ! -d "/etc/letsencrypt/live/$ADMIN_DOM" ]; then
         echo -e "${RED}SSL Failed! Check domains DNS.${NC}"
+        # Restart nginx anyway
+        systemctl start nginx
         return
     fi
     
@@ -82,10 +84,6 @@ EOF
     # 5. Restart Nginx
     systemctl start nginx
     systemctl restart nginx
-    
-    # 6. Update Panel Config (Optional but recommended)
-    echo -e "\n${BLUE}Updating Panel Subscription URL...${NC}"
-    # We can't easily edit DB, but we can guide user
     
     echo -e "${GREEN}✔ Configuration Complete!${NC}"
     echo ""
