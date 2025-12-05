@@ -104,7 +104,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$ADMIN_DOM/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:$PANEL_PORT;
+        proxy_pass https://127.0.0.1:$PANEL_PORT;
         
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
