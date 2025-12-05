@@ -32,14 +32,22 @@ install_requirements() {
 setup_domain_separation() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}      DOMAIN SEPARATOR (Verbose Mode)        ${NC}"
+    echo -e "${YELLOW}      DOMAIN SEPARATOR (Panel & Sub)         ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
     
     install_requirements
+    
+    # --- CLEANUP OLD CONFLICTS ---
+    if [ -f "/etc/nginx/conf.d/panel.conf" ]; then
+        echo -e "${YELLOW}Found conflicting config: panel.conf. Disabling it...${NC}"
+        mv /etc/nginx/conf.d/panel.conf /etc/nginx/conf.d/panel.conf.bak
+        echo -e "${GREEN}✔ Disabled panel.conf${NC}"
+    fi
+    
     echo ""
     
-    # 1. Get Inputs with Validation
+    # 1. Get Inputs
     read -p "1. Admin Domain (e.g., admin.site.com): " ADMIN_DOM
     if [ -z "$ADMIN_DOM" ]; then echo -e "${RED}Error: Admin Domain is required!${NC}"; pause; return; fi
     
@@ -68,21 +76,22 @@ setup_domain_separation() {
     systemctl stop nginx
     
     echo -e "${BLUE}Requesting SSL from Let's Encrypt...${NC}"
+    # We request for BOTH domains in ONE certificate (using --expand)
     certbot certonly --standalone --non-interactive --agree-tos --expand \
         --email "admin@$ADMIN_DOM" \
         -d "$ADMIN_DOM" -d "$SUB_DOM"
         
     local CERT_RES=$?
     
+    # Verify SSL Success
     if [ $CERT_RES -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$ADMIN_DOM" ]; then
         echo ""
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
-        echo -e "${YELLOW}Possible reasons:${NC}"
-        echo "1. Domains do not point to this server IP."
-        echo "2. Cloudflare Proxy (Orange Cloud) is ON (Turn it OFF for SSL generation)."
-        echo "3. Port 80 is blocked."
+        echo -e "${YELLOW}Troubleshooting:${NC}"
+        echo "1. Check if domains ($ADMIN_DOM, $SUB_DOM) point to this server IP."
+        echo "2. Turn OFF Cloudflare Proxy (Orange Cloud) temporarily."
+        echo "3. Ensure Port 80 is open."
         
-        # Restart nginx anyway so site doesn't stay down
         systemctl start nginx
         pause
         return
@@ -100,12 +109,20 @@ server {
     
     server_name $ADMIN_DOM $SUB_DOM;
 
+    # SSL Certificates (Using the first domain's path which contains both)
     ssl_certificate /etc/letsencrypt/live/$ADMIN_DOM/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$ADMIN_DOM/privkey.pem;
 
     location / {
+        # Connect to Panel via HTTPS (Important: Panel uses self-signed SSL)
         proxy_pass https://127.0.0.1:$PANEL_PORT;
         
+        # Ignore Panel's internal SSL errors (Fixes 502 Bad Gateway)
+        proxy_ssl_verify off;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ADMIN_DOM;
+
+        # Standard Proxy Headers
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -117,11 +134,10 @@ server {
 }
 EOF
 
-    # 4. Test Nginx Config
+    # 4. Test Nginx Config (Critical Step)
     echo -e "${BLUE}Testing Nginx configuration...${NC}"
-    nginx -t
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}✘ Nginx Config Error! Restoring...${NC}"
+    if ! nginx -t; then
+        echo -e "${RED}✘ Nginx Config Error! Reverting changes...${NC}"
         rm -f "$NGINX_CONF"
         systemctl start nginx
         pause
@@ -149,7 +165,8 @@ EOF
     echo -e "${GREEN}======================================${NC}"
     echo ""
     echo -e "1. Login Panel: ${CYAN}https://$ADMIN_DOM:$PORT${NC}"
-    echo -e "2. Set 'Subscription URL' in panel to: ${CYAN}https://$SUB_DOM:$PORT${NC}"
+    echo -e "2. Go to Panel Settings > General"
+    echo -e "3. Set 'Subscription URL' to: ${CYAN}https://$SUB_DOM:$PORT${NC}"
     echo ""
     pause
 }
@@ -162,7 +179,7 @@ domain_menu() {
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Separate Admin & Sub Domains (Wizard)"
         echo "2) Restart Nginx"
-        echo "3) Check Nginx Status/Errors"
+        echo "3) Check Nginx Status"
         echo "4) Edit Nginx Config Manually"
         echo "5) Back"
         read -p "Select: " OPT
