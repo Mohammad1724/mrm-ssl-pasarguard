@@ -4,93 +4,112 @@ if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 BACKUP_DIR="/root/mrm-backups"
 MAX_BACKUPS=10
-DATA_DIR="/var/lib/pasarguard"
-ENV_FILE="/opt/pasarguard/.env"
-NODE_ENV_FILE="/opt/pg-node/.env"
-NODE_CERTS_DIR="/var/lib/pg-node/certs"
+
+# Paths to Backup
+PATH_DATA="/var/lib/pasarguard"
+PATH_DB="/var/lib/postgresql/pasarguard"
+PATH_OPT="/opt/pasarguard"
+PATH_NGINX="/etc/nginx"
+PATH_LE="/etc/letsencrypt"
+PATH_NODE_ENV="/opt/pg-node/.env"
+PATH_NODE_CERTS="/var/lib/pg-node/certs"
 
 create_backup() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}      CREATE FULL BACKUP                     ${NC}"
+    echo -e "${YELLOW}      CREATE FULL SERVER BACKUP              ${NC}"
     echo -e "${CYAN}=============================================${NC}"
+    echo "This will backup Panel, Database, Nginx, SSL, and Configs."
     echo ""
 
     mkdir -p "$BACKUP_DIR"
-
     local TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    local BACKUP_NAME="backup_$TIMESTAMP"
+    local BACKUP_NAME="mrm_full_backup_$TIMESTAMP"
     local TEMP_PATH="$BACKUP_DIR/$BACKUP_NAME"
 
     mkdir -p "$TEMP_PATH"
 
-    echo -e "${YELLOW}Stopping services (few seconds)...${NC}"
-
+    echo -e "${YELLOW}Stopping services to ensure data integrity...${NC}"
+    
     # Stop Services
-    if [ -d "$PANEL_DIR" ]; then
-        cd "$PANEL_DIR" && docker compose stop > /dev/null 2>&1
-    fi
-    if [ -d "$NODE_DIR" ]; then
-        cd "$NODE_DIR" && docker compose stop > /dev/null 2>&1
-    fi
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose stop > /dev/null 2>&1
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose stop > /dev/null 2>&1
+    systemctl stop nginx > /dev/null 2>&1
 
-    # Backup Panel Data
-    echo -e "${BLUE}[1/4] Panel Data...${NC}"
-    if [ -d "$DATA_DIR" ]; then
-        cp -r "$DATA_DIR" "$TEMP_PATH/panel_data" 2>/dev/null
-        echo -e "${GREEN}✔ Done${NC}"
+    # 1. Panel Data (Config & Certs)
+    echo -e "${BLUE}[1/6] Backing up Panel Data...${NC}"
+    if [ -d "$PATH_DATA" ]; then
+        mkdir -p "$TEMP_PATH/var_lib_pasarguard"
+        cp -r "$PATH_DATA/." "$TEMP_PATH/var_lib_pasarguard/"
+        echo -e "${GREEN}✔ Panel Data Saved${NC}"
     else
-        echo -e "${YELLOW}! Not found${NC}"
+        echo -e "${RED}✘ Panel Data not found${NC}"
     fi
 
-    if [ -f "$ENV_FILE" ]; then
-        cp "$ENV_FILE" "$TEMP_PATH/panel.env"
+    # 2. Database (Postgres/Timescale)
+    echo -e "${BLUE}[2/6] Backing up Database...${NC}"
+    if [ -d "$PATH_DB" ]; then
+        mkdir -p "$TEMP_PATH/var_lib_postgresql"
+        cp -r "$PATH_DB/." "$TEMP_PATH/var_lib_postgresql/"
+        echo -e "${GREEN}✔ Database Saved${NC}"
+    else
+        echo -e "${YELLOW}! Database folder not found (Maybe SQLite?)${NC}"
     fi
 
-    # Backup Node Data
-    echo -e "${BLUE}[2/4] Node Data...${NC}"
-    if [ -f "$NODE_ENV_FILE" ]; then
-        cp "$NODE_ENV_FILE" "$TEMP_PATH/node.env"
-        echo -e "${GREEN}✔ Done${NC}"
+    # 3. Docker Configs (.env & yml)
+    echo -e "${BLUE}[3/6] Backing up Docker Configs...${NC}"
+    if [ -d "$PATH_OPT" ]; then
+        mkdir -p "$TEMP_PATH/opt_pasarguard"
+        cp -r "$PATH_OPT/." "$TEMP_PATH/opt_pasarguard/"
+        echo -e "${GREEN}✔ Docker Configs Saved${NC}"
     fi
-    if [ -d "$NODE_CERTS_DIR" ]; then
-        cp -r "$NODE_CERTS_DIR" "$TEMP_PATH/node_certs" 2>/dev/null
+
+    # 4. Nginx & SSL
+    echo -e "${BLUE}[4/6] Backing up Nginx & SSL...${NC}"
+    if [ -d "$PATH_NGINX" ]; then
+        mkdir -p "$TEMP_PATH/etc_nginx"
+        cp -r "$PATH_NGINX/." "$TEMP_PATH/etc_nginx/"
     fi
+    if [ -d "$PATH_LE" ]; then
+        mkdir -p "$TEMP_PATH/etc_letsencrypt"
+        cp -r "$PATH_LE/." "$TEMP_PATH/etc_letsencrypt/"
+    fi
+    echo -e "${GREEN}✔ Nginx & SSL Saved${NC}"
+
+    # 5. Node Configs (If exists)
+    echo -e "${BLUE}[5/6] Backing up Node Configs...${NC}"
+    if [ -f "$PATH_NODE_ENV" ]; then
+        mkdir -p "$TEMP_PATH/opt_pgnode"
+        cp "$PATH_NODE_ENV" "$TEMP_PATH/opt_pgnode/.env"
+    fi
+    if [ -d "$PATH_NODE_CERTS" ]; then
+        mkdir -p "$TEMP_PATH/var_lib_pgnode_certs"
+        cp -r "$PATH_NODE_CERTS/." "$TEMP_PATH/var_lib_pgnode_certs/"
+    fi
+    echo -e "${GREEN}✔ Node Configs Checked${NC}"
 
     # Restart Services
-    echo -e "${BLUE}[3/4] Restarting services...${NC}"
-    if [ -d "$PANEL_DIR" ]; then
-        cd "$PANEL_DIR" && docker compose up -d > /dev/null 2>&1
-    fi
-    if [ -d "$NODE_DIR" ]; then
-        cd "$NODE_DIR" && docker compose up -d > /dev/null 2>&1
-    fi
-    echo -e "${GREEN}✔ Services running${NC}"
+    echo -e "${YELLOW}Restarting services...${NC}"
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose up -d > /dev/null 2>&1
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose up -d > /dev/null 2>&1
+    systemctl start nginx > /dev/null 2>&1
 
     # Compress
-    echo -e "${BLUE}[4/4] Compressing...${NC}"
+    echo -e "${BLUE}[6/6] Compressing...${NC}"
     cd "$BACKUP_DIR"
-    tar -czf "${BACKUP_NAME}.tar.gz" "$BACKUP_NAME" 2>/dev/null
+    tar -czf "${BACKUP_NAME}.tar.gz" "$BACKUP_NAME"
     rm -rf "$TEMP_PATH"
 
     local FINAL_FILE="$BACKUP_DIR/${BACKUP_NAME}.tar.gz"
-    
-    if [ -f "$FINAL_FILE" ]; then
-        local FILE_SIZE=$(du -h "$FINAL_FILE" | cut -f1)
-        echo ""
-        echo -e "${GREEN}✔ Backup Complete!${NC}"
-        echo -e "File: ${CYAN}$FINAL_FILE${NC}"
-        echo -e "Size: ${CYAN}$FILE_SIZE${NC}"
-    else
-        echo -e "${RED}✘ Backup failed!${NC}"
-    fi
+    local SIZE=$(du -h "$FINAL_FILE" | cut -f1)
 
-    # Cleanup old backups
-    local COUNT=$(ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
-    if [ "$COUNT" -gt "$MAX_BACKUPS" ]; then
-        ls -1t "$BACKUP_DIR"/*.tar.gz | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -f
-        echo -e "${YELLOW}Old backups cleaned (keeping $MAX_BACKUPS)${NC}"
-    fi
+    echo ""
+    echo -e "${GREEN}✔ BACKUP SUCCESSFUL!${NC}"
+    echo -e "File: ${CYAN}$FINAL_FILE${NC}"
+    echo -e "Size: ${CYAN}$SIZE${NC}"
+
+    # Rotate
+    ls -1t "$BACKUP_DIR"/*.tar.gz | tail -n +$((MAX_BACKUPS + 1)) | xargs rm -f 2>/dev/null
 
     pause
 }
@@ -98,114 +117,73 @@ create_backup() {
 restore_backup() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}      RESTORE BACKUP                         ${NC}"
+    echo -e "${YELLOW}      RESTORE FULL SERVER BACKUP             ${NC}"
     echo -e "${CYAN}=============================================${NC}"
-
-    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A $BACKUP_DIR/*.tar.gz 2>/dev/null)" ]; then
-        echo -e "${RED}No backups found.${NC}"
-        pause
-        return
+    
+    if [ -z "$(ls -A $BACKUP_DIR/*.tar.gz 2>/dev/null)" ]; then
+        echo -e "${RED}No backups found in $BACKUP_DIR${NC}"
+        pause; return
     fi
 
-    echo ""
+    echo "Select backup to restore:"
     local i=1
     declare -a backups
-    for file in $(ls -1t "$BACKUP_DIR"/*.tar.gz 2>/dev/null); do
-        local fname=$(basename "$file")
-        local fsize=$(du -h "$file" | cut -f1)
-        local fdate=$(stat -c %y "$file" 2>/dev/null | cut -d'.' -f1)
+    for file in $(ls -1t "$BACKUP_DIR"/*.tar.gz); do
+        echo -e "${GREEN}$i)${NC} $(basename $file) ($(du -h $file | cut -f1))"
         backups[$i]="$file"
-        echo -e "${GREEN}$i)${NC} $fname ($fsize) - $fdate"
         ((i++))
     done
 
-    echo ""
-    read -p "Select backup (0 to cancel): " SEL
-    [ "$SEL" == "0" ] && return
-    [ -z "${backups[$SEL]}" ] && { echo "Invalid."; pause; return; }
-
-    local SELECTED="${backups[$SEL]}"
+    read -p "Select: " SEL
+    local FILE="${backups[$SEL]}"
+    [ -z "$FILE" ] && return
 
     echo ""
-    echo -e "${RED}⚠ WARNING: This will OVERWRITE all current data!${NC}"
-    read -p "Type 'yes' to confirm: " CONFIRM
-    [ "$CONFIRM" != "yes" ] && { echo "Cancelled."; pause; return; }
+    echo -e "${RED}⚠ WARNING: This will DELETE current data and RESTORE from backup.${NC}"
+    read -p "Are you sure? (yes/no): " CONF
+    [ "$CONF" != "yes" ] && return
+
+    echo -e "${YELLOW}Stopping services...${NC}"
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose down
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose down
+    systemctl stop nginx
 
     local TEMP_DIR="/tmp/mrm_restore_$$"
     mkdir -p "$TEMP_DIR"
+    tar -xzf "$FILE" -C "$TEMP_DIR"
+    local ROOT="$TEMP_DIR/$(ls "$TEMP_DIR" | head -1)"
 
-    echo -e "${BLUE}Extracting...${NC}"
-    if ! tar -xzf "$SELECTED" -C "$TEMP_DIR" 2>/dev/null; then
-        echo -e "${RED}Failed to extract backup!${NC}"
-        rm -rf "$TEMP_DIR"
-        pause
-        return
-    fi
+    echo -e "${BLUE}Restoring files...${NC}"
 
-    local SOURCE_PATH="$TEMP_DIR/$(ls "$TEMP_DIR" | head -1)"
-
-    echo -e "${BLUE}Stopping services...${NC}"
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose down > /dev/null 2>&1
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose down > /dev/null 2>&1
-
-    # Restore Panel
-    if [ -d "$SOURCE_PATH/panel_data" ]; then
-        rm -rf "$DATA_DIR"
-        cp -r "$SOURCE_PATH/panel_data" "$DATA_DIR"
-        echo -e "${GREEN}✔ Panel data restored${NC}"
-    fi
-    if [ -f "$SOURCE_PATH/panel.env" ]; then
-        cp "$SOURCE_PATH/panel.env" "$ENV_FILE"
-        echo -e "${GREEN}✔ Panel config restored${NC}"
-    fi
-
+    # Restore paths
+    [ -d "$ROOT/var_lib_pasarguard" ] && rm -rf "$PATH_DATA"/* && cp -r "$ROOT/var_lib_pasarguard/." "$PATH_DATA/"
+    [ -d "$ROOT/var_lib_postgresql" ] && rm -rf "$PATH_DB"/* && cp -r "$ROOT/var_lib_postgresql/." "$PATH_DB/"
+    [ -d "$ROOT/opt_pasarguard" ] && cp -r "$ROOT/opt_pasarguard/." "$PATH_OPT/"
+    [ -d "$ROOT/etc_nginx" ] && cp -r "$ROOT/etc_nginx/." "$PATH_NGINX/"
+    [ -d "$ROOT/etc_letsencrypt" ] && cp -r "$ROOT/etc_letsencrypt/." "$PATH_LE/"
+    
     # Restore Node
-    if [ -f "$SOURCE_PATH/node.env" ]; then
-        mkdir -p "$(dirname $NODE_ENV_FILE)"
-        cp "$SOURCE_PATH/node.env" "$NODE_ENV_FILE"
-        echo -e "${GREEN}✔ Node config restored${NC}"
+    if [ -d "$ROOT/opt_pgnode" ]; then
+        mkdir -p "$(dirname $PATH_NODE_ENV)"
+        cp "$ROOT/opt_pgnode/.env" "$PATH_NODE_ENV"
     fi
-    if [ -d "$SOURCE_PATH/node_certs" ]; then
-        mkdir -p "$NODE_CERTS_DIR"
-        cp -r "$SOURCE_PATH/node_certs"/* "$NODE_CERTS_DIR/"
-        echo -e "${GREEN}✔ Node certs restored${NC}"
+    if [ -d "$ROOT/var_lib_pgnode_certs" ]; then
+        mkdir -p "$PATH_NODE_CERTS"
+        cp -r "$ROOT/var_lib_pgnode_certs/." "$PATH_NODE_CERTS/"
     fi
+
+    echo -e "${YELLOW}Restarting services...${NC}"
+    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose up -d
+    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose up -d
+    systemctl restart nginx
 
     rm -rf "$TEMP_DIR"
-
-    echo -e "${BLUE}Starting services...${NC}"
-    [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR" && docker compose up -d > /dev/null 2>&1
-    [ -d "$NODE_DIR" ] && cd "$NODE_DIR" && docker compose up -d > /dev/null 2>&1
-
     echo -e "${GREEN}✔ Restore Complete!${NC}"
     pause
 }
 
 list_backups() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}      BACKUP LIST                            ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
-
-    if [ ! -d "$BACKUP_DIR" ] || [ -z "$(ls -A $BACKUP_DIR/*.tar.gz 2>/dev/null)" ]; then
-        echo "No backups found."
-        pause
-        return
-    fi
-
-    printf "%-35s %-10s %-20s\n" "Filename" "Size" "Date"
-    echo "--------------------------------------------------------------"
-
-    for file in $(ls -1t "$BACKUP_DIR"/*.tar.gz 2>/dev/null); do
-        local fname=$(basename "$file")
-        local fsize=$(du -h "$file" | cut -f1)
-        local fdate=$(stat -c %y "$file" 2>/dev/null | cut -d'.' -f1)
-        printf "%-35s %-10s %-20s\n" "$fname" "$fsize" "$fdate"
-    done
-
-    echo ""
-    echo "Total: $(ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l) backups"
+    ls -lh "$BACKUP_DIR"/*.tar.gz 2>/dev/null
     pause
 }
 
@@ -215,11 +193,10 @@ backup_menu() {
         echo -e "${BLUE}===========================================${NC}"
         echo -e "${YELLOW}      BACKUP & RESTORE                     ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        echo "1) Create Backup"
+        echo "1) Create Full Backup"
         echo "2) Restore Backup"
         echo "3) List Backups"
         echo "4) Back"
-        echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " OPT
         case $OPT in
             1) create_backup ;;
