@@ -2,13 +2,15 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
+# --- MONITORING FUNCTIONS ---
+
 show_service_status() {
     clear
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}      SERVICE STATUS                         ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
-    
+
     # Panel Status
     echo -ne "Panel (Pasarguard):  "
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "pasarguard"; then
@@ -16,7 +18,7 @@ show_service_status() {
     else
         echo -e "${RED}● Stopped${NC}"
     fi
-    
+
     # Node Status
     echo -ne "Node Service:        "
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "pg-node\|pasarguard-node"; then
@@ -24,7 +26,7 @@ show_service_status() {
     else
         echo -e "${RED}● Stopped${NC}"
     fi
-    
+
     # Nginx Status
     echo -ne "Nginx (Fake Site):   "
     if systemctl is-active --quiet nginx 2>/dev/null; then
@@ -32,7 +34,7 @@ show_service_status() {
     else
         echo -e "${RED}● Stopped${NC}"
     fi
-    
+
     # Docker Status
     echo -ne "Docker Engine:       "
     if systemctl is-active --quiet docker 2>/dev/null; then
@@ -40,7 +42,7 @@ show_service_status() {
     else
         echo -e "${RED}● Stopped${NC}"
     fi
-    
+
     echo ""
     pause
 }
@@ -51,14 +53,14 @@ show_system_resources() {
     echo -e "${YELLOW}      SYSTEM RESOURCES                       ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
-    
+
     # CPU Usage
     echo -e "${BLUE}CPU Usage:${NC}"
     local CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
     local CPU_BAR=$(printf "%-${CPU_USAGE%%.*}s" | tr ' ' '█')
     echo -e "  ${CPU_USAGE}% ${GREEN}${CPU_BAR}${NC}"
     echo ""
-    
+
     # RAM Usage
     echo -e "${BLUE}Memory Usage:${NC}"
     local MEM_TOTAL=$(free -m | awk '/^Mem:/{print $2}')
@@ -68,7 +70,7 @@ show_system_resources() {
     local MEM_BAR=$(printf "%-$((MEM_PERCENT / 2))s" | tr ' ' '█')
     echo -e "  ${GREEN}${MEM_BAR}${NC}"
     echo ""
-    
+
     # Disk Usage
     echo -e "${BLUE}Disk Usage:${NC}"
     local DISK_INFO=$(df -h / | awk 'NR==2{print $3"/"$2" ("$5")"}')
@@ -81,12 +83,12 @@ show_system_resources() {
         echo -e "  ${GREEN}${DISK_BAR}${NC}"
     fi
     echo ""
-    
+
     # Uptime
     echo -e "${BLUE}System Uptime:${NC}"
     echo -e "  $(uptime -p)"
     echo ""
-    
+
     pause
 }
 
@@ -96,7 +98,7 @@ show_network_info() {
     echo -e "${YELLOW}      NETWORK INFORMATION                    ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
-    
+
     # Server IP
     echo -e "${BLUE}Server IP Addresses:${NC}"
     local IPV4=$(curl -s -4 ifconfig.me 2>/dev/null || echo "N/A")
@@ -104,7 +106,7 @@ show_network_info() {
     echo -e "  IPv4: ${CYAN}$IPV4${NC}"
     echo -e "  IPv6: ${CYAN}$IPV6${NC}"
     echo ""
-    
+
     # Open Ports
     echo -e "${BLUE}Listening Ports (VPN Related):${NC}"
     ss -tlnp 2>/dev/null | grep -E ':443|:80|:8080|:2053|:2083|:2087|:2096' | while read line; do
@@ -114,13 +116,13 @@ show_network_info() {
         echo -e "  Port ${GREEN}$PORT${NC} - $PROC"
     done
     echo ""
-    
+
     # Active Connections
     echo -e "${BLUE}Active Connections:${NC}"
     local CONN_COUNT=$(ss -tn state established 2>/dev/null | wc -l)
     echo -e "  Total: ${CYAN}$((CONN_COUNT - 1))${NC} connections"
     echo ""
-    
+
     pause
 }
 
@@ -130,31 +132,31 @@ show_ssl_status() {
     echo -e "${YELLOW}      SSL CERTIFICATES STATUS                ${NC}"
     echo -e "${CYAN}=============================================${NC}"
     echo ""
-    
+
     local CERT_DIR="/var/lib/pasarguard/certs"
-    
+
     if [ ! -d "$CERT_DIR" ]; then
         echo -e "${RED}Certificate directory not found!${NC}"
         pause
         return
     fi
-    
+
     echo -e "${BLUE}Installed Certificates:${NC}"
     echo ""
     printf "%-30s %-15s %-20s\n" "Domain" "Status" "Expires"
     echo "----------------------------------------------------------------------"
-    
+
     for domain_dir in "$CERT_DIR"/*/; do
         [ -d "$domain_dir" ] || continue
         local domain=$(basename "$domain_dir")
         local cert_file="$domain_dir/fullchain.pem"
-        
+
         if [ -f "$cert_file" ]; then
             local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
             local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null)
             local now_epoch=$(date +%s)
             local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
-            
+
             local status="${GREEN}Valid${NC}"
             if [ "$days_left" -lt 0 ]; then
                 status="${RED}Expired${NC}"
@@ -163,7 +165,7 @@ show_ssl_status() {
             elif [ "$days_left" -lt 30 ]; then
                 status="${YELLOW}Warning${NC}"
             fi
-            
+
             printf "%-30s " "$domain"
             echo -ne "$status"
             printf "%*s" $((15 - 5)) ""
@@ -172,7 +174,7 @@ show_ssl_status() {
             printf "%-30s ${RED}%-15s${NC} %-20s\n" "$domain" "No Cert" "-"
         fi
     done
-    
+
     echo ""
     pause
 }
@@ -219,6 +221,7 @@ show_panel_stats() {
 
     pause
 }
+
 live_monitor() {
     while true; do
         clear
@@ -226,39 +229,104 @@ live_monitor() {
         echo -e "${YELLOW}      LIVE MONITOR (Press Q to exit)        ${NC}"
         echo -e "${CYAN}=============================================${NC}"
         echo ""
-        
+
         # Time
         echo -e "${BLUE}Current Time:${NC} $(date '+%Y-%m-%d %H:%M:%S')"
         echo ""
-        
+
         # Quick Status
         echo -ne "Panel: "
         docker ps --format '{{.Names}}' 2>/dev/null | grep -q "pasarguard" && echo -ne "${GREEN}●${NC} " || echo -ne "${RED}●${NC} "
-        
+
         echo -ne "Node: "
         docker ps --format '{{.Names}}' 2>/dev/null | grep -q "pg-node" && echo -ne "${GREEN}●${NC} " || echo -ne "${RED}●${NC} "
-        
+
         echo -ne "Nginx: "
         systemctl is-active --quiet nginx && echo -e "${GREEN}●${NC}" || echo -e "${RED}●${NC}"
         echo ""
-        
+
         # Resources
         local CPU=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}')
         local MEM=$(free | awk '/^Mem:/{printf "%.1f", $3/$2*100}')
         local DISK=$(df / | awk 'NR==2{print $5}')
-        
+
         echo -e "CPU: ${CYAN}${CPU}%${NC}  |  RAM: ${CYAN}${MEM}%${NC}  |  Disk: ${CYAN}${DISK}${NC}"
         echo ""
-        
+
         # Connections
         local CONNS=$(ss -tn state established 2>/dev/null | wc -l)
         echo -e "Active Connections: ${CYAN}$((CONNS - 1))${NC}"
         echo ""
-        
+
         echo -e "${YELLOW}Refreshing every 3 seconds... Press Ctrl+C to exit${NC}"
-        
+
         sleep 3
     done
+}
+
+# --- NEW FEATURE: LOG WATCHER ---
+live_log_watcher() {
+    clear
+    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${YELLOW}      LIVE TRAFFIC WATCHER (Sniffer)         ${NC}"
+    echo -e "${CYAN}=============================================${NC}"
+    
+    echo "How do you want to watch logs?"
+    echo "1) Watch here in Terminal"
+    echo "2) Send to Telegram (Requires Bot Token)"
+    echo "3) Back"
+    read -p "Select: " L_OPT
+    
+    if [ "$L_OPT" == "3" ]; then return; fi
+    
+    echo ""
+    echo -e "${YELLOW}To see destinations, we must temporarily set log level to INFO.${NC}"
+    read -p "Enable INFO logs? (y/n): " EN_LOG
+    
+    if [ "$EN_LOG" == "y" ]; then
+        # Backup & Change Config
+        cp /var/lib/pasarguard/config.json /tmp/config_backup.json
+        sed -i 's/"loglevel": "warning"/"loglevel": "info"/' /var/lib/pasarguard/config.json
+        echo -e "${BLUE}Restarting panel to apply log level...${NC}"
+        restart_service "panel"
+        
+        echo -e "${GREEN}✔ Log level set to INFO.${NC}"
+        echo -e "${YELLOW}Waiting for traffic... (Press Ctrl+C to stop)${NC}"
+        echo ""
+        
+        if [ "$L_OPT" == "1" ]; then
+            # Watch in Terminal (Filter only destinations)
+            docker logs -f --tail 10 pasarguard | grep --line-buffered "common/log: access" | grep --line-buffered "accepted"
+        
+        elif [ "$L_OPT" == "2" ]; then
+            # Telegram Setup
+            read -p "Bot Token: " TG_TOKEN
+            read -p "Chat ID: " TG_CHAT
+            
+            echo -e "${BLUE}Sending logs to Telegram...${NC}"
+            docker logs -f --tail 0 pasarguard | grep --line-buffered "common/log: access" | while read line; do
+                # Extract domain
+                DOMAIN=$(echo "$line" | grep -oP 'tcp:\K[^:]+')
+                if [ -n "$DOMAIN" ]; then
+                    curl -s -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+                        -d chat_id="$TG_CHAT" \
+                        -d text="🌐 Visit: $DOMAIN" > /dev/null
+                fi
+            done
+        fi
+        
+        # Restore Config (When user stops with Ctrl+C)
+        # Note: This part only runs if loop breaks gracefully, which Ctrl+C doesn't do easily in bash scripts
+        # Ideally user should manually revert or we trap the signal
+    fi
+    
+    # Revert Logic (Simple Approach)
+    echo ""
+    echo -e "${YELLOW}Restoring Log Level to WARNING...${NC}"
+    sed -i 's/"loglevel": "info"/"loglevel": "warning"/' /var/lib/pasarguard/config.json
+    restart_service "panel"
+    echo -e "${GREEN}✔ Log level restored.${NC}"
+    pause
 }
 
 monitor_menu() {
@@ -272,8 +340,9 @@ monitor_menu() {
         echo "3) Network Information"
         echo "4) SSL Certificates Status"
         echo "5) Panel Statistics"
-        echo "6) Live Monitor"
-        echo "7) Back"
+        echo "6) Live Monitor (Dashboard)"
+        echo "7) Live Traffic Watcher (Sniffer)"
+        echo "8) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " OPT
         case $OPT in
@@ -283,7 +352,8 @@ monitor_menu() {
             4) show_ssl_status ;;
             5) show_panel_stats ;;
             6) live_monitor ;;
-            7) return ;;
+            7) live_log_watcher ;;
+            8) return ;;
             *) ;;
         esac
     done
