@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Installer for MRM Manager v3.3
+# Installer for MRM Manager v1.0
 INSTALL_DIR="/opt/mrm-manager"
 
-# --- نکته مهم: اگر فایل‌ها را در پوشه manager آپلود کردید، این آدرس درست است ---
+
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
 # Colors
@@ -19,7 +19,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing MRM Manager v3.3...${NC}"
+echo -e "${BLUE}Installing MRM Manager v1.0...${NC}"
 mkdir -p "$INSTALL_DIR"
 
 # List of files to install
