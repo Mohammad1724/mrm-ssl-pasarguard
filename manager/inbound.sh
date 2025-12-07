@@ -2,16 +2,12 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
-# Config file path
 XRAY_CONFIG="/var/lib/pasarguard/config.json"
 
-# --- Helper Functions ---
 gen_uuid() { cat /proc/sys/kernel/random/uuid; }
 gen_short_id() { openssl rand -hex 8; }
 
-# FIXED: Dynamic Container Detection
 get_xray_container() {
-    # Try to find container with image containing 'pasarguard' or name 'pasarguard'
     local CID=$(docker ps --format '{{.ID}} {{.Names}} {{.Image}}' | grep -i "pasarguard" | head -1 | awk '{print $1}')
     echo "$CID"
 }
@@ -22,7 +18,6 @@ gen_keys() {
         echo "Private: ERROR Public: ERROR"
         return
     fi
-    
     local K=$(docker exec "$CID" xray x25519 2>/dev/null)
     if [ -z "$K" ]; then
         echo "Private: ERROR Public: ERROR"
@@ -54,7 +49,6 @@ check_requirements() {
     return 0
 }
 
-# --- 1. REALITY WIZARD ---
 add_vless_reality() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -77,22 +71,12 @@ add_vless_reality() {
     read -p "Select: " NET_OPT
 
     local NETWORK="tcp"
-    local FLOW_LINE=""
-    local STREAM_EXTRA=""
+    local USE_FLOW="false"
 
     case $NET_OPT in
-        1) 
-            NETWORK="tcp"
-            FLOW_LINE='"flow": "xtls-rprx-vision",'
-            ;;
-        2) 
-            NETWORK="xhttp"
-            STREAM_EXTRA='"xhttpSettings": { "path": "/", "mode": "auto" },'
-            ;;
-        3)
-            NETWORK="grpc"
-            STREAM_EXTRA='"grpcSettings": { "serviceName": "grpc" },'
-            ;;
+        1) NETWORK="tcp"; USE_FLOW="true" ;;
+        2) NETWORK="xhttp"; USE_FLOW="false" ;;
+        3) NETWORK="grpc"; USE_FLOW="false" ;;
         *) return ;;
     esac
 
@@ -107,6 +91,7 @@ add_vless_reality() {
     local PUB=$(echo "$KEYS" | grep "Public" | awk '{print $3}')
     local SID=$(gen_short_id)
     local UUID=$(gen_uuid)
+    local EMAIL="user_$(date +%s)"
 
     if [[ "$PRIV" == "ERROR" ]] || [[ -z "$PRIV" ]]; then
         echo -e "${RED}Error generating keys. Is Panel running?${NC}"
@@ -115,41 +100,61 @@ add_vless_reality() {
 
     backup_config
 
+    # FIXED: Pass variables properly to Python
     python3 << PYEOF
 import json
 import sys
 
 config_path = "$XRAY_CONFIG"
+tag = "$TAG"
+port = $PORT
+network = "$NETWORK"
+use_flow = $USE_FLOW  # Now it's a Python boolean
+dest = "$DEST"
+clean_dest = "$CLEAN_DEST"
+priv_key = "$PRIV"
+short_id = "$SID"
+uuid = "$UUID"
+email = "$EMAIL"
+
+# Build client
+client = {
+    "id": uuid,
+    "email": email
+}
+if use_flow:
+    client["flow"] = "xtls-rprx-vision"
+
+# Build stream settings
+stream_settings = {
+    "network": network,
+    "security": "reality",
+    "realitySettings": {
+        "show": False,
+        "dest": f"{dest}:443",
+        "xver": 0,
+        "serverNames": [dest, f"www.{clean_dest}"],
+        "privateKey": priv_key,
+        "shortIds": [short_id],
+        "fingerprint": "chrome"
+    }
+}
+
+if network == "xhttp":
+    stream_settings["xhttpSettings"] = {"path": "/", "mode": "auto"}
+elif network == "grpc":
+    stream_settings["grpcSettings"] = {"serviceName": "grpc"}
+
 new_inbound = {
-    "tag": "$TAG",
+    "tag": tag,
     "listen": "0.0.0.0",
-    "port": $PORT,
+    "port": port,
     "protocol": "vless",
     "settings": {
-        "clients": [
-            {
-                "id": "$UUID",
-                $([ -n "$FLOW_LINE" ] && echo '"flow": "xtls-rprx-vision",')
-                "email": "user_$(date +%s)"
-            }
-        ],
+        "clients": [client],
         "decryption": "none"
     },
-    "streamSettings": {
-        "network": "$NETWORK",
-        "security": "reality",
-        $([ "$NETWORK" == "xhttp" ] && echo '"xhttpSettings": { "path": "/", "mode": "auto" },')
-        $([ "$NETWORK" == "grpc" ] && echo '"grpcSettings": { "serviceName": "grpc" },')
-        "realitySettings": {
-            "show": False,
-            "dest": "$DEST:443",
-            "xver": 0,
-            "serverNames": ["$DEST", "www.$CLEAN_DEST"],
-            "privateKey": "$PRIV",
-            "shortIds": ["$SID"],
-            "fingerprint": "chrome"
-        }
-    },
+    "streamSettings": stream_settings,
     "sniffing": {
         "enabled": True,
         "destOverride": ["http", "tls", "quic"]
@@ -164,12 +169,9 @@ try:
         config['inbounds'] = []
     
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
-            print(f"CONFLICT: Port $PORT is already used by '{ib.get('tag')}'")
+        if ib.get('port') == port:
+            print(f"CONFLICT: Port {port} is already used by '{ib.get('tag')}'")
             sys.exit(1)
-    
-    if "$NETWORK" != "tcp" and "flow" in new_inbound["settings"]["clients"][0]:
-        del new_inbound["settings"]["clients"][0]["flow"]
     
     config['inbounds'].append(new_inbound)
     
@@ -199,7 +201,6 @@ PYEOF
     pause
 }
 
-# --- 2. STANDARD TLS WIZARD ---
 add_standard_tls() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -265,58 +266,65 @@ add_standard_tls() {
 
     local UUID=$(gen_uuid)
     local PASS=$(openssl rand -hex 8)
-    local AUTH_INFO=""
-
-    if [ "$PROTO" == "trojan" ]; then
-        AUTH_INFO="Password: $PASS"
-    else
-        AUTH_INFO="UUID: $UUID"
-    fi
+    local EMAIL="user_$(date +%s)"
 
     backup_config
 
-    local CERTS_JSON=""
-    for d in "${DOMAINS[@]}"; do
-        [ -n "$CERTS_JSON" ] && CERTS_JSON="$CERTS_JSON,"
-        CERTS_JSON="$CERTS_JSON{\"certificateFile\": \"/var/lib/pasarguard/certs/$d/fullchain.pem\", \"keyFile\": \"/var/lib/pasarguard/certs/$d/privkey.pem\"}"
-    done
+    # Build domains JSON array
+    local DOMAINS_JSON=$(printf '%s\n' "${DOMAINS[@]}" | jq -R . | jq -s .)
 
     python3 << PYEOF
 import json
 import sys
 
 config_path = "$XRAY_CONFIG"
+tag = "$TAG"
+port = $PORT
+protocol = "$PROTO"
+network = "$NETWORK"
+uuid = "$UUID"
+password = "$PASS"
+email = "$EMAIL"
+domains = $DOMAINS_JSON
 
-net_settings = {}
-if "$NETWORK" == "ws":
-    net_settings = {"wsSettings": {"path": "/"}}
-elif "$NETWORK" == "xhttp":
-    net_settings = {"xhttpSettings": {"path": "/", "mode": "auto"}}
-elif "$NETWORK" == "grpc":
-    net_settings = {"grpcSettings": {"serviceName": "grpc"}}
+# Build certificates
+certificates = []
+for d in domains:
+    certificates.append({
+        "certificateFile": f"/var/lib/pasarguard/certs/{d}/fullchain.pem",
+        "keyFile": f"/var/lib/pasarguard/certs/{d}/privkey.pem"
+    })
 
-if "$PROTO" == "trojan":
-    clients = [{"password": "$PASS", "email": "user_trojan"}]
+# Build client
+if protocol == "trojan":
+    clients = [{"password": password, "email": email}]
 else:
-    clients = [{"id": "$UUID", "email": "user_$PROTO"}]
+    clients = [{"id": uuid, "email": email}]
+
+# Build network settings
+stream_settings = {
+    "network": network,
+    "security": "tls",
+    "tlsSettings": {"certificates": certificates}
+}
+
+if network == "ws":
+    stream_settings["wsSettings"] = {"path": "/"}
+elif network == "xhttp":
+    stream_settings["xhttpSettings"] = {"path": "/", "mode": "auto"}
+elif network == "grpc":
+    stream_settings["grpcSettings"] = {"serviceName": "grpc"}
 
 new_inbound = {
-    "tag": "$TAG",
+    "tag": tag,
     "listen": "0.0.0.0",
-    "port": $PORT,
-    "protocol": "$PROTO",
+    "port": port,
+    "protocol": protocol,
     "settings": {
         "clients": clients,
         "decryption": "none"
     },
-    "streamSettings": {
-        "network": "$NETWORK",
-        "security": "tls",
-        **net_settings,
-        "tlsSettings": {
-            "certificates": [$CERTS_JSON]
-        }
-    },
+    "streamSettings": stream_settings,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
 
@@ -328,8 +336,8 @@ try:
         config['inbounds'] = []
     
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
-            print(f"CONFLICT: Port $PORT used by '{ib.get('tag')}'")
+        if ib.get('port') == port:
+            print(f"CONFLICT: Port {port} used by '{ib.get('tag')}'")
             sys.exit(1)
     
     config['inbounds'].append(new_inbound)
@@ -347,7 +355,11 @@ PYEOF
         echo "-------------------------------------"
         echo -e "Type:   ${CYAN}$PROTO + $NETWORK (TLS)${NC}"
         echo -e "Port:   ${CYAN}$PORT${NC}"
-        echo -e "Auth:   ${CYAN}$AUTH_INFO${NC}"
+        if [ "$PROTO" == "trojan" ]; then
+            echo -e "Pass:   ${CYAN}$PASS${NC}"
+        else
+            echo -e "UUID:   ${CYAN}$UUID${NC}"
+        fi
         echo "-------------------------------------"
         read -p "Restart Panel? (y/n): " R
         [ "$R" == "y" ] && restart_service "panel"
@@ -355,7 +367,6 @@ PYEOF
     pause
 }
 
-# --- 3. NO-TLS WIZARD ---
 add_notls_http() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -387,6 +398,7 @@ add_notls_http() {
     [ "$N_OPT" == "2" ] && NETWORK="httpupgrade"
 
     local UUID=$(gen_uuid)
+    local EMAIL="cdn_user_$(date +%s)"
 
     backup_config
 
@@ -395,23 +407,33 @@ import json
 import sys
 
 config_path = "$XRAY_CONFIG"
+tag = "$TAG"
+port = $PORT
+protocol = "$PROTO"
+network = "$NETWORK"
+uuid = "$UUID"
+email = "$EMAIL"
 
-net_settings = {"wsSettings": {"path": "/"}} if "$NETWORK" == "ws" else {"httpupgradeSettings": {"path": "/"}}
+stream_settings = {
+    "network": network,
+    "security": "none"
+}
+
+if network == "ws":
+    stream_settings["wsSettings"] = {"path": "/"}
+else:
+    stream_settings["httpupgradeSettings"] = {"path": "/"}
 
 new_inbound = {
-    "tag": "$TAG",
+    "tag": tag,
     "listen": "0.0.0.0",
-    "port": $PORT,
-    "protocol": "$PROTO",
+    "port": port,
+    "protocol": protocol,
     "settings": {
-        "clients": [{"id": "$UUID", "email": "cdn_user"}],
+        "clients": [{"id": uuid, "email": email}],
         "decryption": "none"
     },
-    "streamSettings": {
-        "network": "$NETWORK",
-        "security": "none",
-        **net_settings
-    },
+    "streamSettings": stream_settings,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
 
@@ -423,8 +445,8 @@ try:
         config['inbounds'] = []
     
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
-            print(f"CONFLICT: Port $PORT used")
+        if ib.get('port') == port:
+            print(f"CONFLICT: Port {port} used")
             sys.exit(1)
     
     config['inbounds'].append(new_inbound)
