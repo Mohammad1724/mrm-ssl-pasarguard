@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Load Utils if run standalone
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 # ==========================================
@@ -12,7 +11,6 @@ install_theme_wizard() {
     echo -e "${YELLOW}      THEME INSTALLATION WIZARD              ${NC}"
     echo -e "${CYAN}=============================================${NC}"
 
-    # Check python3
     if ! command -v python3 &> /dev/null; then
         echo -e "${RED}Python3 is required but not installed.${NC}"
         pause; return
@@ -20,45 +18,53 @@ install_theme_wizard() {
 
     TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
+    mkdir -p "$TEMPLATE_DIR"
 
-    # 1. تهیه بکاپ برای خواندن تنظیمات قبلی
+    # 1. Backup old file
     if [ -s "$TEMPLATE_FILE" ]; then
         cp "$TEMPLATE_FILE" "/tmp/index_old.html"
     else
         echo "" > "/tmp/index_old.html"
     fi
 
-    # 2. دانلود فایل جدید
-    echo -e "\n${BLUE}Downloading latest template...${NC}"
-    mkdir -p "$TEMPLATE_DIR"
+    # 2. Source Selection (FIXED)
     local TEMP_DL="/tmp/index_dl.html"
     rm -f "$TEMP_DL"
-
-    if curl -sL -o "$TEMP_DL" "$THEME_HTML_URL"; then
-        if [ ! -s "$TEMP_DL" ]; then
-            echo -e "${RED}✘ Downloaded file is empty! Check URL.${NC}"
-            pause; return
-        fi
-        echo -e "${GREEN}✔ Downloaded.${NC}"
+    
+    # Check if index.html exists in current directory or install directory
+    if [ -f "./index.html" ]; then
+        echo -e "${GREEN}✔ Found local index.html. Using it.${NC}"
+        cp "./index.html" "$TEMP_DL"
+    elif [ -f "/opt/mrm-manager/index.html" ]; then
+        echo -e "${GREEN}✔ Found local index.html in /opt/mrm-manager. Using it.${NC}"
+        cp "/opt/mrm-manager/index.html" "$TEMP_DL"
     else
-        echo -e "${RED}✘ Download failed! Connection error.${NC}"
+        echo -e "${BLUE}No local index.html found. Downloading from GitHub...${NC}"
+        if curl -sL -o "$TEMP_DL" "$THEME_HTML_URL"; then
+             echo -e "${GREEN}✔ Downloaded.${NC}"
+        else
+             echo -e "${RED}✘ Download failed!${NC}"
+             pause; return
+        fi
+    fi
+
+    if [ ! -s "$TEMP_DL" ]; then
+        echo -e "${RED}✘ Source file is empty.${NC}"
         pause; return
     fi
 
-    # 3. اجرای پایتون (Write to file first to fix EOFError)
+    # 3. Processing
     echo -e "${BLUE}Processing configuration...${NC}"
 
     export OLD_FILE="/tmp/index_old.html"
     export NEW_FILE="/tmp/index_dl.html"
     export FINAL_FILE="$TEMPLATE_FILE"
-    
-    # Write python script to temp file
+
     cat > /tmp/mrm_theme_logic.py << 'PYEOF'
 import os
 import re
 import sys
 
-# Colors for Python output
 CYAN = '\033[0;36m'
 YELLOW = '\033[1;33m'
 GREEN = '\033[0;32m'
@@ -68,7 +74,6 @@ old_path = os.environ.get('OLD_FILE')
 new_path = os.environ.get('NEW_FILE')
 final_path = os.environ.get('FINAL_FILE')
 
-# پیش‌فرض‌ها
 defaults = {
     'brand': 'FarsNetVIP',
     'bot': 'MyBot',
@@ -79,80 +84,56 @@ defaults = {
     'l_win': 'https://github.com/2dust/v2rayN/releases'
 }
 
-# --- 1. خواندن تنظیمات قبلی از فایل قدیمی ---
 try:
     with open(old_path, 'r', encoding='utf-8', errors='ignore') as f:
         old_content = f.read()
-        
     m_brand = re.search(r'id="brandTxt"[^>]*data-text="([^"]+)"', old_content)
     if m_brand: defaults['brand'] = m_brand.group(1)
-    
     m_bot = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="bot-link"', old_content)
-    if not m_bot:
-        m_bot = re.search(r'class="bot-link"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
+    if not m_bot: m_bot = re.search(r'class="bot-link"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
     if m_bot: defaults['bot'] = m_bot.group(1)
-    
     m_sup = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="btn btn-dark"', old_content)
-    if not m_sup:
-        m_sup = re.search(r'class="btn btn-dark"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
+    if not m_sup: m_sup = re.search(r'class="btn btn-dark"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
     if m_sup: defaults['sup'] = m_sup.group(1)
-    
     m_news = re.search(r'id="nT">\s*([^<]+)\s*<', old_content)
     if m_news: defaults['news'] = m_news.group(1).strip()
+except: pass
 
-except Exception as e:
-    pass
-
-# --- 2. دریافت ورودی از کاربر ---
 print(f'\n{CYAN}=== Theme Settings ==={NC}')
 print(f'Press {YELLOW}ENTER{NC} to keep the current value [in brackets].\n')
 
 def get_input(label, key):
     try:
         val = input(f'{label} [{defaults[key]}]: ').strip()
-        if not val:
-            return defaults[key]
+        if not val: return defaults[key]
         return val
-    except EOFError:
-        return defaults[key]
+    except EOFError: return defaults[key]
 
 new_brand = get_input('Brand Name', 'brand')
 new_bot = get_input('Bot Username (No @)', 'bot')
 new_sup = get_input('Support ID (No @)', 'sup')
 new_news = get_input('News Text', 'news')
 
-# --- 3. جایگزینی در فایل جدید ---
 try:
-    with open(new_path, 'r', encoding='utf-8', errors='ignore') as f:
-        content = f.read()
-
+    with open(new_path, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
     content = content.replace('__BRAND__', new_brand)
     content = content.replace('__BOT__', new_bot)
     content = content.replace('__SUP__', new_sup)
     content = content.replace('__NEWS__', new_news)
-    
     content = content.replace('__ANDROID__', defaults['l_and'])
     content = content.replace('__IOS__', defaults['l_ios'])
     content = content.replace('__WIN__', defaults['l_win'])
-
-    with open(final_path, 'w', encoding='utf-8') as f:
-        f.write(content)
-        
+    with open(final_path, 'w', encoding='utf-8') as f: f.write(content)
     print(f'\n{GREEN}✔ Settings saved successfully.{NC}')
-
 except Exception as e:
     print(f'\nError processing file: {e}')
     sys.exit(1)
 PYEOF
 
-    # Run the python script interactively
     python3 /tmp/mrm_theme_logic.py
     PY_EXIT_CODE=$?
-    
-    # Cleanup python script
     rm -f /tmp/mrm_theme_logic.py
 
-    # 4. بررسی نتیجه و تنظیمات پنل
     if [ $PY_EXIT_CODE -eq 0 ]; then
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
@@ -162,46 +143,29 @@ PYEOF
 
         restart_service "panel"
         echo -e "${GREEN}✔ Theme Updated & Restarted.${NC}"
-
-        # پاکسازی
         rm -f "/tmp/index_old.html" "/tmp/index_dl.html"
     else
         echo -e "${RED}✘ Script Failed.${NC}"
     fi
-
     pause
 }
 
-# ==========================================
-# 2. ACTIVATE THEME
-# ==========================================
 activate_theme() {
     clear
-    echo -e "${BLUE}Activating Theme...${NC}"
     local T_FILE="/var/lib/pasarguard/templates/subscription/index.html"
-
-    if [ ! -s "$T_FILE" ]; then
-        echo -e "${RED}Theme file missing. Install first.${NC}"
-        pause; return
-    fi
-
+    if [ ! -s "$T_FILE" ]; then echo -e "${RED}Theme file missing. Install first.${NC}"; pause; return; fi
     if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
     sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
     sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
     echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
     echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
-
     restart_service "panel"
     echo -e "${GREEN}✔ Theme Activated.${NC}"
     pause
 }
 
-# ==========================================
-# 3. DEACTIVATE THEME
-# ==========================================
 deactivate_theme() {
     clear
-    echo -e "${YELLOW}Deactivating Theme...${NC}"
     if [ -f "$PANEL_ENV" ]; then
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
@@ -211,55 +175,35 @@ deactivate_theme() {
     pause
 }
 
-# ==========================================
-# 4. UNINSTALL THEME
-# ==========================================
 uninstall_theme() {
     clear
-    echo -e "${RED}--- Uninstall Theme ---${NC}"
     read -p "Delete theme files? (y/n): " CONFIRM
     if [[ "$CONFIRM" == "y" ]]; then
         rm -rf "/var/lib/pasarguard/templates/subscription"
-        
-        # Deactivate without pause
         if [ -f "$PANEL_ENV" ]; then
             sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
             sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
             restart_service "panel"
         fi
-        
         echo -e "${GREEN}✔ Theme removed & deactivated.${NC}"
-    else
-        echo "Cancelled."
     fi
     pause
 }
 
-# Helper: Check if theme is active
 is_theme_active() {
-    if grep -q "SUBSCRIPTION_PAGE_TEMPLATE" "$PANEL_ENV" 2>/dev/null; then
-        return 0
-    fi
+    if grep -q "SUBSCRIPTION_PAGE_TEMPLATE" "$PANEL_ENV" 2>/dev/null; then return 0; fi
     return 1
 }
 
-# === MENU ===
 theme_menu() {
     while true; do
         clear
         echo -e "${BLUE}===========================================${NC}"
         echo -e "${YELLOW}      THEME MANAGER                        ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        
-        # Show status
-        if is_theme_active; then
-            echo -e "Status: ${GREEN}● Active${NC}"
-        else
-            echo -e "Status: ${RED}● Inactive${NC}"
-        fi
+        if is_theme_active; then echo -e "Status: ${GREEN}● Active${NC}"; else echo -e "Status: ${RED}● Inactive${NC}"; fi
         echo ""
-        
-        echo "1) Install / Update Theme (Wizard)"
+        echo "1) Install / Update Theme (Local/Web)"
         echo "2) Activate Theme"
         echo "3) Deactivate Theme"
         echo "4) Uninstall Theme"
