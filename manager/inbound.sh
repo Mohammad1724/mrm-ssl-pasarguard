@@ -9,8 +9,21 @@ XRAY_CONFIG="/var/lib/pasarguard/config.json"
 gen_uuid() { cat /proc/sys/kernel/random/uuid; }
 gen_short_id() { openssl rand -hex 8; }
 
+# FIXED: Dynamic Container Detection
+get_xray_container() {
+    # Try to find container with image containing 'pasarguard' or name 'pasarguard'
+    local CID=$(docker ps --format '{{.ID}} {{.Names}} {{.Image}}' | grep -i "pasarguard" | head -1 | awk '{print $1}')
+    echo "$CID"
+}
+
 gen_keys() { 
-    local K=$(docker exec pasarguard xray x25519 2>/dev/null)
+    local CID=$(get_xray_container)
+    if [ -z "$CID" ]; then
+        echo "Private: ERROR Public: ERROR"
+        return
+    fi
+    
+    local K=$(docker exec "$CID" xray x25519 2>/dev/null)
     if [ -z "$K" ]; then
         echo "Private: ERROR Public: ERROR"
     else
@@ -86,7 +99,6 @@ add_vless_reality() {
     read -p "Dest Domain (SNI) [www.google.com]: " DEST
     [ -z "$DEST" ] && DEST="www.google.com"
 
-    # Clean domain (remove www. if exists to avoid www.www.)
     local CLEAN_DEST=$(echo "$DEST" | sed 's/^www\.//')
 
     echo -e "${BLUE}Generating X25519 Keys...${NC}"
@@ -101,7 +113,6 @@ add_vless_reality() {
         pause; return
     fi
 
-    # Build JSON properly
     backup_config
 
     python3 << PYEOF
@@ -152,13 +163,11 @@ try:
     if 'inbounds' not in config:
         config['inbounds'] = []
     
-    # Check port conflict
     for ib in config['inbounds']:
         if ib.get('port') == $PORT:
             print(f"CONFLICT: Port $PORT is already used by '{ib.get('tag')}'")
             sys.exit(1)
     
-    # Fix: Remove flow if not TCP
     if "$NETWORK" != "tcp" and "flow" in new_inbound["settings"]["clients"][0]:
         del new_inbound["settings"]["clients"][0]["flow"]
     
@@ -205,16 +214,15 @@ add_standard_tls() {
     read -p "Port [443]: " PORT
     [ -z "$PORT" ] && PORT="443"
 
-    # Collect domains
     local DOMAINS=()
     echo ""
     echo "Enter domains with SSL certificates."
     echo "(Leave empty when done)"
-    
+
     while true; do
         read -p "Domain: " DOMAIN
         [ -z "$DOMAIN" ] && break
-        
+
         local C_PATH="/var/lib/pasarguard/certs/$DOMAIN/fullchain.pem"
         if [ -f "$C_PATH" ]; then
             DOMAINS+=("$DOMAIN")
@@ -235,7 +243,7 @@ add_standard_tls() {
     echo "2) VMess"
     echo "3) Trojan"
     read -p "Select: " P_OPT
-    
+
     local PROTO="vless"
     [ "$P_OPT" == "2" ] && PROTO="vmess"
     [ "$P_OPT" == "3" ] && PROTO="trojan"
@@ -258,7 +266,7 @@ add_standard_tls() {
     local UUID=$(gen_uuid)
     local PASS=$(openssl rand -hex 8)
     local AUTH_INFO=""
-    
+
     if [ "$PROTO" == "trojan" ]; then
         AUTH_INFO="Password: $PASS"
     else
@@ -267,7 +275,6 @@ add_standard_tls() {
 
     backup_config
 
-    # Build certs array
     local CERTS_JSON=""
     for d in "${DOMAINS[@]}"; do
         [ -n "$CERTS_JSON" ] && CERTS_JSON="$CERTS_JSON,"
@@ -280,7 +287,6 @@ import sys
 
 config_path = "$XRAY_CONFIG"
 
-# Network settings
 net_settings = {}
 if "$NETWORK" == "ws":
     net_settings = {"wsSettings": {"path": "/"}}
@@ -289,7 +295,6 @@ elif "$NETWORK" == "xhttp":
 elif "$NETWORK" == "grpc":
     net_settings = {"grpcSettings": {"serviceName": "grpc"}}
 
-# Client settings
 if "$PROTO" == "trojan":
     clients = [{"password": "$PASS", "email": "user_trojan"}]
 else:
@@ -369,7 +374,7 @@ add_notls_http() {
     echo "1) VLESS"
     echo "2) VMess"
     read -p "Select: " P_OPT
-    
+
     local PROTO="vless"
     [ "$P_OPT" == "2" ] && PROTO="vmess"
 
@@ -441,7 +446,6 @@ PYEOF
     pause
 }
 
-# --- LIST & DELETE ---
 list_inbounds() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -505,7 +509,6 @@ PYEOF
     pause
 }
 
-# --- MENU ---
 inbound_menu() {
     while true; do
         clear
