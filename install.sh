@@ -18,7 +18,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing MRM Manager v3.3...${NC}"
+echo -e "${BLUE}Installing MRM Manager v1.0...${NC}"
 mkdir -p "$INSTALL_DIR"
 
 # List of files to install
