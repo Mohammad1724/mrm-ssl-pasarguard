@@ -31,6 +31,7 @@ curl -s -o "$INSTALL_DIR/inbound.sh" "$REPO_URL/inbound.sh" && echo -e "${GREEN}
 curl -s -o "$INSTALL_DIR/backup.sh" "$REPO_URL/backup.sh" && echo -e "${GREEN}✔ backup.sh${NC}" || echo -e "${RED}✘ backup.sh${NC}"
 curl -s -o "$INSTALL_DIR/monitor.sh" "$REPO_URL/monitor.sh" && echo -e "${GREEN}✔ monitor.sh${NC}" || echo -e "${RED}✘ monitor.sh${NC}"
 curl -s -o "$INSTALL_DIR/domain_separator.sh" "$REPO_URL/domain_separator.sh" && echo -e "${GREEN}✔ domain_separator.sh${NC}" || echo -e "${RED}✘ domain_separator.sh${NC}"
+curl -s -o "$INSTALL_DIR/port_manager.sh" "$REPO_URL/port_manager.sh" && echo -e "${GREEN}✔ port_manager.sh${NC}" || echo -e "${RED}✘ port_manager.sh${NC}"
 curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh" && echo -e "${GREEN}✔ main.sh${NC}" || echo -e "${RED}✘ main.sh${NC}"
 
 # Make executable
