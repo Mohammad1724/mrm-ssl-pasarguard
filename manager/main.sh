@@ -9,7 +9,8 @@ source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/inbound.sh
 source /opt/mrm-manager/backup.sh
 source /opt/mrm-manager/monitor.sh
-source /opt/mrm-manager/domain_separator.sh # NEW
+source /opt/mrm-manager/domain_separator.sh
+source /opt/mrm-manager/port_manager.sh # NEW MODULE
 
 # --- HELPER FUNCTIONS ---
 edit_file() {
@@ -29,28 +30,30 @@ tools_menu() {
         echo -e "${YELLOW}      TOOLS                                ${NC}"
         echo -e "${BLUE}===========================================${NC}"
         echo "1) Fake Site / Camouflage (Nginx)"
-        echo "2) Domain Separator (Panel & Sub)" # NEW
-        echo "3) Theme Manager (Subscription Page)"
-        echo "4) Inbound Wizard (Create Config)"
-        echo "5) Edit Panel Config (.env)"
-        echo "6) Edit Node Config (.env)"
-        echo "7) Restart Panel Service"
-        echo "8) Restart Node Service"
-        echo "9) Show Node SSL Paths"
-        echo "10) Back"
+        echo "2) Domain Separator (Panel & Sub)"
+        echo "3) Port Manager (Single/Dual Port) [Advanced]" # NEW OPTION
+        echo "4) Theme Manager (Subscription Page)"
+        echo "5) Inbound Wizard (Create Config)"
+        echo "6) Edit Panel Config (.env)"
+        echo "7) Edit Node Config (.env)"
+        echo "8) Restart Panel Service"
+        echo "9) Restart Node Service"
+        echo "10) Show Node SSL Paths"
+        echo "11) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " T_OPT
         case $T_OPT in
             1) site_menu ;;
-            2) domain_menu ;; # Calls the new module
-            3) theme_menu ;;
-            4) inbound_menu ;;
-            5) edit_file "$PANEL_ENV" ;;
-            6) edit_file "$NODE_ENV" ;;
-            7) restart_service "panel"; pause ;;
-            8) restart_service "node"; pause ;;
-            9) show_node_ssl ;;
-            10) return ;;
+            2) domain_menu ;;
+            3) port_menu ;; # Calls the new module
+            4) theme_menu ;;
+            5) inbound_menu ;;
+            6) edit_file "$PANEL_ENV" ;;
+            7) edit_file "$NODE_ENV" ;;
+            8) restart_service "panel"; pause ;;
+            9) restart_service "node"; pause ;;
+            10) show_node_ssl ;;
+            11) return ;;
             *) ;;
         esac
     done
@@ -63,7 +66,7 @@ install_deps
 while true; do
     clear
     echo -e "${CYAN}===========================================${NC}"
-    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v3.1           ${NC}"
+    echo -e "${YELLOW}     MRM PASARGUARD MANAGER v3.2           ${NC}"
     echo -e "${CYAN}===========================================${NC}"
     echo ""
     echo "  1) SSL Certificates"
