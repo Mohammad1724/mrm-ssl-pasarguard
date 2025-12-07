@@ -2,35 +2,45 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>__BRAND__</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
-        
-        /* DARK MODE */
+
+        /* --- THEME VARIABLES (Default is LIGHT) --- */
         :root {
+            --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
+            --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.08);
+            --pri: rgba(14, 165, 233, 0.9);
+            --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.15);
+            --shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        /* DARK MODE OVERRIDES */
+        :root.dark {
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.85); --brd: rgba(255, 255, 255, 0.1);
             --pri: rgba(56, 189, 248, 0.8);
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.4);
-        }
-        /* LIGHT MODE */
-        :root.light {
-            --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
-            --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.1);
-            --pri: rgba(14, 165, 233, 0.9);
-            --g1: rgba(249, 115, 22, 0.35); --g2: rgba(59, 130, 246, 0.25);
+            --shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { 
+            margin: 0; padding: 0; box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent; /* Fix square highlight on mobile */
+            outline: none;
+        }
+        
         body {
             font-family: 'Vazirmatn', sans-serif;
             background: var(--bg); color: var(--txt);
             min-height: 100vh;
-            padding: 80px 20px 20px;
-            transition: 0.3s;
+            padding: 75px 20px 20px;
+            transition: background 0.3s, color 0.3s;
+            overflow-x: hidden;
         }
-        
+
         /* Background Orbs */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
@@ -38,19 +48,17 @@
 
         /* NEWS TICKER */
         .ticker-wrap {
-            position: fixed; top: 0; left: 0; right: 0; height: 55px;
-            background: rgba(15, 15, 20, 0.85); backdrop-filter: blur(15px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            position: fixed; top: 0; left: 0; right: 0; height: 50px;
+            background: var(--card); backdrop-filter: blur(15px);
+            border-bottom: 1px solid var(--brd);
             display: flex; align-items: center; z-index: 1000;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            box-shadow: var(--shadow);
         }
-        :root.light .ticker-wrap { background: rgba(255, 255, 255, 0.9); border-bottom: 1px solid rgba(0,0,0,0.05); }
         .ticker-icon {
-            width: 55px; height: 100%;
+            width: 50px; height: 100%;
             background: linear-gradient(135deg, #f59e0b, #d97706);
             display: flex; align-items: center; justify-content: center;
-            font-size: 24px; color: white;
-            box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3);
+            font-size: 20px; color: white;
             z-index: 2;
         }
         .ticker-content {
@@ -60,62 +68,46 @@
         }
         .ticker-content span {
             display: inline-block;
-            font-size: 15px; font-weight: 700;
-            color: #fbbf24;
-            text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+            font-size: 14px; font-weight: 600;
+            color: var(--txt);
             padding-left: 100%;
             animation: scroll-left 20s linear infinite;
         }
-        :root.light .ticker-content span { color: #d97706; text-shadow: none; }
-
-        @keyframes scroll-left {
-            0%   { transform: translate3d(100%, 0, 0); }
-            100% { transform: translate3d(-150%, 0, 0); }
-        }
+        @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
 
         .con { max-width: 800px; margin: 0 auto; }
-        
+
         /* HEADER */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand-box { display: flex; flex-direction: column; gap: 8px; }
+        .brand-box { display: flex; flex-direction: column; gap: 5px; }
 
         .brand {
-            font-size: 28px; font-weight: 800;
-            background: linear-gradient(135deg, #fff 0%, #ccc 100%);
+            font-size: 26px; font-weight: 900;
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        :root.light .brand {
-            background: linear-gradient(135deg, #333 0%, #666 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
+        :root.dark .brand { background: linear-gradient(135deg, #38bdf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
         .bot-link {
             display: inline-flex; align-items: center;
-            font-size: 14px; font-weight: 700;
-            color: white; text-decoration: none;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(12px);
-            padding: 10px 20px;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            transition: 0.3s; width: fit-content;
+            font-size: 13px; font-weight: 600;
+            color: var(--mute); text-decoration: none;
+            background: var(--brd);
+            padding: 6px 14px;
+            border-radius: 50px;
+            transition: 0.2s; width: fit-content;
         }
-        .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
-        :root.light .bot-link {
-            color: #333;
-            border-color: rgba(0,0,0,0.15);
-            background: rgba(0,0,0,0.05);
-        }
-        :root.light .bot-link:hover { background: rgba(0,0,0,0.1); }
+        .bot-link:hover { transform: translateY(-2px); background: rgba(14, 165, 233, 0.1); color: #0ea5e9; }
 
         .theme-btn {
-            width: 42px; height: 42px;
+            width: 40px; height: 40px;
             border-radius: 12px; border: 1px solid var(--brd);
-            background: rgba(255,255,255,0.1);
-            font-size: 20px; cursor: pointer;
+            background: var(--card); color: var(--txt);
+            font-size: 18px; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            transition: 0.2s; backdrop-filter: blur(5px);
+            transition: 0.2s; box-shadow: var(--shadow);
         }
+        .theme-btn:active { transform: scale(0.95); }
 
         .card {
             background: var(--card);
@@ -124,168 +116,171 @@
             padding: 24px;
             backdrop-filter: blur(20px);
             transition: 0.3s;
+            box-shadow: var(--shadow);
         }
         .grid { display: grid; gap: 30px; }
-        @media (min-width: 768px) {
-            .grid { grid-template-columns: 1fr 1fr; }
-        }
+        @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
         /* PROFILE */
         .prof-container {
-            display: flex; justify-content: flex-start; align-items: center;
-            margin-bottom: 15px; padding-bottom: 15px;
+            display: flex; align-items: center;
+            margin-bottom: 20px; padding-bottom: 20px;
             border-bottom: 1px solid var(--brd);
         }
-        .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
+        .prof-info { display: flex; gap: 15px; align-items: center; width: 100%; }
 
         .av {
-            width: 60px; height: 60px; border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%);
-            color: #92400e; display: flex; align-items: center; justify-content: center;
-            font-size: 26px; position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
+            width: 64px; height: 64px; border-radius: 50%;
+            background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+            color: #0369a1; display: flex; align-items: center; justify-content: center;
+            font-size: 28px; position: relative;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
         }
+        :root.dark .av { background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; box-shadow: 0 0 15px rgba(251, 191, 36, 0.3); }
+
         .dot {
-            position: absolute; bottom: 2px; right: 2px;
-            width: 12px; height: 12px; background: #10b981;
-            border-radius: 50%; border: 2px solid white;
+            position: absolute; bottom: 3px; right: 3px;
+            width: 14px; height: 14px; background: #10b981;
+            border-radius: 50%; border: 2px solid var(--card);
         }
-        .nm { font-size: 18px; font-weight: 700; }
-        .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
-        .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
-        .st.in  { background: rgba(239,68,68,0.2);  color: #f87171; }
+        .nm { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+        .st { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
+        .st.act { background: rgba(16,185,129,0.15); color: #059669; } :root.dark .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
+        .st.in  { background: rgba(239,68,68,0.15);  color: #dc2626; } :root.dark .st.in { background: rgba(239,68,68,0.2);  color: #f87171; }
 
         /* CHART WRAPPER */
         .chart-wrapper {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--brd);
+            background: var(--brd);
             border-radius: 20px;
-            padding: 14px 14px 10px;
+            padding: 16px;
             margin-bottom: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+            display: flex; flex-direction: column; gap: 16px;
         }
-        :root.light .chart-wrapper { background: rgba(0,0,0,0.02); }
+        :root.dark .chart-wrapper { background: rgba(255,255,255,0.03); }
 
-        .usage-row { display: flex; flex-direction: column; gap: 6px; }
-        .usage-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-        .usage-left { display: flex; align-items: center; gap: 8px; }
+        .usage-row { display: flex; flex-direction: column; gap: 8px; }
+        .usage-header { display: flex; align-items: center; justify-content: space-between; }
+        .usage-left { display: flex; align-items: center; gap: 10px; }
 
         .usage-icon {
-            width: 42px; height: 42px;
-            border-radius: 14px;
+            width: 38px; height: 38px; border-radius: 12px;
             display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            color: #38bdf8; font-size: 20px;
-            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.1);
+            background: var(--card); color: var(--mute); font-size: 18px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-        :root.light .usage-icon {
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-            border-color: rgba(56, 189, 248, 0.5);
-            color: #0284c7;
-            box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);
-        }
-
-        .usage-title { font-size: 12px; font-weight: 700; }
-        .usage-sub { font-size: 11px; color: var(--mute); }
-        .usage-percent { font-size: 13px; font-weight: 800; }
+        .usage-title { font-size: 13px; font-weight: 700; }
+        .usage-sub { font-size: 12px; color: var(--mute); }
+        .usage-percent { font-size: 14px; font-weight: 800; }
 
         .usage-bar {
-            width: 100%; height: 10px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.06);
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.08);
+            width: 100%; height: 8px; border-radius: 99px;
+            background: rgba(0,0,0,0.06); overflow: hidden;
         }
-        :root.light .usage-bar { background: rgba(0,0,0,0.05); border-color: rgba(0,0,0,0.08); }
-        .usage-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.8s, background 0.3s; }
+        :root.dark .usage-bar { background: rgba(255,255,255,0.1); }
+        .usage-fill { height: 100%; width: 0%; border-radius: 99px; transition: width 1s ease-out; }
 
         /* BUTTONS */
         .btn {
             position: relative; display: flex; align-items: center; justify-content: center;
-            height: 48px; border-radius: 14px;
-            font-size: 13px; font-weight: 600;
-            cursor: pointer; text-decoration: none; overflow: hidden;
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: var(--txt); transition: 0.3s;
+            height: 50px; border-radius: 14px;
+            font-size: 14px; font-weight: 700;
+            cursor: pointer; text-decoration: none; border: none;
+            transition: 0.2s; user-select: none;
         }
-        .btn:active { transform: scale(0.97); }
-        .btn:hover  { transform: translateY(-2px); }
+        .btn:active { transform: scale(0.96); border-radius: 14px; } /* Prevent square on click */
         
-        /* Orange Lamp (Default) */
-        .btn::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%);
-            opacity: 0.4; filter: blur(10px); pointer-events: none; transition: 0.3s;
+        /* Primary Button (Direct Connect) */
+        .btn-p { 
+            background: linear-gradient(135deg, #0ea5e9, #2563eb); 
+            color: white; 
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
         }
-        :root.light .btn::before { background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%); opacity: 0.6; }
+        .btn-p:hover { box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
 
-        /* Direct Connect (Green Lamp) */
-        .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); }
-        .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; }
-        :root.light .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
-        :root.light .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; }
+        /* Secondary Button */
+        .btn-s { 
+            background: var(--brd); 
+            color: var(--txt); 
+        }
+        .btn-s:hover { background: rgba(0,0,0,0.1); } :root.dark .btn-s:hover { background: rgba(255,255,255,0.1); }
 
-        .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); }
-        :root.light .btn-s { background: rgba(0,0,0,0.03); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
-        .btn-dark { background: rgba(0,0,0,0.3); font-size: 12px; border: 1px solid rgba(255,255,255,0.2); } 
-        :root.light .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); }
+        /* Dark/Support Button */
+        .btn-dark { 
+            background: transparent; 
+            border: 1px solid var(--brd); 
+            color: var(--mute); 
+            font-size: 13px;
+        }
+        .btn-dark:hover { border-color: var(--mute); color: var(--txt); }
+
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
         /* STATS & DOWNLOADS */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .sb { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } :root.light .sb { background: rgba(0,0,0,0.03); }
-        .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
+        .sb { background: var(--brd); padding: 12px; border-radius: 16px; text-align: center; }
+        .sl { font-size: 12px; color: var(--mute); margin-bottom: 5px; } 
+        .sv { font-size: 15px; font-weight: 800; direction: ltr; }
 
-        .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
-        .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(255,255,255,0.05); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
-        .db span { font-size: 14px; } :root.light .db { background: rgba(0,0,0,0.03); }
-        .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
-        .db:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
-
-        /* NEON BREATHING BRAND */
-        .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
-        .big-brand {
-            font-size: 54px; font-weight: 900; letter-spacing: -1.5px;
-            background: linear-gradient(90deg, #38bdf8, #e879f9, #a78bfa, #38bdf8);
-            background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            -webkit-text-stroke: 0;
-            animation: neon-breath 5s linear infinite;
-            z-index: 2; position: relative;
+        .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--brd); }
+        .db { 
+            display: flex; flex-direction: column; align-items: center; gap: 5px; 
+            padding: 10px 5px; border-radius: 12px; 
+            text-decoration: none; color: var(--mute); font-size: 11px; 
+            transition: 0.2s; cursor: pointer;
         }
-        @keyframes neon-breath {
-            0% { background-position: 0% 50%; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5)); }
-            50% { background-position: 100% 50%; filter: drop-shadow(0 0 25px rgba(232, 121, 249, 0.8)); }
-            100% { background-position: 0% 50%; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5)); }
-        }
-        :root.light .big-brand {
-            background: linear-gradient(90deg, #0ea5e9, #c026d3, #7c3aed, #0ea5e9);
-            background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4));
-        }
+        .db span { font-size: 20px; margin-bottom: 2px; } 
+        .db:hover { background: var(--brd); color: var(--txt); transform: translateY(-3px); }
+        .db.rec { color: #0ea5e9; background: rgba(14, 165, 233, 0.1); font-weight: bold; }
 
         /* MODALS */
-        .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
-        .mbox { background: #1a1a1a; padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: white; }
-        .tst { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: white; color: black; padding: 12px 24px; border-radius: 30px; font-weight: 700; opacity: 0; transition: 0.3s; z-index: 1000; }
+        .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
+        .mbox { background: var(--card); padding: 25px; border-radius: 24px; text-align: center; width: 100%; max-width: 400px; color: var(--txt); border: 1px solid var(--brd); box-shadow: var(--shadow); }
+        
+        .tst { 
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); 
+            background: #10b981; color: white; padding: 12px 24px; border-radius: 30px; 
+            font-weight: 700; opacity: 0; transition: 0.3s; z-index: 3000; box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+        }
         .tst.sh { opacity: 1; transform: translateX(-50%) translateY(0); }
-        .cin { width: 100%; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; }
-        #cph { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
-        .app-list { display: grid; gap: 8px; margin-top: 10px; }
+        
+        .cin { width: 100%; background: var(--brd); border: none; color: var(--txt); padding: 12px; border-radius: 12px; margin-top: 10px; font-family: monospace; font-size: 13px; text-align: center; }
+        #cph { position: absolute; left: -9999px; }
+
+        .app-list { display: grid; gap: 10px; margin-top: 15px; }
         .app-btn {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 16px; background: rgba(255,255,255,0.08);
-            border-radius: 12px; color: white; text-decoration: none;
-            border: 1px solid var(--brd); transition: 0.2s; cursor: pointer;
+            padding: 14px; background: var(--brd);
+            border-radius: 14px; color: var(--txt); text-decoration: none;
+            transition: 0.2s; cursor: pointer; font-weight: 600;
         }
-        .app-btn:hover { background: rgba(255,255,255,0.15); transform: translateX(5px); }
+        .app-btn:hover { background: rgba(0,0,0,0.1); transform: translateX(-5px); } :root.dark .app-btn:hover { background: rgba(255,255,255,0.1); }
+
+        /* TUTORIAL TABS */
+        .tut-tabs { display: flex; gap: 5px; margin-bottom: 15px; background: var(--brd); padding: 4px; border-radius: 12px; }
+        .tut-tab { flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--mute); font-size: 13px; border: none; background: transparent; transition: 0.2s; }
+        .tut-tab.active { background: var(--card); color: var(--txt); font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .tut-content { display: none; text-align: right; }
+        .tut-content.active { display: block; }
+        
+        .step { display: flex; gap: 12px; padding: 12px; background: var(--brd); border-radius: 12px; margin-bottom: 8px; align-items: flex-start; }
+        .s-num { width: 24px; height: 24px; background: var(--pri); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
+        .s-txt strong { display: block; font-size: 13px; margin-bottom: 3px; }
+        .s-txt p { font-size: 12px; color: var(--mute); margin: 0; }
+
+        /* NEON BRAND */
+        .big-brand {
+            margin-top: 30px; text-align: center;
+            font-size: 40px; font-weight: 900; letter-spacing: -1px;
+            background: linear-gradient(90deg, #0ea5e9, #8b5cf6, #0ea5e9);
+            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: shine 4s linear infinite; opacity: 0.3; filter: grayscale(1); transition: 0.5s;
+        }
+        :root.dark .big-brand { opacity: 0.8; filter: grayscale(0); }
+        @keyframes shine { to { background-position: 200% center; } }
+
     </style>
 </head>
+<!-- CLASS LIGHT REMOVED -> DEFAULT IS LIGHT (VARIABLES) -->
 <body>
     <div class="orb o1"></div> <div class="orb o2"></div>
     <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
@@ -295,7 +290,7 @@
     <div class="con">
         <div class="head">
             <div class="brand-box">
-                <div class="brand">Dashboard</div>
+                <div class="brand">User Panel</div>
                 <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
             <button class="theme-btn" id="themeBtn">🌙</button>
@@ -303,7 +298,7 @@
 
         <div class="card">
             <div class="grid">
-                <!-- LEFT COLUMN -->
+                <!-- LEFT -->
                 <div style="display:flex; flex-direction:column;">
                     <div class="prof-container">
                         <div class="prof-info">
@@ -319,14 +314,13 @@
                         </div>
                     </div>
 
-                    <!-- BAR-STYLE CHART -->
                     <div class="chart-wrapper">
                         <div class="usage-row">
                             <div class="usage-header">
                                 <div class="usage-left">
                                     <div class="usage-icon">📊</div>
                                     <div>
-                                        <div class="usage-title">حجم</div>
+                                        <div class="usage-title">مصرف حجم</div>
                                         <div class="usage-sub" id="usageLabel">...</div>
                                     </div>
                                 </div>
@@ -339,7 +333,7 @@
                                 <div class="usage-left">
                                     <div class="usage-icon">⏳</div>
                                     <div>
-                                        <div class="usage-title">زمان</div>
+                                        <div class="usage-title">اعتبار زمانی</div>
                                         <div class="usage-sub" id="timeLabel">...</div>
                                     </div>
                                 </div>
@@ -350,25 +344,27 @@
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}')">کپی لینک</button>
+                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
-                    
+
                     <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">
-                        🚀 اتصال مستقیم (انتخاب اپ)
+                        🚀 اتصال سریع
                     </button>
-                    <button class="btn btn-s" style="width:100%" onclick="sc()">📂 کانفیگ‌ها</button>
-                    <a href="https://t.me/__SUP__" class="btn btn-dark" style="width:100%; display:flex; justify-content:center; align-items:center; margin-top:10px">
-                        💬 ارتباط با پشتیبانی
-                    </a>
+                    <button class="btn btn-s" style="width:100%" onclick="sc()">📂 لیست کانفیگ‌ها</button>
+                    
+                    <div class="btn-grid" style="margin-top:10px">
+                        <button class="btn btn-s" onclick="om('tutMod')">📖 آموزش</button>
+                        <a href="https://t.me/__SUP__" class="btn btn-dark" style="display:flex;justify-content:center;text-decoration:none">💬 پشتیبانی</a>
+                    </div>
                 </div>
 
-                <!-- RIGHT COLUMN -->
+                <!-- RIGHT -->
                 <div style="display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
                         <div class="stats">
                             <div class="sb">
-                                <div class="sl">انقضا</div>
+                                <div class="sl">تاریخ انقضا</div>
                                 <div class="sv" id="ed"></div>
                             </div>
                             <div class="sb">
@@ -381,11 +377,10 @@
                             </div>
                             <div class="sb">
                                 <div class="sl">باقیمانده</div>
-                                <div class="sv" id="rem" style="color:#3b82f6">...</div>
+                                <div class="sv" id="rem" style="color:#0ea5e9">...</div>
                             </div>
                         </div>
-                        
-                        <!-- DOWNLOAD BUTTONS -->
+
                         <div class="dls">
                             <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
                             <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
@@ -393,76 +388,87 @@
                         </div>
                     </div>
 
-                    <!-- NEON BRAND -->
-                    <div class="big-brand-box">
-                        <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
-                    </div>
+                    <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- MODALS -->
-    
-    <!-- 1. Direct Connect Modal -->
+
+    <!-- DIRECT CONNECT -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
-            <h3>انتخاب برنامه</h3>
+            <h3>انتخاب برنامه</h3><br>
             <div class="app-list">
                 <div class="app-btn" onclick="openApp('v2rayng')"><span>v2rayNG</span><span>⚡</span></div>
                 <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span>🦋</span></div>
-                <div class="app-btn" onclick="openApp('happ')"><span>Happ</span><span>🌐</span></div>
-                <div class="app-btn" onclick="openApp('sub')"><span>آیفون / Universal</span><span>🍏</span></div>
-            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('appMod')">بستن</button>
+                <div class="app-btn" onclick="openApp('streisand')"><span>Streisand</span><span>🏴</span></div>
+                <div class="app-btn" onclick="openApp('sub')"><span>دیگر (لینک)</span><span>🔗</span></div>
+            </div>
+            <br><button class="btn btn-s" style="width:100%" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
-    <!-- 2. Android Download Modal -->
+    <!-- TUTORIAL -->
+    <div class="mod" id="tutMod" onclick="if(event.target===this)cm('tutMod')">
+        <div class="mbox">
+            <h3 style="margin-bottom:15px">راهنمای اتصال</h3>
+            <div class="tut-tabs">
+                <button class="tut-tab active" onclick="tab('android')">اندروید</button>
+                <button class="tut-tab" onclick="tab('ios')">آیفون</button>
+                <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
+            </div>
+            
+            <div id="t-android" class="tut-content active">
+                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب v2rayNG</strong><p>از گوگل پلی دانلود کنید</p></div></div>
+                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>کپی لینک</strong><p>دکمه "کپی لینک" را بزنید</p></div></div>
+                <div class="step"><div class="s-num">3</div><div class="s-txt"><strong>اتصال</strong><p>در برنامه ☰ سپس Subscription setting و +</p></div></div>
+            </div>
+            <div id="t-ios" class="tut-content">
+                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب Streisand</strong><p>از اپ استور دانلود کنید</p></div></div>
+                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>افزودن</strong><p>دکمه + را بزنید و Import from clipboard</p></div></div>
+            </div>
+            <div id="t-windows" class="tut-content">
+                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب v2rayN</strong><p>نسخه zip را دانلود و اکسترکت کنید</p></div></div>
+                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>پیست کردن</strong><p>Ctrl+V را در برنامه بزنید</p></div></div>
+            </div>
+            
+            <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
+        </div>
+    </div>
+
+    <!-- DOWNLOADS -->
     <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
         <div class="mbox">
-            <h3>دانلود برای اندروید</h3>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-btn"><span>v2rayNG</span><span>⚡</span></a>
-                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>🦋</span></a>
-                <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>🛡️</span></a>
-                <a href="https://play.google.com/store/apps/details?id=com.happ.proxy" target="_blank" class="app-btn"><span>Happ</span><span>🌐</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-and')">بستن</button>
+            <h3>دانلود اندروید</h3><div class="app-list">
+                <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank" class="app-btn"><span>v2rayNG</span><span>Google Play</span></a>
+                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Google Play</span></a>
+            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
-
-    <!-- 3. iOS Download Modal -->
     <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
         <div class="mbox">
-            <h3>دانلود برای آیفون</h3>
-            <div class="app-list">
-                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>📦</span></a>
-                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>🏴</span></a>
-                <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="app-btn"><span>FoXray</span><span>🦊</span></a>
-                <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="app-btn"><span>Shadowrocket ($)</span><span>🚀</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-ios')">بستن</button>
+            <h3>دانلود آیفون</h3><div class="app-list">
+                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>App Store</span></a>
+                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>App Store</span></a>
+            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-ios')">بستن</button>
         </div>
     </div>
-
-    <!-- 4. Windows Download Modal -->
     <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
         <div class="mbox">
-            <h3>دانلود برای ویندوز</h3>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-btn"><span>v2rayN</span><span>💻</span></a>
-                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-btn"><span>Hiddify Desktop</span><span>🦋</span></a>
-                <a href="https://github.com/MatsuriDayo/nekoray/releases" target="_blank" class="app-btn"><span>NekoRay</span><span>🐱</span></a>
-            </div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('dl-win')">بستن</button>
+            <h3>دانلود ویندوز</h3><div class="app-list">
+                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-btn"><span>v2rayN</span><span>GitHub</span></a>
+                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-btn"><span>Hiddify</span><span>GitHub</span></a>
+            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-win')">بستن</button>
         </div>
     </div>
 
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:10px;display:inline-block"><img id="qi" src="" width="180"></div><br><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('qrm')">بستن</button></div></div>
-    
-    <!-- Config Modal (Fixed Copy Button Color) -->
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('cfm')">بستن</button></div></div>
-    
-    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="background:#333;color:white;width:100%" onclick="cm('cpm')">بستن</button></div></div>
+    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:16px;display:inline-block"><img id="qi" src="" width="200" style="display:block"></div><br><br><button class="btn btn-s" style="width:100%" onclick="cm('qrm')">بستن</button></div></div>
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="width:100%" onclick="cm('cfm')">بستن</button></div></div>
+    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="width:100%" onclick="cm('cpm')">بستن</button></div></div>
 
-        <script>
+    <script>
         var subUrl = '{{ subscription_url }}';
         var totStr = '{{ user.data_limit }}';
         var useStr = '{{ user.used_traffic }}';
@@ -470,23 +476,26 @@
 
         {% raw %}
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        document.getElementById('qi').src =
-            'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
+        // THEME LOGIC (Default is LIGHT, so check for DARK)
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'light') {
-            root.classList.add('light'); tb.textContent = '☀️';
+        if (localStorage.getItem('theme') === 'dark') {
+            root.classList.add('dark'); tb.textContent = '☀️';
+        } else {
+            tb.textContent = '🌙';
         }
+
         tb.onclick = function () {
-            if (root.classList.contains('light')) {
-                root.classList.remove('light');
+            if (root.classList.contains('dark')) {
+                root.classList.remove('dark');
                 tb.textContent = '🌙';
-                localStorage.setItem('theme', 'dark');
-            } else {
-                root.classList.add('light');
-                tb.textContent = '☀️';
                 localStorage.setItem('theme', 'light');
+            } else {
+                root.classList.add('dark');
+                tb.textContent = '☀️';
+                localStorage.setItem('theme', 'dark');
             }
         };
 
@@ -494,203 +503,149 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        // --- BUG FIX START ---
-        var tPer = 0; 
-        var expDate = null; 
-        var daysLeftText = 'نامحدود'; 
-        var daysNum = null;
-
+        // DATE CALCULATION
+        var tPer = 0; var expDate = null; var daysLeftText = 'نامحدود'; var daysNum = null;
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
-                expDate = new Date(expStr);
+                expDate = new Date(expStr * 1000); // Usually python sends timestamp, check if it's seconds
+                if (expStr.indexOf && expStr.indexOf('-') > -1) expDate = new Date(expStr); // If string date
+                
                 if (!isNaN(expDate.getTime())) {
                     var now = new Date();
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-
-                    if (days <= 0) { 
-                        tPer = 0; 
-                        daysLeftText = 'منقضی'; 
-                    } else {
-                        // محاسبه درصد (فرض بر این است که دوره ۱ ماهه بوده، اگر بیشتر بود درصد ۱۰۰ می‌ماند)
-                        // اما متن روز همیشه دقیق نمایش داده می‌شود
-                        tPer = Math.min((days / 30) * 100, 100); 
-                        daysLeftText = Math.ceil(days) + ' روز';
-                    }
+                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
+                    else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
-        } else { 
-            tPer = 100; 
-            daysLeftText = 'نامحدود';
-        }
-        // --- BUG FIX END ---
+        } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
-        var usagePercent = document.getElementById('usagePercent');
-        var usageFill    = document.getElementById('usageFill');
-        var usageLabel   = document.getElementById('usageLabel');
-
-        usagePercent.innerText = Math.round(per) + '%';
-        usageFill.style.width  = per + '%';
-
+        // USAGE UI
+        var up = document.getElementById('usagePercent');
+        var uf = document.getElementById('usageFill');
+        var ul = document.getElementById('usageLabel');
+        up.innerText = Math.round(per) + '%';
+        uf.style.width = per + '%';
+        
         function fb(b) {
-            if (tot === 0) return 'نامحدود';
-            if (b <= 0)   return '0 B';
+            if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 MB';
             var u = ['B', 'KB', 'MB', 'GB', 'TB'];
             var i = Math.floor(Math.log(b) / Math.log(1024));
             return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
         }
-        usageLabel.innerText   = fb(use) + ' / ' + fb(tot);
+        ul.innerText = fb(use) + ' / ' + fb(tot);
 
-        if (per > 85)
-            usageFill.style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
-        else if (per > 65)
-            usageFill.style.background = 'linear-gradient(90deg, #f59e0b, #f97316)';
-        else
-            usageFill.style.background = 'linear-gradient(90deg, #3b82f6, #6366f1)';
+        // COLOR LOGIC
+        if (per > 90) uf.style.background = '#ef4444';
+        else if (per > 75) uf.style.background = '#f97316';
+        else uf.style.background = '#0ea5e9';
 
-        var timePercent = document.getElementById('timePercent');
-        var timeFill    = document.getElementById('timeFill');
-        var timeLabel   = document.getElementById('timeLabel');
-
-        // اگر نامحدود بود، درصد را ۱۰۰ و سبز نشان بده
-        if (daysLeftText === 'نامحدود') {
-            timePercent.innerText = '∞';
-            timeFill.style.width = '100%';
-            timeFill.style.background = 'linear-gradient(90deg,#22c55e,#10b981)';
-        } else {
-            timePercent.innerText = Math.round(tPer) + '%';
-            timeFill.style.width  = Math.max(0, Math.min(tPer, 100)) + '%';
-        }
+        // TIME UI
+        var tp = document.getElementById('timePercent');
+        var tf = document.getElementById('timeFill');
+        var tl = document.getElementById('timeLabel');
         
-        timeLabel.innerText = daysLeftText;
-
-        if (daysLeftText === 'منقضی')
-            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
-        else if (daysNum !== null && daysNum < 3)
-            timeFill.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
-        else if (daysNum !== null && daysNum < 7)
-            timeFill.style.background = 'linear-gradient(90deg,#f59e0b,#f97316)';
-        else if (daysLeftText !== 'نامحدود')
-            timeFill.style.background = 'linear-gradient(90deg,#3b82f6, #6366f1)'; // آبی برای زمان زیاد
+        if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; tf.style.background = '#10b981'; }
+        else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
+        
+        tl.innerText = daysLeftText;
+        if (daysLeftText === 'منقضی') tf.style.background = '#ef4444';
+        else if (daysNum !== null && daysNum < 3) tf.style.background = '#f97316';
+        else if (daysLeftText !== 'نامحدود') tf.style.background = '#0ea5e9';
 
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
-        document.getElementById('rem').textContent    = fb(tot - use);
+        document.getElementById('rem').textContent = fb(tot - use);
 
         var ed = document.getElementById('ed');
         if (ed) {
             if (!expDate) ed.innerText = 'نامحدود';
             else {
-                var sh   = expDate.toLocaleDateString('fa-IR');
+                var sh = expDate.toLocaleDateString('fa-IR');
                 var diff = Math.ceil(daysNum);
-                var txt = diff < 0
-                    ? '(منقضی)'
-                    : diff === 0
-                    ? '(امروز)'
-                    : '(' + diff + ' روز)';
-                var c   = diff < 0 ? '#ef4444'
-                        : diff < 3 ? '#f59e0b'
-                                     : '#10b981';
-                ed.innerHTML =
-                    sh +
-                    '<br><span style="font-size:11px; opacity:0.8; color:' +
-                    c + '">' +
-                    txt + '</span>';
+                var c = diff < 0 ? '#ef4444' : diff < 3 ? '#f59e0b' : '#10b981';
+                var txt = diff < 0 ? '(منقضی)' : '(' + diff + ' روز)';
+                ed.innerHTML = sh + '<br><span style="font-size:11px;color:' + c + '">' + txt + '</span>';
             }
         }
 
-        function hc(t) {
+        // COPY FUNCTION WITH FEEDBACK
+        function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = subUrl;
             if (navigator.clipboard && window.isSecureContext)
-                navigator.clipboard.writeText(t).then(st).catch(function () {
-                    fbc(t);
-                });
-            else fbc(t);
+                navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
+            else fbc(t, btn);
         }
-        function fbc(t) {
+        function fbc(t, btn) {
             var h = document.getElementById('cph');
-            h.style.display = 'block';
-            h.value = t; h.focus(); h.select();
-            try {
-                if (document.execCommand('copy')) st();
-                else omc(t);
-            } catch (e) { omc(t); }
+            h.style.display = 'block'; h.value = t; h.focus(); h.select();
+            try { document.execCommand('copy'); st(btn); } catch (e) { omc(t); }
             h.style.display = 'none';
         }
-        function omc(t) {
-            document.getElementById('cpi').value = t;
-            om('cpm');
-        }
-        function st() {
+        function omc(t) { document.getElementById('cpi').value = t; om('cpm'); }
+        
+        function st(btn) {
             var t = document.getElementById('toast');
-            t.classList.add('sh');
-            setTimeout(function () { t.classList.remove('sh'); }, 2000);
+            t.classList.add('sh'); setTimeout(() => t.classList.remove('sh'), 2000);
+            
+            // Button Feedback
+            if(btn) {
+                var oldText = btn.innerText;
+                var oldBg = btn.style.background;
+                btn.innerText = "کپی شد! ✓";
+                btn.style.background = "#10b981";
+                btn.style.color = "white";
+                setTimeout(() => {
+                    btn.innerText = oldText;
+                    btn.style.background = oldBg;
+                    btn.style.color = "";
+                }, 1500);
+            }
         }
+
         function om(i) { document.getElementById(i).style.display = 'flex'; }
         function cm(i) { document.getElementById(i).style.display = 'none'; }
+        
+        // TAB LOGIC
+        function tab(t) {
+            document.querySelectorAll('.tut-tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tut-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('t-' + t).classList.add('active');
+        }
 
         function openApp(app) {
             var t = subUrl; var n = document.title; var link = '';
-            if      (app === 'v2rayng')
-                link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'hiddify')
-                link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'v2raytun')
-                link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'happ')
-                link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else {
-                try {
-                    var b = btoa(t);
-                    link = 'sub://' + b + '#' + encodeURIComponent(n);
-                } catch (e) { link = t; }
-            }
-            window.location.href = link;
-            setTimeout(function () { cm('appMod'); }, 500);
+            if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if (app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
+            else if (app === 'streisand') link = 'streisand://import/' + t;
+            else link = t;
+            
+            if (app === 'sub') hc(t);
+            else { window.location.href = link; setTimeout(() => cm('appMod'), 500); }
         }
 
         function sc() {
-            om('cfm');
-            var l = document.getElementById('cl');
-            l.innerHTML = '...';
-            fetch(window.location.pathname + '/links')
-                .then(function (r) { return r.text(); })
-                .then(function (t) {
-                    if (t) {
-                        l.innerHTML =
-                            '<button class="btn btn-p" style="height:32px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\'' +
-                            t.replace(/\n/g, '\\n') + '\')">کپی همه</button>';
-                        t.split('\n').forEach(function (x) {
-                            var z = x.trim();
-                            if (z && (
-                                z.indexOf('vmess')===0 ||
-                                z.indexOf('vless')===0 ||
-                                z.indexOf('trojan')===0 ||
-                                z.indexOf('ss://')===0
-                            )) {
-                                var n = 'Config';
-                                if (z.indexOf('#') > -1)
-                                    n = decodeURIComponent(z.split('#')[1]);
-                                l.innerHTML +=
-                                    '<div style="background:rgba(255,255,255,0.1);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">' +
-                                    '<span>' + n + '</span>' +
-                                    '<button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px;background:rgba(0,0,0,0.3);color:white" onclick="hc(\'' +
-                                    z + '\')">کپی</button></div>';
-                            }
-                        });
-                    }
-                })
-                .catch(function () { l.innerHTML = 'خطا'; });
+            om('cfm'); var l = document.getElementById('cl'); l.innerHTML = '...';
+            fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
+                if (t) {
+                    l.innerHTML = '<button class="btn btn-p" style="height:35px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\'' + t.replace(/\n/g, '\\n') + '\', this)">کپی همه کانفیگ‌ها</button>';
+                    t.split('\n').forEach(x => {
+                        var z = x.trim();
+                        if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
+                            var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
+                            l.innerHTML += '<div style="background:var(--brd);padding:10px;border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>' + n + '</span><button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px" onclick="hc(\'' + z + '\', this)">کپی</button></div>';
+                        }
+                    });
+                }
+            }).catch(() => l.innerHTML = 'خطا');
         }
 
         var ua = navigator.userAgent.toLowerCase();
-        if      (ua.indexOf('android') > -1)
-            document.getElementById('da').classList.add('rec');
-        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1)
-            document.getElementById('di').classList.add('rec');
-        else if (ua.indexOf('win') > -1)
-            document.getElementById('dw').classList.add('rec');
+        if (ua.indexOf('android') > -1) document.getElementById('da').classList.add('rec');
+        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('di').classList.add('rec');
+        else if (ua.indexOf('win') > -1) document.getElementById('dw').classList.add('rec');
         {% endraw %}
     </script>
 </body>
