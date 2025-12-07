@@ -116,7 +116,7 @@ setup_single_port() {
     [ -z "$FB_PORT" ] && FB_PORT="8080"
     
     # Check if port is in use
-    if lsof -i :$FB_PORT > /dev/null; then
+    if lsof -i :$FB_PORT > /dev/null 2>&1; then
         echo -e "${RED}Warning: Port $FB_PORT seems to be in use!${NC}"
         read -p "Continue anyway? (y/n): " CONT
         if [ "$CONT" != "y" ]; then return; fi
