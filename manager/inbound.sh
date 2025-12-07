@@ -33,18 +33,34 @@ backup_config() {
     fi
 }
 
+# FIXED: Added jq check
 check_requirements() {
+    local MISSING=false
+    
     if ! command -v python3 &> /dev/null; then
         echo -e "${RED}Python3 is required!${NC}"
-        pause; return 1
+        MISSING=true
     fi
     if ! command -v openssl &> /dev/null; then
         echo -e "${RED}OpenSSL is required!${NC}"
-        pause; return 1
+        MISSING=true
+    fi
+    if ! command -v jq &> /dev/null; then
+        echo -e "${YELLOW}jq not found. Installing...${NC}"
+        apt-get install -y jq -qq > /dev/null 2>&1
+        if ! command -v jq &> /dev/null; then
+            echo -e "${RED}Failed to install jq!${NC}"
+            MISSING=true
+        fi
     fi
     if [ ! -f "$XRAY_CONFIG" ]; then
         echo -e "${RED}Config file not found: $XRAY_CONFIG${NC}"
-        pause; return 1
+        MISSING=true
+    fi
+    
+    if [ "$MISSING" = true ]; then
+        pause
+        return 1
     fi
     return 0
 }
@@ -100,7 +116,6 @@ add_vless_reality() {
 
     backup_config
 
-    # FIXED: Pass variables properly to Python
     python3 << PYEOF
 import json
 import sys
@@ -109,7 +124,7 @@ config_path = "$XRAY_CONFIG"
 tag = "$TAG"
 port = $PORT
 network = "$NETWORK"
-use_flow = $USE_FLOW  # Now it's a Python boolean
+use_flow = $USE_FLOW
 dest = "$DEST"
 clean_dest = "$CLEAN_DEST"
 priv_key = "$PRIV"
@@ -117,15 +132,10 @@ short_id = "$SID"
 uuid = "$UUID"
 email = "$EMAIL"
 
-# Build client
-client = {
-    "id": uuid,
-    "email": email
-}
+client = {"id": uuid, "email": email}
 if use_flow:
     client["flow"] = "xtls-rprx-vision"
 
-# Build stream settings
 stream_settings = {
     "network": network,
     "security": "reality",
@@ -150,34 +160,23 @@ new_inbound = {
     "listen": "0.0.0.0",
     "port": port,
     "protocol": "vless",
-    "settings": {
-        "clients": [client],
-        "decryption": "none"
-    },
+    "settings": {"clients": [client], "decryption": "none"},
     "streamSettings": stream_settings,
-    "sniffing": {
-        "enabled": True,
-        "destOverride": ["http", "tls", "quic"]
-    }
+    "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
 
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
-    
     if 'inbounds' not in config:
         config['inbounds'] = []
-    
     for ib in config['inbounds']:
         if ib.get('port') == port:
             print(f"CONFLICT: Port {port} is already used by '{ib.get('tag')}'")
             sys.exit(1)
-    
     config['inbounds'].append(new_inbound)
-    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
-    
     print("OK")
 except Exception as e:
     print(f"ERROR: {e}")
@@ -194,7 +193,6 @@ PYEOF
         echo -e "Public Key: ${CYAN}$PUB${NC}"
         echo -e "Short ID:   ${CYAN}$SID${NC}"
         echo "-------------------------------------"
-        echo ""
         read -p "Restart Panel? (y/n): " R
         [ "$R" == "y" ] && restart_service "panel"
     fi
@@ -223,7 +221,6 @@ add_standard_tls() {
     while true; do
         read -p "Domain: " DOMAIN
         [ -z "$DOMAIN" ] && break
-
         local C_PATH="/var/lib/pasarguard/certs/$DOMAIN/fullchain.pem"
         if [ -f "$C_PATH" ]; then
             DOMAINS+=("$DOMAIN")
@@ -270,7 +267,6 @@ add_standard_tls() {
 
     backup_config
 
-    # Build domains JSON array
     local DOMAINS_JSON=$(printf '%s\n' "${DOMAINS[@]}" | jq -R . | jq -s .)
 
     python3 << PYEOF
@@ -287,7 +283,6 @@ password = "$PASS"
 email = "$EMAIL"
 domains = $DOMAINS_JSON
 
-# Build certificates
 certificates = []
 for d in domains:
     certificates.append({
@@ -295,13 +290,11 @@ for d in domains:
         "keyFile": f"/var/lib/pasarguard/certs/{d}/privkey.pem"
     })
 
-# Build client
 if protocol == "trojan":
     clients = [{"password": password, "email": email}]
 else:
     clients = [{"id": uuid, "email": email}]
 
-# Build network settings
 stream_settings = {
     "network": network,
     "security": "tls",
@@ -320,10 +313,7 @@ new_inbound = {
     "listen": "0.0.0.0",
     "port": port,
     "protocol": protocol,
-    "settings": {
-        "clients": clients,
-        "decryption": "none"
-    },
+    "settings": {"clients": clients, "decryption": "none"},
     "streamSettings": stream_settings,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
@@ -331,17 +321,13 @@ new_inbound = {
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
-    
     if 'inbounds' not in config:
         config['inbounds'] = []
-    
     for ib in config['inbounds']:
         if ib.get('port') == port:
             print(f"CONFLICT: Port {port} used by '{ib.get('tag')}'")
             sys.exit(1)
-    
     config['inbounds'].append(new_inbound)
-    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
     print("OK")
@@ -414,11 +400,7 @@ network = "$NETWORK"
 uuid = "$UUID"
 email = "$EMAIL"
 
-stream_settings = {
-    "network": network,
-    "security": "none"
-}
-
+stream_settings = {"network": network, "security": "none"}
 if network == "ws":
     stream_settings["wsSettings"] = {"path": "/"}
 else:
@@ -429,10 +411,7 @@ new_inbound = {
     "listen": "0.0.0.0",
     "port": port,
     "protocol": protocol,
-    "settings": {
-        "clients": [{"id": uuid, "email": email}],
-        "decryption": "none"
-    },
+    "settings": {"clients": [{"id": uuid, "email": email}], "decryption": "none"},
     "streamSettings": stream_settings,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
@@ -440,17 +419,13 @@ new_inbound = {
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
-    
     if 'inbounds' not in config:
         config['inbounds'] = []
-    
     for ib in config['inbounds']:
         if ib.get('port') == port:
             print(f"CONFLICT: Port {port} used")
             sys.exit(1)
-    
     config['inbounds'].append(new_inbound)
-    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
     print("OK")
@@ -512,7 +487,6 @@ try:
     idx = int("$DEL_ID") - 1
     with open("/var/lib/pasarguard/config.json", 'r') as f:
         d = json.load(f)
-    
     inbounds = d.get('inbounds', [])
     if 0 <= idx < len(inbounds):
         removed = inbounds.pop(idx)
