@@ -7,14 +7,14 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
 
-        /* --- DEFAULT LIGHT THEME --- */
+        /* DEFAULT LIGHT */
         :root {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.1);
             --pri: rgba(14, 165, 233, 0.9);
             --g1: rgba(249, 115, 22, 0.35); --g2: rgba(59, 130, 246, 0.25);
         }
-        /* DARK MODE OVERRIDE */
+        /* DARK MODE */
         :root.dark {
             --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
             --card: rgba(25, 25, 30, 0.85); --brd: rgba(255, 255, 255, 0.1);
@@ -22,11 +22,7 @@
             --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.4);
         }
 
-        * { 
-            margin: 0; padding: 0; box-sizing: border-box; 
-            -webkit-tap-highlight-color: transparent; /* Fix square button on tap */
-            outline: none;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
         
         body {
             font-family: 'Vazirmatn', sans-serif;
@@ -36,12 +32,12 @@
             transition: 0.3s;
         }
 
-        /* Background Orbs */
+        /* Orbs */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
         .o2 { bottom: -150px; left: -100px; background: var(--g2); }
 
-        /* NEWS TICKER */
+        /* Ticker */
         .ticker-wrap {
             position: fixed; top: 0; left: 0; right: 0; height: 55px;
             background: var(--card); backdrop-filter: blur(15px);
@@ -56,241 +52,97 @@
             background: linear-gradient(135deg, #f59e0b, #d97706);
             display: flex; align-items: center; justify-content: center;
             font-size: 24px; color: white;
-            box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3);
-            z-index: 2;
+            box-shadow: 5px 0 15px rgba(245, 158, 11, 0.3); z-index: 2;
         }
-        .ticker-content {
-            flex: 1; overflow: hidden; white-space: nowrap;
-            position: relative; height: 100%;
-            display: flex; align-items: center;
-        }
-        .ticker-content span {
-            display: inline-block;
-            font-size: 15px; font-weight: 700;
-            color: #d97706;
-            padding-left: 100%;
-            animation: scroll-left 20s linear infinite;
-        }
+        .ticker-content { flex: 1; overflow: hidden; white-space: nowrap; position: relative; height: 100%; display: flex; align-items: center; }
+        .ticker-content span { display: inline-block; font-size: 15px; font-weight: 700; color: #d97706; padding-left: 100%; animation: scroll-left 20s linear infinite; }
         :root.dark .ticker-content span { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
-
-        @keyframes scroll-left {
-            0%   { transform: translate3d(100%, 0, 0); }
-            100% { transform: translate3d(-150%, 0, 0); }
-        }
+        @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
 
         .con { max-width: 800px; margin: 0 auto; }
 
-        /* HEADER */
+        /* Head */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
+        .brand { font-size: 28px; font-weight: 800; background: linear-gradient(135deg, #333 0%, #666 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        :root.dark .brand { background: linear-gradient(135deg, #fff 0%, #ccc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; color: var(--txt); display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
 
-        .brand {
-            font-size: 28px; font-weight: 800;
-            background: linear-gradient(135deg, #333 0%, #666 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-        :root.dark .brand {
-            background: linear-gradient(135deg, #fff 0%, #ccc 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        }
-
-        .bot-link {
-            display: inline-flex; align-items: center;
-            font-size: 14px; font-weight: 700;
-            color: #333; text-decoration: none;
-            background: rgba(0,0,0,0.05);
-            backdrop-filter: blur(12px);
-            padding: 10px 20px;
-            border-radius: 16px;
-            border: 1px solid rgba(0,0,0,0.15);
-            transition: 0.3s; width: fit-content;
-        }
-        .bot-link:hover { background: rgba(0,0,0,0.1); }
-        :root.dark .bot-link {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.15);
-        }
-        :root.dark .bot-link:hover { transform: translateY(-2px); background: rgba(255, 255, 255, 0.2); }
-
-        .theme-btn {
-            width: 42px; height: 42px;
-            border-radius: 12px; border: 1px solid var(--brd);
-            background: rgba(255,255,255,0.1);
-            font-size: 20px; cursor: pointer; color: var(--txt);
-            display: flex; align-items: center; justify-content: center;
-            transition: 0.2s; backdrop-filter: blur(5px);
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--brd);
-            border-radius: 24px;
-            padding: 24px;
-            backdrop-filter: blur(20px);
-            transition: 0.3s;
-        }
+        .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
         .grid { display: grid; gap: 30px; }
-        @media (min-width: 768px) {
-            .grid { grid-template-columns: 1fr 1fr; }
-        }
+        @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
-        /* PROFILE */
-        .prof-container {
-            display: flex; justify-content: flex-start; align-items: center;
-            margin-bottom: 15px; padding-bottom: 15px;
-            border-bottom: 1px solid var(--brd);
-        }
+        /* Profile */
+        .prof-container { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); }
         .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
-
-        .av {
-            width: 60px; height: 60px; border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%);
-            color: #92400e; display: flex; align-items: center; justify-content: center;
-            font-size: 26px; position: relative;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
-        }
-        .dot {
-            position: absolute; bottom: 2px; right: 2px;
-            width: 12px; height: 12px; background: #10b981;
-            border-radius: 50%; border: 2px solid white;
-        }
+        .av { width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; display: flex; align-items: center; justify-content: center; font-size: 26px; position: relative; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
+        .dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #10b981; border-radius: 50%; border: 2px solid white; }
         .nm { font-size: 18px; font-weight: 700; }
         .st { display: inline-block; margin-top: 2px; font-size: 11px; padding: 2px 8px; border-radius: 8px; }
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
-        .st.in  { background: rgba(239,68,68,0.2);  color: #f87171; }
+        .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* CHART WRAPPER */
-        .chart-wrapper {
-            background: rgba(0,0,0,0.03);
-            border: 1px solid var(--brd);
-            border-radius: 20px;
-            padding: 14px 14px 10px;
-            margin-bottom: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        /* RENEW BUTTON (BOT) */
+        .renew-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 12px; margin-bottom: 20px;
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            color: white; text-decoration: none; font-weight: 700; font-size: 14px;
+            border-radius: 14px; transition: 0.3s;
+            box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3);
         }
-        :root.dark .chart-wrapper { background: rgba(255, 255, 255, 0.03); }
+        .renew-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4); }
+        .renew-btn:active { transform: scale(0.98); }
 
+        /* Chart */
+        .chart-wrapper { background: rgba(0,0,0,0.03); border: 1px solid var(--brd); border-radius: 20px; padding: 14px 14px 10px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
+        :root.dark .chart-wrapper { background: rgba(255, 255, 255, 0.03); }
         .usage-row { display: flex; flex-direction: column; gap: 6px; }
         .usage-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .usage-left { display: flex; align-items: center; gap: 8px; }
-
-        .usage-icon {
-            width: 42px; height: 42px;
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-            border: 1px solid rgba(56, 189, 248, 0.5);
-            color: #0284c7; font-size: 20px;
-            box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3);
-        }
-        :root.dark .usage-icon {
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8));
-            border-color: rgba(56, 189, 248, 0.3);
-            color: #38bdf8;
-            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.1);
-        }
-
-        .usage-title { font-size: 12px; font-weight: 700; }
-        .usage-sub { font-size: 11px; color: var(--mute); }
-        .usage-percent { font-size: 13px; font-weight: 800; }
-
-        .usage-bar {
-            width: 100%; height: 10px;
-            border-radius: 999px;
-            background: rgba(0,0,0,0.05);
-            overflow: hidden;
-            border: 1px solid rgba(0,0,0,0.08);
-        }
+        .usage-icon { width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #f0f9ff, #e0f2fe); border: 1px solid rgba(56, 189, 248, 0.5); color: #0284c7; font-size: 20px; box-shadow: 0 4px 10px rgba(56, 189, 248, 0.3); }
+        :root.dark .usage-icon { background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.8)); border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.1); }
+        .usage-title { font-size: 12px; font-weight: 700; } .usage-sub { font-size: 11px; color: var(--mute); } .usage-percent { font-size: 13px; font-weight: 800; }
+        .usage-bar { width: 100%; height: 10px; border-radius: 999px; background: rgba(0,0,0,0.05); overflow: hidden; border: 1px solid rgba(0,0,0,0.08); }
         :root.dark .usage-bar { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08); }
         .usage-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.8s, background 0.3s; }
 
-        /* BUTTONS */
-        .btn {
-            position: relative; display: flex; align-items: center; justify-content: center;
-            height: 48px; border-radius: 14px;
-            font-size: 13px; font-weight: 600;
-            cursor: pointer; text-decoration: none; overflow: hidden;
-            background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.5));
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(0,0,0,0.1);
-            color: var(--txt); transition: 0.3s;
-        }
-        :root.dark .btn {
-            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-            border-color: rgba(255,255,255,0.1);
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn:hover  { transform: translateY(-2px); }
-
-        /* Orange Lamp */
-        .btn::before {
-            content: ''; position: absolute; inset: 0;
-            background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.6), transparent 70%);
-            opacity: 0.6; filter: blur(10px); pointer-events: none; transition: 0.3s;
-        }
-        :root.dark .btn::before { background: radial-gradient(circle at 50% 0%, rgba(249, 115, 22, 0.5), transparent 70%); opacity: 0.4; }
-
-        /* Direct Connect */
-        .btn-p { 
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); 
-            color: #0369a1; border: 1px solid #7dd3fc; 
-            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); 
-        }
-        :root.dark .btn-p { 
-            background: rgba(56, 189, 248, 0.05); 
-            color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); 
-            box-shadow: none;
-        }
-        .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; }
-        :root.dark .btn-p::before { background: radial-gradient(circle at 50% 0%, rgba(74, 222, 128, 0.7), transparent 70%); opacity: 0.3; }
-
+        /* Buttons */
+        .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.5)); backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.1); color: var(--txt); transition: 0.3s; }
+        :root.dark .btn { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); border-color: rgba(255,255,255,0.1); }
+        .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
+        
+        .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
+        :root.dark .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); box-shadow: none; }
+        .btn-p::before { content:''; position:absolute; inset:0; background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; filter: blur(10px); pointer-events: none; transition: 0.3s; }
+        
         .btn-s { background: rgba(0,0,0,0.05); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
         :root.dark .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); color: var(--txt); }
-        
-        .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); font-size: 12px; } 
+        .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); font-size: 12px; }
         :root.dark .btn-dark { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: var(--txt); }
-        
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* STATS & DOWNLOADS */
+        /* Stats */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .sb { background: rgba(0,0,0,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); } 
+        .sb { background: rgba(0,0,0,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); }
         :root.dark .sb { background: rgba(255,255,255,0.05); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
+        /* Dls */
         .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; border-top: 1px solid var(--brd); padding-top: 15px; }
         .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(0,0,0,0.03); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
         :root.dark .db { background: rgba(255,255,255,0.05); }
-        .db span { font-size: 14px; } 
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
-        .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); } :root.dark .db:hover { background: rgba(255,255,255,0.1); }
+        .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
 
-        /* NEON BRAND */
+        /* Brand */
         .big-brand-box { position: relative; margin-top: 35px; text-align: center; padding: 10px 0; }
-        .big-brand {
-            font-size: 54px; font-weight: 900; letter-spacing: -1.5px;
-            background: linear-gradient(90deg, #0ea5e9, #c026d3, #7c3aed, #0ea5e9);
-            background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4));
-            -webkit-text-stroke: 0;
-            animation: neon-breath 5s linear infinite;
-            z-index: 2; position: relative;
-        }
-        :root.dark .big-brand {
-            background: linear-gradient(90deg, #38bdf8, #e879f9, #a78bfa, #38bdf8);
-            filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
-        }
-        @keyframes neon-breath {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
+        .big-brand { font-size: 54px; font-weight: 900; letter-spacing: -1.5px; background: linear-gradient(90deg, #0ea5e9, #c026d3, #7c3aed, #0ea5e9); background-size: 300% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.4)); -webkit-text-stroke: 0; animation: neon-breath 5s linear infinite; z-index: 2; position: relative; }
+        :root.dark .big-brand { background: linear-gradient(90deg, #38bdf8, #e879f9, #a78bfa, #38bdf8); }
+        @keyframes neon-breath { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 
-        /* MODALS */
+        /* Modals */
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
         .mbox { background: var(--card); padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: var(--txt); border: 1px solid var(--brd); }
         .tst { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #10b981; color: white; padding: 12px 24px; border-radius: 30px; font-weight: 700; opacity: 0; transition: 0.3s; z-index: 1000; }
@@ -298,25 +150,17 @@
         .cin { width: 100%; background: rgba(0,0,0,0.05); border: 1px solid var(--brd); color: var(--txt); padding: 10px; border-radius: 8px; margin-top: 10px; font-family: monospace; font-size: 12px; text-align: center; } :root.dark .cin { background: rgba(255,255,255,0.1); }
         #cph { position: absolute; left: -9999px; top: -9999px; opacity: 0; }
         .app-list { display: grid; gap: 8px; margin-top: 10px; }
-        .app-btn {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 12px 16px; background: rgba(0,0,0,0.05);
-            border-radius: 12px; color: var(--txt); text-decoration: none;
-            border: 1px solid var(--brd); transition: 0.2s; cursor: pointer;
-        } :root.dark .app-btn { background: rgba(255,255,255,0.08); }
-        .app-btn:hover { background: rgba(0,0,0,0.1); transform: translateX(5px); } :root.dark .app-btn:hover { background: rgba(255,255,255,0.15); }
+        .app-btn { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(0,0,0,0.05); border-radius: 12px; color: var(--txt); text-decoration: none; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; } :root.dark .app-btn { background: rgba(255,255,255,0.08); }
+        .app-btn:hover { background: rgba(0,0,0,0.1); transform: translateX(5px); }
 
-        /* TUTORIAL TABS */
+        /* TABS */
         .tut-tabs { display: flex; gap: 5px; margin-bottom: 15px; background: var(--brd); padding: 4px; border-radius: 12px; }
         .tut-tab { flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--mute); font-size: 13px; border: none; background: transparent; transition: 0.2s; }
         .tut-tab.active { background: var(--card); color: var(--txt); font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .tut-content { display: none; text-align: right; }
-        .tut-content.active { display: block; }
-        
+        .tut-content { display: none; text-align: right; } .tut-content.active { display: block; }
         .step { display: flex; gap: 10px; padding: 10px; background: var(--brd); border-radius: 10px; margin-bottom: 8px; align-items: flex-start; }
         .step-num { width: 22px; height: 22px; background: var(--pri); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
-        .step-txt strong { display: block; font-size: 13px; margin-bottom: 2px; }
-        .step-txt p { font-size: 11px; color: var(--mute); margin: 0; }
+        .step-txt strong { display: block; font-size: 13px; margin-bottom: 2px; } .step-txt p { font-size: 11px; color: var(--mute); margin: 0; }
     </style>
 </head>
 <body>
@@ -329,7 +173,6 @@
         <div class="head">
             <div class="brand-box">
                 <div class="brand">Dashboard</div>
-                <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
             </div>
             <button class="theme-btn" id="themeBtn">🌙</button>
         </div>
@@ -352,7 +195,11 @@
                         </div>
                     </div>
 
-                    <!-- CHART -->
+                    <!-- NEW RENEW BUTTON -->
+                    <a href="https://t.me/__BOT__" class="renew-btn">
+                        <span>🤖</span> تمدید اشتراک از طریق ربات
+                    </a>
+
                     <div class="chart-wrapper">
                         <div class="usage-row">
                             <div class="usage-header">
@@ -441,7 +288,6 @@
 
     <!-- MODALS -->
 
-    <!-- DIRECT CONNECT -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
             <h3>انتخاب برنامه</h3>
@@ -464,24 +310,64 @@
                 <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
             </div>
             
+            <!-- ANDROID -->
             <div id="t-android" class="tut-content active">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب v2rayNG</strong><p>از گوگل پلی دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>کپی لینک</strong><p>دکمه "کپی لینک" را بزنید</p></div></div>
-                <div class="step"><div class="step-num">3</div><div class="step-txt"><strong>اتصال</strong><p>در برنامه ☰ سپس Subscription group setting</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- IOS -->
             <div id="t-ios" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب Streisand</strong><p>از اپ استور دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>افزودن</strong><p>دکمه + را بزنید و Import from clipboard</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- WINDOWS -->
             <div id="t-windows" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب v2rayN</strong><p>دانلود کنید و اجرا نمایید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>پیست کردن</strong><p>Ctrl+V را در برنامه بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اجرا و اتصال</strong>
+                        <p>لینک را کپی کرده و در برنامه Ctrl+V بزنید</p>
+                    </div>
+                </div>
             </div>
+            
             <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
         </div>
     </div>
 
-    <!-- DOWNLOADS -->
     <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
         <div class="mbox"><h3>اندروید</h3><div class="app-list"><a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-btn"><span>v2rayNG</span><span>GitHub</span></a><a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Play</span></a></div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button></div>
     </div>
@@ -506,35 +392,19 @@
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
-        // THEME LOGIC - DEFAULT LIGHT
+        // THEME LOGIC
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
-        
-        // Check saved theme, default to LIGHT (so only add class if DARK)
-        if (localStorage.getItem('theme') === 'dark') {
-            root.classList.add('dark'); 
-            tb.textContent = '☀️';
-        } else {
-            tb.textContent = '🌙';
-        }
-
+        if (localStorage.getItem('theme') === 'dark') { root.classList.add('dark'); tb.textContent = '☀️'; } else { tb.textContent = '🌙'; }
         tb.onclick = function () {
-            if (root.classList.contains('dark')) {
-                root.classList.remove('dark');
-                tb.textContent = '🌙';
-                localStorage.setItem('theme', 'light');
-            } else {
-                root.classList.add('dark');
-                tb.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            }
+            if (root.classList.contains('dark')) { root.classList.remove('dark'); tb.textContent = '🌙'; localStorage.setItem('theme', 'light'); }
+            else { root.classList.add('dark'); tb.textContent = '☀️'; localStorage.setItem('theme', 'dark'); }
         };
 
         var tot = parseInt(totStr) || 0;
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        // DATE CALC
         var tPer = 0; var expDate = null; var daysLeftText = 'نامحدود'; var daysNum = null;
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
@@ -550,12 +420,10 @@
             } catch (e) {}
         } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
-        // UI UPDATE
         var up = document.getElementById('usagePercent');
         var uf = document.getElementById('usageFill');
         var ul = document.getElementById('usageLabel');
-        up.innerText = Math.round(per) + '%';
-        uf.style.width  = per + '%';
+        up.innerText = Math.round(per) + '%'; uf.style.width  = per + '%';
 
         function fb(b) {
             if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
@@ -572,10 +440,8 @@
         var tp = document.getElementById('timePercent');
         var tf = document.getElementById('timeFill');
         var tl = document.getElementById('timeLabel');
-
         if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; tf.style.background = 'linear-gradient(90deg,#22c55e,#10b981)'; } 
         else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-
         tl.innerText = daysLeftText;
         if (daysLeftText === 'منقضی') tf.style.background = 'linear-gradient(90deg,#ef4444,#b91c1c)';
         else if (daysNum !== null && daysNum < 3) tf.style.background = 'linear-gradient(90deg,#ef4444,#f97316)';
@@ -597,11 +463,9 @@
             }
         }
 
-        // COPY WITH FEEDBACK
         function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = subUrl;
-            if (navigator.clipboard && window.isSecureContext)
-                navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
+            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
             else fbc(t, btn);
         }
         function fbc(t, btn) {
@@ -631,7 +495,6 @@
         function om(i) { document.getElementById(i).style.display = 'flex'; }
         function cm(i) { document.getElementById(i).style.display = 'none'; }
 
-        // TABS
         function tab(t) {
             document.querySelectorAll('.tut-tab').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tut-content').forEach(c => c.classList.remove('active'));
