@@ -64,7 +64,7 @@ install_deps
 
 while true; do
     clear
-    ui_header "MRM PASARGUARD MANAGER v3.3"
+    ui_header "MRM PASARGUARD MANAGER v1.0"
     ui_status_bar
     
     echo "  1) SSL Certificates"
