@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Installer for MRM Manager v3.3 (Hybrid: Local + Online)
+# Installer for MRM Manager v1.0 (Hybrid: Local + Online)
 INSTALL_DIR="/opt/mrm-manager"
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main"
 
