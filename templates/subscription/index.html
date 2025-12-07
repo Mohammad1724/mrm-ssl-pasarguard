@@ -4,648 +4,486 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#f5f5f5" id="themeColor">
     <title>__BRAND__</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap');
 
-        /* --- THEME VARIABLES (Default is LIGHT) --- */
+        /* --- VARIABLES (Light Default) --- */
         :root {
-            --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
-            --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.08);
-            --pri: rgba(14, 165, 233, 0.9);
-            --g1: rgba(249, 115, 22, 0.2); --g2: rgba(59, 130, 246, 0.15);
-            --shadow: 0 4px 20px rgba(0,0,0,0.05);
+            --bg: #f8fafc; --txt: #0f172a; --mute: #64748b;
+            --card: #ffffff; --brd: #e2e8f0;
+            --pri: #0ea5e9;
+            --nav-h: 60px; /* Height of the news ticker */
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
         }
-        /* DARK MODE OVERRIDES */
+        /* DARK MODE */
         :root.dark {
-            --bg: #0a0a0a; --txt: #e5e5e5; --mute: #888;
-            --card: rgba(25, 25, 30, 0.85); --brd: rgba(255, 255, 255, 0.1);
-            --pri: rgba(56, 189, 248, 0.8);
-            --g1: rgba(249, 115, 22, 0.4); --g2: rgba(59, 130, 246, 0.4);
-            --shadow: 0 10px 30px rgba(0,0,0,0.3);
+            --bg: #0f172a; --txt: #f1f5f9; --mute: #94a3b8;
+            --card: #1e293b; --brd: #334155;
+            --pri: #38bdf8;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
         }
 
-        * { 
-            margin: 0; padding: 0; box-sizing: border-box; 
-            -webkit-tap-highlight-color: transparent; /* Fix square highlight on mobile */
-            outline: none;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; }
+
         body {
             font-family: 'Vazirmatn', sans-serif;
             background: var(--bg); color: var(--txt);
+            /* فاصله زیاد از بالا برای جلوگیری از تداخل با نوار خبر */
+            padding-top: calc(var(--nav-h) + 30px);
+            padding-bottom: 30px;
+            padding-left: 20px;
+            padding-right: 20px;
             min-height: 100vh;
-            padding: 75px 20px 20px;
-            transition: background 0.3s, color 0.3s;
             overflow-x: hidden;
+            transition: background 0.3s, color 0.3s;
         }
 
-        /* Background Orbs */
-        .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
-        .o1 { top: -150px; right: -100px; background: var(--g1); }
-        .o2 { bottom: -150px; left: -100px; background: var(--g2); }
-
-        /* NEWS TICKER */
+        /* --- FIXED TOP BAR (NEWS) --- */
         .ticker-wrap {
-            position: fixed; top: 0; left: 0; right: 0; height: 50px;
-            background: var(--card); backdrop-filter: blur(15px);
+            position: fixed; top: 0; left: 0; right: 0;
+            height: var(--nav-h);
+            background: var(--card);
             border-bottom: 1px solid var(--brd);
-            display: flex; align-items: center; z-index: 1000;
+            display: flex; align-items: center;
+            z-index: 9999; /* بالاترین لایه */
             box-shadow: var(--shadow);
         }
+        
         .ticker-icon {
-            width: 50px; height: 100%;
+            width: 60px; height: 100%;
             background: linear-gradient(135deg, #f59e0b, #d97706);
             display: flex; align-items: center; justify-content: center;
-            font-size: 20px; color: white;
-            z-index: 2;
+            font-size: 24px; color: white;
+            flex-shrink: 0;
         }
+
         .ticker-content {
             flex: 1; overflow: hidden; white-space: nowrap;
             position: relative; height: 100%;
             display: flex; align-items: center;
         }
+        
+        /* انیمیشن اصلاح شده برای راست چین */
         .ticker-content span {
             display: inline-block;
-            font-size: 14px; font-weight: 600;
-            color: var(--txt);
-            padding-left: 100%;
-            animation: scroll-left 20s linear infinite;
+            font-weight: 600; font-size: 14px;
+            padding-left: 100%; /* شروع از بیرون کادر */
+            animation: ticker 20s linear infinite;
         }
-        @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
+        
+        @keyframes ticker {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-200%, 0, 0); }
+        }
 
-        .con { max-width: 800px; margin: 0 auto; }
+        /* --- MAIN CONTAINER --- */
+        .con { max-width: 800px; margin: 0 auto; width: 100%; }
 
-        /* HEADER */
-        .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-        .brand-box { display: flex; flex-direction: column; gap: 5px; }
-
+        /* HEADER (Brand & Theme) */
+        .head { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 25px; 
+            position: relative; z-index: 1; /* اطمینان از دیده شدن */
+        }
+        
+        .brand-box { display: flex; flex-direction: column; gap: 4px; }
+        
         .brand {
-            font-size: 26px; font-weight: 900;
-            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+            font-size: 28px; font-weight: 900;
+            background: linear-gradient(135deg, var(--pri), #8b5cf6);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            line-height: 1.2;
         }
-        :root.dark .brand { background: linear-gradient(135deg, #38bdf8, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
 
         .bot-link {
-            display: inline-flex; align-items: center;
-            font-size: 13px; font-weight: 600;
-            color: var(--mute); text-decoration: none;
-            background: var(--brd);
-            padding: 6px 14px;
-            border-radius: 50px;
-            transition: 0.2s; width: fit-content;
+            font-size: 13px; color: var(--mute); text-decoration: none;
+            background: var(--brd); padding: 4px 12px; border-radius: 20px;
+            display: inline-block; width: fit-content; font-weight: 500;
         }
-        .bot-link:hover { transform: translateY(-2px); background: rgba(14, 165, 233, 0.1); color: #0ea5e9; }
 
         .theme-btn {
-            width: 40px; height: 40px;
-            border-radius: 12px; border: 1px solid var(--brd);
+            width: 45px; height: 45px;
+            border-radius: 14px; border: 1px solid var(--brd);
             background: var(--card); color: var(--txt);
-            font-size: 18px; cursor: pointer;
+            font-size: 20px; cursor: pointer;
             display: flex; align-items: center; justify-content: center;
-            transition: 0.2s; box-shadow: var(--shadow);
+            box-shadow: var(--shadow);
+            transition: 0.2s;
         }
-        .theme-btn:active { transform: scale(0.95); }
+        .theme-btn:active { transform: scale(0.9); }
 
+        /* CARDS */
         .card {
-            background: var(--card);
-            border: 1px solid var(--brd);
-            border-radius: 24px;
-            padding: 24px;
-            backdrop-filter: blur(20px);
-            transition: 0.3s;
+            background: var(--card); border: 1px solid var(--brd);
+            border-radius: 24px; padding: 25px;
             box-shadow: var(--shadow);
         }
+
         .grid { display: grid; gap: 30px; }
         @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
 
-        /* PROFILE */
-        .prof-container {
-            display: flex; align-items: center;
-            margin-bottom: 20px; padding-bottom: 20px;
-            border-bottom: 1px solid var(--brd);
-        }
-        .prof-info { display: flex; gap: 15px; align-items: center; width: 100%; }
-
+        /* PROFILE SECTION */
+        .prof-row { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid var(--brd); }
+        
         .av {
-            width: 64px; height: 64px; border-radius: 50%;
-            background: linear-gradient(135deg, #e0f2fe, #bae6fd);
-            color: #0369a1; display: flex; align-items: center; justify-content: center;
-            font-size: 28px; position: relative;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            width: 70px; height: 70px; border-radius: 50%;
+            background: linear-gradient(135deg, #e0f2fe, #bae6fd); color: #0369a1;
+            display: flex; align-items: center; justify-content: center; font-size: 30px;
+            position: relative; flex-shrink: 0;
         }
-        :root.dark .av { background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; box-shadow: 0 0 15px rgba(251, 191, 36, 0.3); }
+        :root.dark .av { background: linear-gradient(135deg, #334155, #475569); color: #cbd5e1; }
+        
+        .dot { position: absolute; bottom: 2px; right: 2px; width: 16px; height: 16px; background: #22c55e; border: 3px solid var(--card); border-radius: 50%; }
 
-        .dot {
-            position: absolute; bottom: 3px; right: 3px;
-            width: 14px; height: 14px; background: #10b981;
-            border-radius: 50%; border: 2px solid var(--card);
-        }
-        .nm { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
-        .st { display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 6px; font-weight: 600; }
-        .st.act { background: rgba(16,185,129,0.15); color: #059669; } :root.dark .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
-        .st.in  { background: rgba(239,68,68,0.15);  color: #dc2626; } :root.dark .st.in { background: rgba(239,68,68,0.2);  color: #f87171; }
-
-        /* CHART WRAPPER */
-        .chart-wrapper {
-            background: var(--brd);
-            border-radius: 20px;
-            padding: 16px;
-            margin-bottom: 20px;
-            display: flex; flex-direction: column; gap: 16px;
-        }
-        :root.dark .chart-wrapper { background: rgba(255,255,255,0.03); }
-
-        .usage-row { display: flex; flex-direction: column; gap: 8px; }
-        .usage-header { display: flex; align-items: center; justify-content: space-between; }
-        .usage-left { display: flex; align-items: center; gap: 10px; }
-
-        .usage-icon {
-            width: 38px; height: 38px; border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--card); color: var(--mute); font-size: 18px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }
-        .usage-title { font-size: 13px; font-weight: 700; }
-        .usage-sub { font-size: 12px; color: var(--mute); }
-        .usage-percent { font-size: 14px; font-weight: 800; }
-
-        .usage-bar {
-            width: 100%; height: 8px; border-radius: 99px;
-            background: rgba(0,0,0,0.06); overflow: hidden;
-        }
-        :root.dark .usage-bar { background: rgba(255,255,255,0.1); }
-        .usage-fill { height: 100%; width: 0%; border-radius: 99px; transition: width 1s ease-out; }
-
+        .nm { font-size: 19px; font-weight: 800; margin-bottom: 4px; }
+        .st { font-size: 12px; padding: 4px 10px; border-radius: 8px; font-weight: 700; background: var(--brd); color: var(--mute); }
+        .st.act { background: rgba(34, 197, 94, 0.1); color: #16a34a; }
+        
+        /* USAGE BARS */
+        .bars { display: flex; flex-direction: column; gap: 20px; margin-bottom: 25px; }
+        .bar-item { display: flex; flex-direction: column; gap: 8px; }
+        .bar-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; }
+        .bar-track { width: 100%; height: 10px; background: var(--brd); border-radius: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 10px; transition: width 0.8s ease; width: 0%; }
+        
         /* BUTTONS */
         .btn {
-            position: relative; display: flex; align-items: center; justify-content: center;
-            height: 50px; border-radius: 14px;
-            font-size: 14px; font-weight: 700;
-            cursor: pointer; text-decoration: none; border: none;
-            transition: 0.2s; user-select: none;
+            width: 100%; height: 50px; border: none; border-radius: 14px;
+            font-size: 14px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            transition: 0.2s; text-decoration: none;
         }
-        .btn:active { transform: scale(0.96); border-radius: 14px; } /* Prevent square on click */
-        
-        /* Primary Button (Direct Connect) */
-        .btn-p { 
-            background: linear-gradient(135deg, #0ea5e9, #2563eb); 
-            color: white; 
-            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+        .btn:active { transform: scale(0.97); }
+
+        .btn-p { background: var(--pri); color: white; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3); }
+        .btn-s { background: var(--brd); color: var(--txt); }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+        /* STATS GRID */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px; }
+        .stat-box { background: var(--brd); padding: 15px; border-radius: 16px; text-align: center; }
+        .stat-lbl { font-size: 12px; color: var(--mute); margin-bottom: 5px; }
+        .stat-val { font-size: 16px; font-weight: 800; direction: ltr; }
+
+        /* DOWNLOADS */
+        .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; border-top: 1px solid var(--brd); padding-top: 20px; margin-top: 20px; }
+        .dl-item { 
+            display: flex; flex-direction: column; align-items: center; gap: 6px; 
+            padding: 10px; border-radius: 12px; cursor: pointer; color: var(--mute); 
+            font-size: 11px; font-weight: 600; transition: 0.2s;
         }
-        .btn-p:hover { box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4); }
-
-        /* Secondary Button */
-        .btn-s { 
-            background: var(--brd); 
-            color: var(--txt); 
-        }
-        .btn-s:hover { background: rgba(0,0,0,0.1); } :root.dark .btn-s:hover { background: rgba(255,255,255,0.1); }
-
-        /* Dark/Support Button */
-        .btn-dark { 
-            background: transparent; 
-            border: 1px solid var(--brd); 
-            color: var(--mute); 
-            font-size: 13px;
-        }
-        .btn-dark:hover { border-color: var(--mute); color: var(--txt); }
-
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-
-        /* STATS & DOWNLOADS */
-        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .sb { background: var(--brd); padding: 12px; border-radius: 16px; text-align: center; }
-        .sl { font-size: 12px; color: var(--mute); margin-bottom: 5px; } 
-        .sv { font-size: 15px; font-weight: 800; direction: ltr; }
-
-        .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--brd); }
-        .db { 
-            display: flex; flex-direction: column; align-items: center; gap: 5px; 
-            padding: 10px 5px; border-radius: 12px; 
-            text-decoration: none; color: var(--mute); font-size: 11px; 
-            transition: 0.2s; cursor: pointer;
-        }
-        .db span { font-size: 20px; margin-bottom: 2px; } 
-        .db:hover { background: var(--brd); color: var(--txt); transform: translateY(-3px); }
-        .db.rec { color: #0ea5e9; background: rgba(14, 165, 233, 0.1); font-weight: bold; }
+        .dl-item:hover { background: var(--brd); color: var(--txt); }
+        .dl-icon { font-size: 22px; }
 
         /* MODALS */
-        .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
-        .mbox { background: var(--card); padding: 25px; border-radius: 24px; text-align: center; width: 100%; max-width: 400px; color: var(--txt); border: 1px solid var(--brd); box-shadow: var(--shadow); }
-        
-        .tst { 
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); 
-            background: #10b981; color: white; padding: 12px 24px; border-radius: 30px; 
-            font-weight: 700; opacity: 0; transition: 0.3s; z-index: 3000; box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+        .mod { 
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); 
+            backdrop-filter: blur(5px); z-index: 10000;
+            display: none; align-items: center; justify-content: center; padding: 20px;
+        }
+        .mbox { 
+            background: var(--card); width: 100%; max-width: 400px; 
+            border-radius: 24px; padding: 25px; box-shadow: var(--shadow);
+            max-height: 90vh; overflow-y: auto; text-align: center;
+        }
+        .tst {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: #10b981; color: white; padding: 10px 24px; border-radius: 30px;
+            font-weight: 700; opacity: 0; transition: 0.3s; z-index: 11000;
         }
         .tst.sh { opacity: 1; transform: translateX(-50%) translateY(0); }
         
-        .cin { width: 100%; background: var(--brd); border: none; color: var(--txt); padding: 12px; border-radius: 12px; margin-top: 10px; font-family: monospace; font-size: 13px; text-align: center; }
         #cph { position: absolute; left: -9999px; }
 
-        .app-list { display: grid; gap: 10px; margin-top: 15px; }
-        .app-btn {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 14px; background: var(--brd);
-            border-radius: 14px; color: var(--txt); text-decoration: none;
-            transition: 0.2s; cursor: pointer; font-weight: 600;
-        }
-        .app-btn:hover { background: rgba(0,0,0,0.1); transform: translateX(-5px); } :root.dark .app-btn:hover { background: rgba(255,255,255,0.1); }
-
-        /* TUTORIAL TABS */
-        .tut-tabs { display: flex; gap: 5px; margin-bottom: 15px; background: var(--brd); padding: 4px; border-radius: 12px; }
-        .tut-tab { flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--mute); font-size: 13px; border: none; background: transparent; transition: 0.2s; }
-        .tut-tab.active { background: var(--card); color: var(--txt); font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .tut-content { display: none; text-align: right; }
-        .tut-content.active { display: block; }
+        /* TABS */
+        .tabs { display: flex; background: var(--brd); padding: 4px; border-radius: 12px; margin-bottom: 15px; }
+        .tab { flex: 1; padding: 10px; border-radius: 10px; border: none; background: transparent; color: var(--mute); cursor: pointer; font-weight: 600; font-size: 13px; }
+        .tab.active { background: var(--card); color: var(--txt); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .tab-content { display: none; text-align: right; }
+        .tab-content.active { display: block; }
         
-        .step { display: flex; gap: 12px; padding: 12px; background: var(--brd); border-radius: 12px; margin-bottom: 8px; align-items: flex-start; }
-        .s-num { width: 24px; height: 24px; background: var(--pri); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
-        .s-txt strong { display: block; font-size: 13px; margin-bottom: 3px; }
-        .s-txt p { font-size: 12px; color: var(--mute); margin: 0; }
-
-        /* NEON BRAND */
-        .big-brand {
-            margin-top: 30px; text-align: center;
-            font-size: 40px; font-weight: 900; letter-spacing: -1px;
-            background: linear-gradient(90deg, #0ea5e9, #8b5cf6, #0ea5e9);
-            background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            animation: shine 4s linear infinite; opacity: 0.3; filter: grayscale(1); transition: 0.5s;
-        }
-        :root.dark .big-brand { opacity: 0.8; filter: grayscale(0); }
-        @keyframes shine { to { background-position: 200% center; } }
-
+        .step { background: var(--brd); padding: 12px; border-radius: 12px; margin-bottom: 10px; display: flex; gap: 12px; }
+        .step-num { width: 24px; height: 24px; background: var(--pri); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; flex-shrink: 0; }
+        .step-txt strong { display: block; font-size: 13px; margin-bottom: 2px; }
+        .step-txt p { font-size: 12px; color: var(--mute); margin: 0; }
     </style>
 </head>
-<!-- CLASS LIGHT REMOVED -> DEFAULT IS LIGHT (VARIABLES) -->
 <body>
-    <div class="orb o1"></div> <div class="orb o2"></div>
-    <div class="ticker-wrap"><div class="ticker-icon">📢</div><div class="ticker-content"><span id="nT">__NEWS__</span></div></div>
+    <div class="ticker-wrap">
+        <div class="ticker-icon">📢</div>
+        <div class="ticker-content"><span id="nT">__NEWS__</span></div>
+    </div>
+
     <div class="tst" id="toast">کپی شد!</div>
     <input type="text" id="cph" readonly>
 
     <div class="con">
+        <!-- HEADER -->
         <div class="head">
             <div class="brand-box">
                 <div class="brand">User Panel</div>
-                <a href="https://t.me/__BOT__" class="bot-link">🤖 @__BOT__</a>
+                <a href="https://t.me/__BOT__" class="bot-link">@__BOT__</a>
             </div>
             <button class="theme-btn" id="themeBtn">🌙</button>
         </div>
 
         <div class="card">
             <div class="grid">
-                <!-- LEFT -->
-                <div style="display:flex; flex-direction:column;">
-                    <div class="prof-container">
-                        <div class="prof-info">
-                            <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
-                            <div>
-                                <div class="nm">{{ user.username }}</div>
-                                {% if user.status.name == 'active' %}
-                                    <span class="st act">فعال</span>
-                                {% else %}
-                                    <span class="st in">غیرفعال</span>
-                                {% endif %}
-                            </div>
+                <!-- LEFT SIDE -->
+                <div>
+                    <!-- Profile -->
+                    <div class="prof-row">
+                        <div class="av">👤 {% if user.online_at %}<div class="dot"></div>{% endif %}</div>
+                        <div>
+                            <div class="nm">{{ user.username }}</div>
+                            <span class="st {% if user.status.name == 'active' %}act{% endif %}">
+                                {% if user.status.name == 'active' %}فعال{% else %}غیرفعال{% endif %}
+                            </span>
                         </div>
                     </div>
 
-                    <div class="chart-wrapper">
-                        <div class="usage-row">
-                            <div class="usage-header">
-                                <div class="usage-left">
-                                    <div class="usage-icon">📊</div>
-                                    <div>
-                                        <div class="usage-title">مصرف حجم</div>
-                                        <div class="usage-sub" id="usageLabel">...</div>
-                                    </div>
-                                </div>
-                                <div class="usage-percent" id="usagePercent">0%</div>
-                            </div>
-                            <div class="usage-bar"><div class="usage-fill" id="usageFill"></div></div>
+                    <!-- Usage Bars -->
+                    <div class="bars">
+                        <div class="bar-item">
+                            <div class="bar-head"><span>حجم مصرفی</span><span id="usageTxt">0%</span></div>
+                            <div class="bar-track"><div class="bar-fill" id="usageFill" style="background: #3b82f6;"></div></div>
+                            <div class="bar-head" style="font-weight:400;color:var(--mute);margin-top:2px"><small id="usageLbl">...</small></div>
                         </div>
-                        <div class="usage-row">
-                            <div class="usage-header">
-                                <div class="usage-left">
-                                    <div class="usage-icon">⏳</div>
-                                    <div>
-                                        <div class="usage-title">اعتبار زمانی</div>
-                                        <div class="usage-sub" id="timeLabel">...</div>
-                                    </div>
-                                </div>
-                                <div class="usage-percent" id="timePercent">0%</div>
-                            </div>
-                            <div class="usage-bar"><div class="usage-fill" id="timeFill"></div></div>
+                        <div class="bar-item">
+                            <div class="bar-head"><span>اعتبار زمانی</span><span id="timeTxt">0%</span></div>
+                            <div class="bar-track"><div class="bar-fill" id="timeFill" style="background: #10b981;"></div></div>
+                            <div class="bar-head" style="font-weight:400;color:var(--mute);margin-top:2px"><small id="timeLbl">...</small></div>
                         </div>
                     </div>
 
+                    <!-- Actions -->
                     <div class="btn-grid">
-                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
-                        <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
+                        <button class="btn btn-s" onclick="copy('{{ subscription_url }}', this)">📋 کپی لینک</button>
+                        <button class="btn btn-s" onclick="modal('qrMod')">🔳 اسکن QR</button>
                     </div>
-
-                    <button class="btn btn-p" style="width:100%; margin-bottom:10px" onclick="om('appMod')">
-                        🚀 اتصال سریع
-                    </button>
-                    <button class="btn btn-s" style="width:100%" onclick="sc()">📂 لیست کانفیگ‌ها</button>
-                    
-                    <div class="btn-grid" style="margin-top:10px">
-                        <button class="btn btn-s" onclick="om('tutMod')">📖 آموزش</button>
-                        <a href="https://t.me/__SUP__" class="btn btn-dark" style="display:flex;justify-content:center;text-decoration:none">💬 پشتیبانی</a>
+                    <button class="btn btn-p" onclick="modal('connectMod')">🚀 اتصال سریع</button>
+                    <div class="btn-grid" style="margin-top:12px">
+                        <button class="btn btn-s" onclick="modal('tutMod')">📖 آموزش</button>
+                        <a href="https://t.me/__SUP__" class="btn btn-s" style="justify-content:center">💬 پشتیبانی</a>
                     </div>
                 </div>
 
-                <!-- RIGHT -->
+                <!-- RIGHT SIDE -->
                 <div style="display:flex; flex-direction:column; justify-content:space-between;">
                     <div>
-                        <div class="stats">
-                            <div class="sb">
-                                <div class="sl">تاریخ انقضا</div>
-                                <div class="sv" id="ed"></div>
+                        <div class="stats-grid">
+                            <div class="stat-box">
+                                <div class="stat-lbl">انقضا</div>
+                                <div class="stat-val" id="expDate">...</div>
                             </div>
-                            <div class="sb">
-                                <div class="sl">حجم کل</div>
-                                <div class="sv" id="totDisp">...</div>
+                            <div class="stat-box">
+                                <div class="stat-lbl">حجم کل</div>
+                                <div class="stat-val" id="totalVol">...</div>
                             </div>
-                            <div class="sb">
-                                <div class="sl">مصرف شده</div>
-                                <div class="sv" id="useDisp">...</div>
+                            <div class="stat-box">
+                                <div class="stat-lbl">مصرف شده</div>
+                                <div class="stat-val" id="usedVol">...</div>
                             </div>
-                            <div class="sb">
-                                <div class="sl">باقیمانده</div>
-                                <div class="sv" id="rem" style="color:#0ea5e9">...</div>
+                            <div class="stat-box">
+                                <div class="stat-lbl">باقیمانده</div>
+                                <div class="stat-val" id="remVol" style="color:var(--pri)">...</div>
                             </div>
                         </div>
 
-                        <div class="dls">
-                            <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
-                            <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
-                            <div class="db" id="dw" onclick="om('dl-win')"><span>💻</span>Windows</div>
+                        <div class="dl-grid">
+                            <div class="dl-item" id="dl-and" onclick="modal('dlAnd')">
+                                <div class="dl-icon">🤖</div><span>Android</span>
+                            </div>
+                            <div class="dl-item" id="dl-ios" onclick="modal('dlIos')">
+                                <div class="dl-icon">🍎</div><span>iOS</span>
+                            </div>
+                            <div class="dl-item" id="dl-win" onclick="modal('dlWin')">
+                                <div class="dl-icon">💻</div><span>Windows</span>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
+                    
+                    <div style="text-align:center; margin-top:20px; font-weight:900; font-size:24px; opacity:0.1; letter-spacing:2px">
+                        __BRAND__
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- MODALS -->
-
-    <!-- DIRECT CONNECT -->
-    <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
+    
+    <!-- Connect Modal -->
+    <div class="mod" id="connectMod" onclick="if(event.target===this)closeModal()">
         <div class="mbox">
             <h3>انتخاب برنامه</h3><br>
-            <div class="app-list">
-                <div class="app-btn" onclick="openApp('v2rayng')"><span>v2rayNG</span><span>⚡</span></div>
-                <div class="app-btn" onclick="openApp('hiddify')"><span>Hiddify</span><span>🦋</span></div>
-                <div class="app-btn" onclick="openApp('streisand')"><span>Streisand</span><span>🏴</span></div>
-                <div class="app-btn" onclick="openApp('sub')"><span>دیگر (لینک)</span><span>🔗</span></div>
+            <div style="display:grid; gap:10px">
+                <button class="btn btn-s" onclick="openUri('v2rayng')">v2rayNG (Android)</button>
+                <button class="btn btn-s" onclick="openUri('streisand')">Streisand (iOS)</button>
+                <button class="btn btn-s" onclick="openUri('hiddify')">Hiddify (All)</button>
+                <button class="btn btn-s" onclick="copy('{{ subscription_url }}')">کپی لینک کلی</button>
             </div>
-            <br><button class="btn btn-s" style="width:100%" onclick="cm('appMod')">بستن</button>
+            <br><button class="btn btn-s" style="background:var(--brd)" onclick="closeModal()">بستن</button>
         </div>
     </div>
 
-    <!-- TUTORIAL -->
-    <div class="mod" id="tutMod" onclick="if(event.target===this)cm('tutMod')">
-        <div class="mbox">
-            <h3 style="margin-bottom:15px">راهنمای اتصال</h3>
-            <div class="tut-tabs">
-                <button class="tut-tab active" onclick="tab('android')">اندروید</button>
-                <button class="tut-tab" onclick="tab('ios')">آیفون</button>
-                <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
+    <!-- Tutorial Modal -->
+    <div class="mod" id="tutMod" onclick="if(event.target===this)closeModal()">
+        <div class="mbox" style="text-align:right">
+            <h3 style="text-align:center;margin-bottom:15px">راهنما</h3>
+            <div class="tabs">
+                <button class="tab active" onclick="setTab('and')">اندروید</button>
+                <button class="tab" onclick="setTab('ios')">آیفون</button>
+                <button class="tab" onclick="setTab('win')">ویندوز</button>
             </div>
             
-            <div id="t-android" class="tut-content active">
-                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب v2rayNG</strong><p>از گوگل پلی دانلود کنید</p></div></div>
-                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>کپی لینک</strong><p>دکمه "کپی لینک" را بزنید</p></div></div>
-                <div class="step"><div class="s-num">3</div><div class="s-txt"><strong>اتصال</strong><p>در برنامه ☰ سپس Subscription setting و +</p></div></div>
+            <div id="tab-and" class="tab-content active">
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب v2rayNG</strong><p>از لینک‌های پایین دانلود کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>کپی لینک</strong><p>لینک اشتراک را کپی کنید</p></div></div>
+                <div class="step"><div class="step-num">3</div><div class="step-txt"><strong>افزودن</strong><p>در برنامه ☰ سپس Subscription settings و +</p></div></div>
             </div>
-            <div id="t-ios" class="tut-content">
-                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب Streisand</strong><p>از اپ استور دانلود کنید</p></div></div>
-                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>افزودن</strong><p>دکمه + را بزنید و Import from clipboard</p></div></div>
+            <div id="tab-ios" class="tab-content">
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب Streisand</strong><p>از اپ استور نصب کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>افزودن</strong><p>دکمه + را بزنید و Import from clipboard</p></div></div>
             </div>
-            <div id="t-windows" class="tut-content">
-                <div class="step"><div class="s-num">1</div><div class="s-txt"><strong>نصب v2rayN</strong><p>نسخه zip را دانلود و اکسترکت کنید</p></div></div>
-                <div class="step"><div class="s-num">2</div><div class="s-txt"><strong>پیست کردن</strong><p>Ctrl+V را در برنامه بزنید</p></div></div>
+            <div id="tab-win" class="tab-content">
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>نصب v2rayN</strong><p>نسخه zip را دانلود و اکسترکت کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>پیست</strong><p>Ctrl+V را در برنامه بزنید</p></div></div>
             </div>
-            
-            <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
+            <br><button class="btn btn-s" onclick="closeModal()">بستن</button>
         </div>
     </div>
-
-    <!-- DOWNLOADS -->
-    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
+    
+    <!-- QR Modal -->
+    <div class="mod" id="qrMod" onclick="if(event.target===this)closeModal()">
         <div class="mbox">
-            <h3>دانلود اندروید</h3><div class="app-list">
-                <a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" target="_blank" class="app-btn"><span>v2rayNG</span><span>Google Play</span></a>
-                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Google Play</span></a>
-            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
+            <div style="background:white; padding:15px; border-radius:16px; display:inline-block">
+                <img id="qrImg" src="" width="200" style="display:block">
+            </div>
+            <br><br><button class="btn btn-s" onclick="closeModal()">بستن</button>
         </div>
     </div>
-    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
-        <div class="mbox">
-            <h3>دانلود آیفون</h3><div class="app-list">
-                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>App Store</span></a>
-                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>App Store</span></a>
-            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-ios')">بستن</button>
-        </div>
-    </div>
-    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
-        <div class="mbox">
-            <h3>دانلود ویندوز</h3><div class="app-list">
-                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-btn"><span>v2rayN</span><span>GitHub</span></a>
-                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-btn"><span>Hiddify</span><span>GitHub</span></a>
-            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-win')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:white;padding:10px;border-radius:16px;display:inline-block"><img id="qi" src="" width="200" style="display:block"></div><br><br><button class="btn btn-s" style="width:100%" onclick="cm('qrm')">بستن</button></div></div>
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div id="cl" style="text-align:left;max-height:300px;overflow-y:auto;font-size:12px">...</div><br><button class="btn btn-s" style="width:100%" onclick="cm('cfm')">بستن</button></div></div>
-    <div class="mod" id="cpm" onclick="if(event.target===this)cm('cpm')"><div class="mbox"><input type="text" class="cin" id="cpi" readonly onclick="this.select()"><br><br><button class="btn btn-s" style="width:100%" onclick="cm('cpm')">بستن</button></div></div>
+    
+    <!-- Downloads (Simplified) -->
+    <div class="mod" id="dlAnd" onclick="if(event.target===this)closeModal()"><div class="mbox"><h3>اندروید</h3><br><a href="https://play.google.com/store/apps/details?id=com.v2ray.ang" class="btn btn-s" target="_blank" style="margin-bottom:10px">v2rayNG</a><a href="https://play.google.com/store/apps/details?id=app.hiddify.com" class="btn btn-s" target="_blank">Hiddify</a><br><br><button class="btn btn-s" onclick="closeModal()">بستن</button></div></div>
+    <div class="mod" id="dlIos" onclick="if(event.target===this)closeModal()"><div class="mbox"><h3>آیفون</h3><br><a href="https://apps.apple.com/us/app/streisand/id6450534064" class="btn btn-s" target="_blank" style="margin-bottom:10px">Streisand</a><a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" class="btn btn-s" target="_blank">V2Box</a><br><br><button class="btn btn-s" onclick="closeModal()">بستن</button></div></div>
+    <div class="mod" id="dlWin" onclick="if(event.target===this)closeModal()"><div class="mbox"><h3>ویندوز</h3><br><a href="https://github.com/2dust/v2rayN/releases" class="btn btn-s" target="_blank" style="margin-bottom:10px">v2rayN</a><a href="https://github.com/hiddify/hiddify-next/releases" class="btn btn-s" target="_blank">Hiddify</a><br><br><button class="btn btn-s" onclick="closeModal()">بستن</button></div></div>
 
     <script>
         var subUrl = '{{ subscription_url }}';
-        var totStr = '{{ user.data_limit }}';
-        var useStr = '{{ user.used_traffic }}';
-        var expStr = '{{ user.expire }}';
+        var total = parseInt('{{ user.data_limit }}') || 0;
+        var used = parseInt('{{ user.used_traffic }}') || 0;
+        var expire = '{{ user.expire }}';
 
         {% raw %}
-        if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        // INIT
+        if (!subUrl || subUrl.includes('{{')) subUrl = window.location.href;
+        document.getElementById('qrImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + subUrl;
 
-        // THEME LOGIC (Default is LIGHT, so check for DARK)
+        // THEME
         var root = document.documentElement;
-        var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'dark') {
-            root.classList.add('dark'); tb.textContent = '☀️';
-        } else {
-            tb.textContent = '🌙';
+        var tBtn = document.getElementById('themeBtn');
+        var isDark = localStorage.getItem('theme') === 'dark';
+        
+        function applyTheme() {
+            if (isDark) { root.classList.add('dark'); tBtn.innerText = '☀️'; document.getElementById('themeColor').content = '#0f172a'; }
+            else { root.classList.remove('dark'); tBtn.innerText = '🌙'; document.getElementById('themeColor').content = '#f8fafc'; }
         }
+        applyTheme();
 
-        tb.onclick = function () {
-            if (root.classList.contains('dark')) {
-                root.classList.remove('dark');
-                tb.textContent = '🌙';
-                localStorage.setItem('theme', 'light');
-            } else {
-                root.classList.add('dark');
-                tb.textContent = '☀️';
-                localStorage.setItem('theme', 'dark');
-            }
+        tBtn.onclick = function() {
+            isDark = !isDark;
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            applyTheme();
         };
 
-        var tot = parseInt(totStr) || 0;
-        var use = parseInt(useStr) || 0;
-        var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
-
-        // DATE CALCULATION
-        var tPer = 0; var expDate = null; var daysLeftText = 'نامحدود'; var daysNum = null;
-        if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
-            try {
-                expDate = new Date(expStr * 1000); // Usually python sends timestamp, check if it's seconds
-                if (expStr.indexOf && expStr.indexOf('-') > -1) expDate = new Date(expStr); // If string date
-                
-                if (!isNaN(expDate.getTime())) {
-                    var now = new Date();
-                    var diffMs = expDate - now;
-                    var days = diffMs / (1000 * 60 * 60 * 24);
-                    daysNum = days;
-                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
-                    else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' روز'; }
-                }
-            } catch (e) {}
-        } else { tPer = 100; daysLeftText = 'نامحدود'; }
-
-        // USAGE UI
-        var up = document.getElementById('usagePercent');
-        var uf = document.getElementById('usageFill');
-        var ul = document.getElementById('usageLabel');
-        up.innerText = Math.round(per) + '%';
-        uf.style.width = per + '%';
-        
-        function fb(b) {
-            if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 MB';
-            var u = ['B', 'KB', 'MB', 'GB', 'TB'];
-            var i = Math.floor(Math.log(b) / Math.log(1024));
-            return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
+        // DATA FORMAT
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 MB';
+            if (total === 0) return 'نامحدود';
+            var k = 1024, sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            var i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
-        ul.innerText = fb(use) + ' / ' + fb(tot);
 
-        // COLOR LOGIC
-        if (per > 90) uf.style.background = '#ef4444';
-        else if (per > 75) uf.style.background = '#f97316';
-        else uf.style.background = '#0ea5e9';
-
-        // TIME UI
-        var tp = document.getElementById('timePercent');
-        var tf = document.getElementById('timeFill');
-        var tl = document.getElementById('timeLabel');
+        // CALCULATE
+        var percent = total > 0 ? Math.min((used/total)*100, 100) : 0;
+        document.getElementById('usageFill').style.width = percent + '%';
+        document.getElementById('usageTxt').innerText = Math.round(percent) + '%';
+        document.getElementById('usageLbl').innerText = formatBytes(used) + ' / ' + formatBytes(total);
         
-        if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; tf.style.background = '#10b981'; }
-        else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-        
-        tl.innerText = daysLeftText;
-        if (daysLeftText === 'منقضی') tf.style.background = '#ef4444';
-        else if (daysNum !== null && daysNum < 3) tf.style.background = '#f97316';
-        else if (daysLeftText !== 'نامحدود') tf.style.background = '#0ea5e9';
+        if(percent > 90) document.getElementById('usageFill').style.background = '#ef4444';
+        else if(percent > 70) document.getElementById('usageFill').style.background = '#f97316';
 
-        document.getElementById('totDisp').textContent = fb(tot);
-        document.getElementById('useDisp').textContent = fb(use);
-        document.getElementById('rem').textContent = fb(tot - use);
+        document.getElementById('totalVol').innerText = formatBytes(total);
+        document.getElementById('usedVol').innerText = formatBytes(used);
+        document.getElementById('remVol').innerText = formatBytes(total - used);
 
-        var ed = document.getElementById('ed');
-        if (ed) {
-            if (!expDate) ed.innerText = 'نامحدود';
-            else {
-                var sh = expDate.toLocaleDateString('fa-IR');
-                var diff = Math.ceil(daysNum);
-                var c = diff < 0 ? '#ef4444' : diff < 3 ? '#f59e0b' : '#10b981';
-                var txt = diff < 0 ? '(منقضی)' : '(' + diff + ' روز)';
-                ed.innerHTML = sh + '<br><span style="font-size:11px;color:' + c + '">' + txt + '</span>';
+        // DATE
+        var dateTxt = 'نامحدود'; var datePer = 100;
+        if (expire && expire !== 'None' && expire !== '0') {
+            var expD = new Date(expire.includes('-') ? expire : expire * 1000);
+            if (!isNaN(expD)) {
+                var diff = (expD - new Date()) / (1000 * 3600 * 24);
+                if (diff < 0) { dateTxt = 'منقضی'; datePer = 0; }
+                else { dateTxt = Math.ceil(diff) + ' روز'; datePer = Math.min((diff/30)*100, 100); }
+                document.getElementById('expDate').innerHTML = expD.toLocaleDateString('fa-IR') + '<br><small style="font-size:11px;color:' + (diff<0?'#ef4444':'#10b981') + '">' + dateTxt + '</small>';
             }
+        } else {
+            document.getElementById('expDate').innerText = 'نامحدود';
+        }
+        
+        document.getElementById('timeFill').style.width = datePer + '%';
+        document.getElementById('timeTxt').innerText = (dateTxt==='نامحدود' ? '∞' : Math.round(datePer)+'%');
+        document.getElementById('timeLbl').innerText = dateTxt;
+
+        // FUNCTIONS
+        function copy(text, btn) {
+            if(!text || text.includes('{{')) text = subUrl;
+            var cph = document.getElementById('cph');
+            cph.value = text; cph.select(); cph.setSelectionRange(0, 99999);
+            try {
+                if(navigator.clipboard) navigator.clipboard.writeText(text);
+                document.execCommand('copy');
+                showToast();
+                if(btn) {
+                    var org = btn.innerHTML;
+                    btn.innerHTML = 'کپی شد! ✓';
+                    setTimeout(() => btn.innerHTML = org, 1500);
+                }
+            } catch(e) {}
         }
 
-        // COPY FUNCTION WITH FEEDBACK
-        function hc(t, btn) {
-            if (!t || t.indexOf('{{') !== -1) t = subUrl;
-            if (navigator.clipboard && window.isSecureContext)
-                navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
-            else fbc(t, btn);
-        }
-        function fbc(t, btn) {
-            var h = document.getElementById('cph');
-            h.style.display = 'block'; h.value = t; h.focus(); h.select();
-            try { document.execCommand('copy'); st(btn); } catch (e) { omc(t); }
-            h.style.display = 'none';
-        }
-        function omc(t) { document.getElementById('cpi').value = t; om('cpm'); }
-        
-        function st(btn) {
+        function showToast() {
             var t = document.getElementById('toast');
             t.classList.add('sh'); setTimeout(() => t.classList.remove('sh'), 2000);
-            
-            // Button Feedback
-            if(btn) {
-                var oldText = btn.innerText;
-                var oldBg = btn.style.background;
-                btn.innerText = "کپی شد! ✓";
-                btn.style.background = "#10b981";
-                btn.style.color = "white";
-                setTimeout(() => {
-                    btn.innerText = oldText;
-                    btn.style.background = oldBg;
-                    btn.style.color = "";
-                }, 1500);
-            }
         }
 
-        function om(i) { document.getElementById(i).style.display = 'flex'; }
-        function cm(i) { document.getElementById(i).style.display = 'none'; }
-        
-        // TAB LOGIC
-        function tab(t) {
-            document.querySelectorAll('.tut-tab').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tut-content').forEach(c => c.classList.remove('active'));
+        function modal(id) { document.getElementById(id).style.display = 'flex'; }
+        function closeModal() { document.querySelectorAll('.mod').forEach(m => m.style.display='none'); }
+
+        function openUri(app) {
+            var n = document.title;
+            if(app==='v2rayng') window.location = 'v2rayng://install-sub?url='+encodeURIComponent(subUrl)+'&name='+encodeURIComponent(n);
+            else if(app==='hiddify') window.location = 'hiddify://install-sub?url='+encodeURIComponent(subUrl)+'&name='+encodeURIComponent(n);
+            else if(app==='streisand') window.location = 'streisand://import/'+subUrl;
+            closeModal();
+        }
+
+        function setTab(id) {
+            document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             event.target.classList.add('active');
-            document.getElementById('t-' + t).classList.add('active');
+            document.getElementById('tab-'+id).classList.add('active');
         }
 
-        function openApp(app) {
-            var t = subUrl; var n = document.title; var link = '';
-            if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'streisand') link = 'streisand://import/' + t;
-            else link = t;
-            
-            if (app === 'sub') hc(t);
-            else { window.location.href = link; setTimeout(() => cm('appMod'), 500); }
-        }
-
-        function sc() {
-            om('cfm'); var l = document.getElementById('cl'); l.innerHTML = '...';
-            fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
-                if (t) {
-                    l.innerHTML = '<button class="btn btn-p" style="height:35px;font-size:12px;margin-bottom:10px;width:100%" onclick="hc(\'' + t.replace(/\n/g, '\\n') + '\', this)">کپی همه کانفیگ‌ها</button>';
-                    t.split('\n').forEach(x => {
-                        var z = x.trim();
-                        if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
-                            l.innerHTML += '<div style="background:var(--brd);padding:10px;border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>' + n + '</span><button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px" onclick="hc(\'' + z + '\', this)">کپی</button></div>';
-                        }
-                    });
-                }
-            }).catch(() => l.innerHTML = 'خطا');
-        }
-
+        // Highlight recommended
         var ua = navigator.userAgent.toLowerCase();
-        if (ua.indexOf('android') > -1) document.getElementById('da').classList.add('rec');
-        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('di').classList.add('rec');
-        else if (ua.indexOf('win') > -1) document.getElementById('dw').classList.add('rec');
+        if(ua.includes('android')) document.getElementById('dl-and').style.background = 'rgba(14,165,233,0.1)';
+        else if(ua.includes('iphone') || ua.includes('ipad')) document.getElementById('dl-ios').style.background = 'rgba(14,165,233,0.1)';
+        else if(ua.includes('win')) document.getElementById('dl-win').style.background = 'rgba(14,165,233,0.1)';
         {% endraw %}
     </script>
 </body>
