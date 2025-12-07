@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# Installer for MRM Manager v1.0 (Hybrid: Local + Online)
+# Installer for MRM Manager v3.3
 INSTALL_DIR="/opt/mrm-manager"
+# لینک مستقیم به فایل‌های خام (Raw)
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main"
 
 # Colors
@@ -46,7 +47,7 @@ install_file() {
     local FILE=$1
     local IS_OPTIONAL=$2
     
-    # 1. Try Local Install (Current Directory)
+    # 1. اولویت با فایل لوکال (اگر دستی کپی کرده باشید)
     if [ -f "./$FILE" ]; then
         cp "./$FILE" "$INSTALL_DIR/$FILE"
         chmod +x "$INSTALL_DIR/$FILE"
@@ -54,49 +55,47 @@ install_file() {
         return 0
     fi
 
-    # 2. Try Online Install (Download from GitHub)
-    echo -ne "Downloading $FILE... "
-    if curl -s -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
+    # 2. دانلود از گیت‌هاب
+    # فلگ -L برای دنبال کردن ریدارکت
+    # فلگ -k برای نادیده گرفتن خطای SSL (در صورت مشکل سرور)
+    # فلگ -f برای اینکه اگر فایل نبود (404) ارور بدهد نه اینکه فایل خالی بسازد
+    if curl -s -L -k -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
         chmod +x "$INSTALL_DIR/$FILE"
-        echo -e "${GREEN}OK${NC}"
+        echo -e "${GREEN}✔ Downloaded: $FILE${NC}"
         return 0
     else
-        echo -e "${RED}Failed!${NC}"
-        if [ "$IS_OPTIONAL" != "true" ]; then
+        if [ "$IS_OPTIONAL" == "true" ]; then
+            echo -e "${YELLOW}⚠ Skipped optional: $FILE${NC}"
+            return 0
+        else
+            echo -e "${RED}✘ Failed to download: $FILE${NC}"
+            echo -e "${YELLOW}  Check if '$FILE' exists in your GitHub repository!${NC}"
             return 1
         fi
     fi
 }
 
-# Main Installation Loop
-echo -e "${YELLOW}Checking source...${NC}"
+# --- شروع نصب ---
 
-# Check connection if local files are missing
-if [ ! -f "./utils.sh" ]; then
-    echo -e "${BLUE}Local files not found. Attempting download from GitHub...${NC}"
-    curl -s --head "$REPO_URL/main.sh" | head -n 1 | grep "200" > /dev/null
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Cannot connect to GitHub repo.${NC}"
-        echo -e "Check your internet connection or REPO_URL."
-        exit 1
-    fi
-fi
+echo -e "${YELLOW}Fetching files from GitHub...${NC}"
 
-# Install Core Files
+# نصب فایل‌های اصلی
 for FILE in "${FILES[@]}"; do
     install_file "$FILE" "false"
     if [ $? -ne 0 ]; then
-        echo -e "${RED}Critical Error: Failed to install $FILE${NC}"
+        echo ""
+        echo -e "${RED}CRITICAL ERROR: Could not install core files.${NC}"
+        echo -e "Make sure you have uploaded '${YELLOW}$FILE${NC}' to your GitHub repository."
         exit 1
     fi
 done
 
-# Install Optional Files
+# نصب فایل‌های اختیاری
 for FILE in "${OPT_FILES[@]}"; do
     install_file "$FILE" "true"
 done
 
-# Create shortcut command
+# ساخت شورت‌کات
 ln -sf "$INSTALL_DIR/main.sh" /usr/local/bin/mrm
 chmod +x /usr/local/bin/mrm
 
@@ -105,5 +104,5 @@ echo -e "${GREEN}✔ Installation Complete!${NC}"
 echo -e "${YELLOW}Type 'mrm' to run the manager.${NC}"
 echo ""
 
-# Run
+# اجرا
 bash "$INSTALL_DIR/main.sh"
