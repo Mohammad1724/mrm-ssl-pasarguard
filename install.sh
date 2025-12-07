@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Installer for Modular MRM Manager
+# Installer for Modular MRM Manager (Local Version)
 INSTALL_DIR="/opt/mrm-manager"
-REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
+CURRENT_DIR=$(pwd)
 
 # Colors
 RED='\033[0;31m'
@@ -16,31 +16,39 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing/Updating MRM Manager...${NC}"
+echo -e "${BLUE}Installing MRM Manager from local files...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-# Download Modules
-echo -e "${BLUE}Downloading modules...${NC}"
+# Function to copy files
+install_file() {
+    local FILE=$1
+    if [ -f "$CURRENT_DIR/$FILE" ]; then
+        cp "$CURRENT_DIR/$FILE" "$INSTALL_DIR/$FILE"
+        chmod +x "$INSTALL_DIR/$FILE"
+        echo -e "${GREEN}✔ Installed: $FILE${NC}"
+    else
+        echo -e "${RED}✘ Missing file: $FILE (Make sure you are in the correct folder)${NC}"
+    fi
+}
 
-curl -s -o "$INSTALL_DIR/utils.sh" "$REPO_URL/utils.sh" && echo -e "${GREEN}✔ utils.sh${NC}" || echo -e "${RED}✘ utils.sh${NC}"
-curl -s -o "$INSTALL_DIR/ssl.sh" "$REPO_URL/ssl.sh" && echo -e "${GREEN}✔ ssl.sh${NC}" || echo -e "${RED}✘ ssl.sh${NC}"
-curl -s -o "$INSTALL_DIR/node.sh" "$REPO_URL/node.sh" && echo -e "${GREEN}✔ node.sh${NC}" || echo -e "${RED}✘ node.sh${NC}"
-curl -s -o "$INSTALL_DIR/theme.sh" "$REPO_URL/theme.sh" && echo -e "${GREEN}✔ theme.sh${NC}" || echo -e "${RED}✘ theme.sh${NC}"
-curl -s -o "$INSTALL_DIR/site.sh" "$REPO_URL/site.sh" && echo -e "${GREEN}✔ site.sh${NC}" || echo -e "${RED}✘ site.sh${NC}"
-curl -s -o "$INSTALL_DIR/inbound.sh" "$REPO_URL/inbound.sh" && echo -e "${GREEN}✔ inbound.sh${NC}" || echo -e "${RED}✘ inbound.sh${NC}"
-curl -s -o "$INSTALL_DIR/backup.sh" "$REPO_URL/backup.sh" && echo -e "${GREEN}✔ backup.sh${NC}" || echo -e "${RED}✘ backup.sh${NC}"
-curl -s -o "$INSTALL_DIR/monitor.sh" "$REPO_URL/monitor.sh" && echo -e "${GREEN}✔ monitor.sh${NC}" || echo -e "${RED}✘ monitor.sh${NC}"
-curl -s -o "$INSTALL_DIR/domain_separator.sh" "$REPO_URL/domain_separator.sh" && echo -e "${GREEN}✔ domain_separator.sh${NC}" || echo -e "${RED}✘ domain_separator.sh${NC}"
-curl -s -o "$INSTALL_DIR/port_manager.sh" "$REPO_URL/port_manager.sh" && echo -e "${GREEN}✔ port_manager.sh${NC}" || echo -e "${RED}✘ port_manager.sh${NC}"
-curl -s -o "$INSTALL_DIR/main.sh" "$REPO_URL/main.sh" && echo -e "${GREEN}✔ main.sh${NC}" || echo -e "${RED}✘ main.sh${NC}"
-
-# Make executable
-chmod +x "$INSTALL_DIR/"*.sh
+# Install Modules
+install_file "utils.sh"
+install_file "ssl.sh"
+install_file "node.sh"
+install_file "theme.sh"
+install_file "site.sh"
+install_file "inbound.sh"
+install_file "backup.sh"
+install_file "monitor.sh"
+install_file "domain_separator.sh"
+install_file "port_manager.sh"
+install_file "main.sh"
 
 # Create shortcut command
 ln -sf "$INSTALL_DIR/main.sh" /usr/local/bin/mrm
-echo -e "${GREEN}✔ Shortcut created: type 'mrm' to run${NC}"
+chmod +x /usr/local/bin/mrm
 
+echo -e "${GREEN}✔ Shortcut created: type 'mrm' to run${NC}"
 echo -e "${GREEN}Installation Complete!${NC}"
 echo ""
 
