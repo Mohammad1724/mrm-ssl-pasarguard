@@ -32,18 +32,20 @@ check_root() {
 
 install_deps() {
     local NEED_INSTALL=false
-    
+
     command -v certbot &> /dev/null || NEED_INSTALL=true
     command -v nginx &> /dev/null || NEED_INSTALL=true
     command -v python3 &> /dev/null || NEED_INSTALL=true
     command -v sqlite3 &> /dev/null || NEED_INSTALL=true
     command -v docker &> /dev/null || NEED_INSTALL=true
-    
+    command -v jq &> /dev/null || NEED_INSTALL=true      # FIXED: Added jq check
+    command -v lsof &> /dev/null || NEED_INSTALL=true    # FIXED: Added lsof check
+
     if [ "$NEED_INSTALL" = true ]; then
         echo -e "${BLUE}[INFO] Installing dependencies...${NC}"
         apt-get update -qq > /dev/null
         apt-get install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 -qq > /dev/null
-        
+
         # Install Docker if missing
         if ! command -v docker &> /dev/null; then
             echo -e "${BLUE}[INFO] Installing Docker...${NC}"
