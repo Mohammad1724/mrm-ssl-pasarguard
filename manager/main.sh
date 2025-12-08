@@ -9,7 +9,6 @@ source /opt/mrm-manager/theme.sh
 source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/inbound.sh
 source /opt/mrm-manager/backup.sh
-source /opt/mrm-manager/monitor.sh
 source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/port_manager.sh
 
@@ -64,13 +63,12 @@ install_deps
 
 while true; do
     clear
-    ui_header "MRM PASARGUARD MANAGER v1.0"
+    ui_header "MRM PASARGUARD MANAGER v3.3"
     ui_status_bar
     
     echo "  1) SSL Certificates"
     echo "  2) Backup & Restore"
-    echo "  3) Monitoring & Status"
-    echo "  4) Tools & Settings"
+    echo "  3) Tools & Settings"
     echo ""
     echo "  0) Exit"
     echo ""
@@ -79,8 +77,7 @@ while true; do
     case $OPTION in
         1) ssl_menu ;;
         2) backup_menu ;;
-        3) monitor_menu ;;
-        4) tools_menu ;;
+        3) tools_menu ;;
         0) exit 0 ;;
         *) ;;
     esac
