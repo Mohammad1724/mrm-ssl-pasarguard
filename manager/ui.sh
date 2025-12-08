@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# INTERACTIVE UI LIBRARY
+# INTERACTIVE UI LIBRARY (FIXED STATUS)
 # ============================================
 
 # Colors
@@ -54,16 +54,28 @@ ui_header() {
 }
 
 ui_status_bar() {
-    local WIDTH=50
-    
-    # Get statuses
+    # Default Status (Red)
     local PANEL_STATUS="${UI_RED}●${UI_NC}"
     local NODE_STATUS="${UI_RED}●${UI_NC}"
     local NGINX_STATUS="${UI_RED}●${UI_NC}"
     
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "pasarguard" && PANEL_STATUS="${UI_GREEN}●${UI_NC}"
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE "pg-node" && NODE_STATUS="${UI_GREEN}●${UI_NC}"
-    systemctl is-active --quiet nginx 2>/dev/null && NGINX_STATUS="${UI_GREEN}●${UI_NC}"
+    # Check Panel (Pasarguard or Marzban)
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE "pasarguard|marzban"; then
+        PANEL_STATUS="${UI_GREEN}●${UI_NC}"
+    fi
+
+    # Check Node (More flexible check: looks for 'node' in any container name)
+    # Also checks if it's NOT the exporter to avoid false positives if possible
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "node"; then
+        NODE_STATUS="${UI_GREEN}●${UI_NC}"
+    fi
+    
+    # Check Nginx (Service OR Container)
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        NGINX_STATUS="${UI_GREEN}●${UI_NC}"
+    elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "nginx"; then
+        NGINX_STATUS="${UI_GREEN}●${UI_NC}"
+    fi
     
     echo -e "${UI_DIM}┌──────────────────────────────────────────────┐${UI_NC}"
     echo -e "${UI_DIM}│${UI_NC} Panel: $PANEL_STATUS  Node: $NODE_STATUS  Nginx: $NGINX_STATUS          ${UI_DIM}│${UI_NC}"
@@ -86,15 +98,10 @@ ui_progress() {
     local EMPTY=$((WIDTH - FILLED))
     
     echo -ne "\r${LABEL}: ["
-    
-    # Filled part (green)
     echo -ne "${UI_GREEN}"
     for ((i=0; i<FILLED; i++)); do echo -ne "█"; done
-    
-    # Empty part (dim)
     echo -ne "${UI_DIM}"
     for ((i=0; i<EMPTY; i++)); do echo -ne "░"; done
-    
     echo -ne "${UI_NC}] ${PERCENT}%"
 }
 
@@ -108,7 +115,6 @@ ui_progress_done() {
 
 ui_spinner_start() {
     local MESSAGE=${1:-"Loading..."}
-    
     (
         local SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
         local i=0
@@ -118,7 +124,6 @@ ui_spinner_start() {
             sleep 0.1
         done
     ) &
-    
     SPINNER_PID=$!
 }
 
@@ -126,12 +131,12 @@ ui_spinner_stop() {
     if [ -n "$SPINNER_PID" ]; then
         kill $SPINNER_PID 2>/dev/null
         wait $SPINNER_PID 2>/dev/null
-        echo -ne "\r\033[K"  # Clear line
+        echo -ne "\r\033[K"
     fi
 }
 
 # ============================================
-# INTERACTIVE MENU (Arrow Keys)
+# INTERACTIVE MENU
 # ============================================
 
 ui_menu() {
@@ -141,11 +146,9 @@ ui_menu() {
     local SELECTED=0
     local COUNT=${#OPTIONS[@]}
     
-    # Hide cursor
     tput civis
     
     while true; do
-        # Clear and draw
         clear
         ui_header "$TITLE"
         ui_status_bar
@@ -161,161 +164,47 @@ ui_menu() {
         echo ""
         echo -e "${UI_DIM}Use ↑↓ arrows to navigate, Enter to select, q to quit${UI_NC}"
         
-        # Read key
         read -rsn1 key
-        
         case "$key" in
-            $'\x1b')  # Escape sequence
+            $'\x1b')
                 read -rsn2 key
                 case "$key" in
-                    '[A') # Up
-                        ((SELECTED--))
-                        [ $SELECTED -lt 0 ] && SELECTED=$((COUNT - 1))
-                        ;;
-                    '[B') # Down
-                        ((SELECTED++))
-                        [ $SELECTED -ge $COUNT ] && SELECTED=0
-                        ;;
+                    '[A') ((SELECTED--)); [ $SELECTED -lt 0 ] && SELECTED=$((COUNT - 1)) ;;
+                    '[B') ((SELECTED++)); [ $SELECTED -ge $COUNT ] && SELECTED=0 ;;
                 esac
                 ;;
-            '')  # Enter
-                tput cnorm  # Show cursor
-                echo $SELECTED
-                return $SELECTED
-                ;;
-            'q'|'Q')
-                tput cnorm
-                echo -1
-                return 255
-                ;;
+            '') tput cnorm; echo $SELECTED; return $SELECTED ;;
+            'q'|'Q') tput cnorm; echo -1; return 255 ;;
         esac
     done
 }
 
-# ============================================
-# CONFIRM DIALOG
-# ============================================
-
 ui_confirm() {
     local MESSAGE=$1
     local DEFAULT=${2:-n}
-    
     local PROMPT="[y/N]"
     [ "$DEFAULT" == "y" ] && PROMPT="[Y/n]"
-    
     echo -ne "${UI_YELLOW}? ${UI_NC}${MESSAGE} ${UI_DIM}${PROMPT}${UI_NC} "
     read -r REPLY
-    
     [ -z "$REPLY" ] && REPLY=$DEFAULT
-    
-    case "$REPLY" in
-        [Yy]*) return 0 ;;
-        *) return 1 ;;
-    esac
+    case "$REPLY" in [Yy]*) return 0 ;; *) return 1 ;; esac
 }
-
-# ============================================
-# INPUT DIALOG
-# ============================================
 
 ui_input() {
     local LABEL=$1
     local DEFAULT=$2
     local RESULT=""
-    
     if [ -n "$DEFAULT" ]; then
         echo -ne "${UI_CYAN}? ${UI_NC}${LABEL} ${UI_DIM}[$DEFAULT]${UI_NC}: "
     else
         echo -ne "${UI_CYAN}? ${UI_NC}${LABEL}: "
     fi
-    
     read -r RESULT
     [ -z "$RESULT" ] && RESULT="$DEFAULT"
     echo "$RESULT"
 }
 
-# ============================================
-# NOTIFICATION
-# ============================================
-
-ui_success() {
-    echo -e "${UI_GREEN}✔ ${UI_NC}$1"
-}
-
-ui_error() {
-    echo -e "${UI_RED}✘ ${UI_NC}$1"
-}
-
-ui_warning() {
-    echo -e "${UI_YELLOW}⚠ ${UI_NC}$1"
-}
-
-ui_info() {
-    echo -e "${UI_BLUE}ℹ ${UI_NC}$1"
-}
-
-# ============================================
-# TABLE
-# ============================================
-
-ui_table_header() {
-    local COLS=("$@")
-    local LINE=""
-    
-    echo -ne "${UI_CYAN}"
-    for col in "${COLS[@]}"; do
-        printf "%-15s" "$col"
-    done
-    echo -e "${UI_NC}"
-    
-    for col in "${COLS[@]}"; do
-        printf "%-15s" "───────────────"
-    done
-    echo ""
-}
-
-ui_table_row() {
-    local COLS=("$@")
-    for col in "${COLS[@]}"; do
-        printf "%-15s" "$col"
-    done
-    echo ""
-}
-
-# ============================================
-# DEMO / TEST
-# ============================================
-
-ui_demo() {
-    clear
-    ui_header "UI DEMO"
-    
-    echo "Progress Bar Demo:"
-    for i in {1..20}; do
-        ui_progress $i 20 30 "Downloading"
-        sleep 0.1
-    done
-    ui_progress_done
-    echo ""
-    
-    ui_success "This is a success message"
-    ui_error "This is an error message"
-    ui_warning "This is a warning message"
-    ui_info "This is an info message"
-    
-    echo ""
-    echo "Table Demo:"
-    ui_table_header "NAME" "STATUS" "PORT"
-    ui_table_row "Panel" "Running" "7431"
-    ui_table_row "Node" "Stopped" "N/A"
-    ui_table_row "Nginx" "Running" "80"
-    
-    echo ""
-    read -p "Press Enter..."
-    
-    # Menu demo
-    local OPTIONS=("SSL Certificates" "Backup & Restore" "Monitoring" "Tools" "Exit")
-    ui_menu "MAIN MENU" "${OPTIONS[@]}"
-    local RESULT=$?
-    echo "You selected: ${OPTIONS[$RESULT]}"
-}
+ui_success() { echo -e "${UI_GREEN}✔ ${UI_NC}$1"; }
+ui_error() { echo -e "${UI_RED}✘ ${UI_NC}$1"; }
+ui_warning() { echo -e "${UI_YELLOW}⚠ ${UI_NC}$1"; }
+ui_info() { echo -e "${UI_BLUE}ℹ ${UI_NC}$1"; }
