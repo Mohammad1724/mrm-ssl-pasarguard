@@ -1,9 +1,7 @@
 #!/bin/bash
 
-# Installer for MRM Manager v1.0
+# Installer for MRM Manager v3.3
 INSTALL_DIR="/opt/mrm-manager"
-
-
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
 # Colors
@@ -19,10 +17,10 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing MRM Manager v1.0...${NC}"
+echo -e "${BLUE}Installing MRM Manager v3.3...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-# List of files to install
+# List of files to install (Removed monitor.sh)
 FILES=(
     "utils.sh"
     "ui.sh"
@@ -32,7 +30,6 @@ FILES=(
     "site.sh"
     "inbound.sh"
     "backup.sh"
-    "monitor.sh"
     "domain_separator.sh"
     "port_manager.sh"
     "main.sh"
@@ -57,10 +54,6 @@ install_file() {
     fi
 
     # 2. Try Online Install
-    # -s: Silent
-    # -L: Follow redirects
-    # -k: Insecure (ignore SSL errors if any)
-    # -f: Fail silently on 404 (don't write error to file)
     if curl -s -L -k -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
         chmod +x "$INSTALL_DIR/$FILE"
         echo -e "${GREEN}✔ Downloaded: $FILE${NC}"
@@ -85,8 +78,6 @@ for FILE in "${FILES[@]}"; do
     if [ $? -ne 0 ]; then
         echo ""
         echo -e "${RED}CRITICAL ERROR: Could not install core files.${NC}"
-        echo -e "1. Check if you uploaded '${YELLOW}$FILE${NC}' to GitHub."
-        echo -e "2. Check if the file is inside the '${YELLOW}manager${NC}' folder in your repo."
         exit 1
     fi
 done
@@ -102,7 +93,7 @@ chmod +x /usr/local/bin/mrm
 
 echo ""
 echo -e "${GREEN}✔ Installation Complete!${NC}"
-echo -e "${YELLOW}Type 'mrm' to run the manager.${NC}"
+echo -e "${YELLOW}Type 'mrm' to run.${NC}"
 echo ""
 
 # Run
