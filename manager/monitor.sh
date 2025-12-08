@@ -21,6 +21,85 @@ ensure_config_exists() {
     return 1
 }
 
+# --- ACTIVE CONNECTIONS (NEW) ---
+show_active_connections() {
+    clear
+    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${YELLOW}      ACTIVE USERS (CONCURRENT)              ${NC}"
+    echo -e "${CYAN}=============================================${NC}"
+
+    if ! ensure_config_exists; then pause; return; fi
+
+    # Check dependencies
+    if ! command -v ss &> /dev/null; then
+        echo -e "${YELLOW}Installing 'ss' tool...${NC}"
+        apt-get install -y iproute2 > /dev/null 2>&1
+    fi
+
+    echo -e "${BLUE}Reading config...${NC}"
+    echo ""
+    
+    printf "${CYAN}%-4s %-25s %-8s %-10s${NC}\n" "#" "TAG (Inbound Name)" "PORT" "ONLINE"
+    echo "----------------------------------------------------"
+
+    python3 << 'PYEOF'
+import json
+import subprocess
+import os
+
+try:
+    with open("/var/lib/pasarguard/config.json", 'r') as f:
+        data = json.load(f)
+    
+    inbounds = data.get('inbounds', [])
+    
+    # Get all active TCP connections
+    cmd = "ss -nt state established"
+    output = subprocess.check_output(cmd, shell=True).decode('utf-8')
+    
+    port_counts = {}
+    
+    # Parse ss output
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 4:
+            local_addr = parts[3] # IP:PORT
+            if ':' in local_addr:
+                port = local_addr.split(':')[-1]
+                port_counts[port] = port_counts.get(port, 0) + 1
+
+    idx = 1
+    for ib in inbounds:
+        tag = ib.get('tag', 'Unknown')[:24]
+        port = str(ib.get('port', '0'))
+        count = port_counts.get(port, 0)
+        
+        color = "\033[0m"
+        count_str = f"{count}"
+        if count > 0:
+            color = "\033[0;32m" # Green
+            count_str = f"● {count}"
+        else:
+            color = "\033[0;90m" # Grey
+            
+        print(f"{idx:<4} {tag:<25} {port:<8} {color}{count_str:<10}\033[0m")
+        idx += 1
+
+except Exception as e:
+    print(f"Error: {e}")
+PYEOF
+
+    echo ""
+    echo -e "${YELLOW}Note: If multiple configs share a port (e.g. 443),${NC}"
+    echo -e "${YELLOW}the count shows total users for that port.${NC}"
+    echo ""
+    
+    read -p "Press Enter to refresh or 'q' to go back: " R_OPT
+    if [ "$R_OPT" != "q" ]; then
+        show_active_connections
+    fi
+}
+
 show_service_status() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -182,7 +261,6 @@ live_monitor() {
     done
 }
 
-# FIXED: Prevent double execution of restore function
 live_log_watcher() {
     clear
     echo -e "${CYAN}=============================================${NC}"
@@ -200,20 +278,17 @@ live_log_watcher() {
 
     echo ""
     echo -e "${YELLOW}To see destinations, we set log level to INFO.${NC}"
-    echo -e "${RED}WARNING: This will increase log size. Don't leave it on for long!${NC}"
     read -p "Enable INFO logs? (y/n): " EN_LOG
 
     if [ "$EN_LOG" != "y" ]; then return; fi
 
-    # Backup and modify config
+    # Backup config
     cp "$CONFIG_FILE" /tmp/config_backup_log.json
     sed -i 's/"loglevel": "warning"/"loglevel": "info"/' "$CONFIG_FILE"
     restart_service "panel"
     echo -e "${GREEN}✔ Log level set to INFO.${NC}"
 
-    # Flag to prevent double restore
     local RESTORED=false
-
     restore_log_level() {
         if [ "$RESTORED" = true ]; then return; fi
         RESTORED=true
@@ -255,7 +330,6 @@ live_log_watcher() {
         done
     fi
 
-    # Normal exit - restore
     trap - SIGINT SIGTERM
     restore_log_level
     pause
@@ -267,25 +341,27 @@ monitor_menu() {
         echo -e "${BLUE}===========================================${NC}"
         echo -e "${YELLOW}      MONITORING & STATUS                  ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        echo "1) Service Status"
-        echo "2) System Resources (CPU/RAM/Disk)"
-        echo "3) Network Information"
-        echo "4) SSL Certificates Status"
-        echo "5) Panel Statistics"
-        echo "6) Live Monitor (Dashboard)"
-        echo "7) Live Traffic Watcher (Sniffer)"
-        echo "8) Back"
+        echo "1) Active Connections (Per Config)"
+        echo "2) Service Status"
+        echo "3) System Resources (CPU/RAM/Disk)"
+        echo "4) Network Information"
+        echo "5) SSL Certificates Status"
+        echo "6) Panel Statistics"
+        echo "7) Live Monitor (Dashboard)"
+        echo "8) Live Traffic Watcher (Sniffer)"
+        echo "9) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " OPT
         case $OPT in
-            1) show_service_status ;;
-            2) show_system_resources ;;
-            3) show_network_info ;;
-            4) show_ssl_status ;;
-            5) show_panel_stats ;;
-            6) live_monitor ;;
-            7) live_log_watcher ;;
-            8) return ;;
+            1) show_active_connections ;;
+            2) show_service_status ;;
+            3) show_system_resources ;;
+            4) show_network_info ;;
+            5) show_ssl_status ;;
+            6) show_panel_stats ;;
+            7) live_monitor ;;
+            8) live_log_watcher ;;
+            9) return ;;
             *) ;;
         esac
     done
