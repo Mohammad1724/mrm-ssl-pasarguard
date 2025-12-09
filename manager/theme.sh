@@ -27,11 +27,10 @@ install_theme_wizard() {
         echo "" > "/tmp/index_old.html"
     fi
 
-    # 2. Source Selection (FIXED)
+    # 2. Source Selection (Hybrid)
     local TEMP_DL="/tmp/index_dl.html"
     rm -f "$TEMP_DL"
     
-    # Check if index.html exists in current directory or install directory
     if [ -f "./index.html" ]; then
         echo -e "${GREEN}✔ Found local index.html. Using it.${NC}"
         cp "./index.html" "$TEMP_DL"
@@ -84,20 +83,32 @@ defaults = {
     'l_win': 'https://github.com/2dust/v2rayN/releases'
 }
 
+# --- IMPROVED REGEX LOGIC ---
 try:
     with open(old_path, 'r', encoding='utf-8', errors='ignore') as f:
         old_content = f.read()
-    m_brand = re.search(r'id="brandTxt"[^>]*data-text="([^"]+)"', old_content)
-    if m_brand: defaults['brand'] = m_brand.group(1)
-    m_bot = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="bot-link"', old_content)
-    if not m_bot: m_bot = re.search(r'class="bot-link"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
+    
+    # Brand: Look for <title> content
+    m_brand = re.search(r'<title>(.*?)</title>', old_content)
+    if m_brand and "__BRAND__" not in m_brand.group(1): 
+        defaults['brand'] = m_brand.group(1)
+    
+    # Bot: Look for t.me link inside renew-btn or bot-link
+    m_bot = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*renew-btn', old_content)
+    if not m_bot:
+        m_bot = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*bot-link', old_content)
     if m_bot: defaults['bot'] = m_bot.group(1)
-    m_sup = re.search(r'href="https:\/\/t\.me\/([^"]+)"[^>]*class="btn btn-dark"', old_content)
-    if not m_sup: m_sup = re.search(r'class="btn btn-dark"[^>]*href="https:\/\/t\.me\/([^"]+)"', old_content)
+    
+    # Support: Look for t.me link with "btn-dark"
+    m_sup = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*btn-dark', old_content)
     if m_sup: defaults['sup'] = m_sup.group(1)
+    
+    # News: Look for id="nT"
     m_news = re.search(r'id="nT">\s*([^<]+)\s*<', old_content)
     if m_news: defaults['news'] = m_news.group(1).strip()
-except: pass
+
+except Exception as e:
+    pass
 
 print(f'\n{CYAN}=== Theme Settings ==={NC}')
 print(f'Press {YELLOW}ENTER{NC} to keep the current value [in brackets].\n')
@@ -120,9 +131,6 @@ try:
     content = content.replace('__BOT__', new_bot)
     content = content.replace('__SUP__', new_sup)
     content = content.replace('__NEWS__', new_news)
-    content = content.replace('__ANDROID__', defaults['l_and'])
-    content = content.replace('__IOS__', defaults['l_ios'])
-    content = content.replace('__WIN__', defaults['l_win'])
     with open(final_path, 'w', encoding='utf-8') as f: f.write(content)
     print(f'\n{GREEN}✔ Settings saved successfully.{NC}')
 except Exception as e:
