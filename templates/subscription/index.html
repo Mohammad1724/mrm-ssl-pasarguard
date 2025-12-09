@@ -7,7 +7,6 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
 
-        /* --- VARIABLES --- */
         :root {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.1);
@@ -31,70 +30,49 @@
             transition: 0.3s;
         }
 
-        /* ORBS */
         .orb { position: fixed; width: 500px; height: 500px; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; transition: background 0.3s; }
         .o1 { top: -150px; right: -100px; background: var(--g1); }
         .o2 { bottom: -150px; left: -100px; background: var(--g2); }
 
-        /* TICKER */
-        .ticker-wrap {
-            position: fixed; top: 0; left: 0; right: 0; height: 55px;
-            background: var(--card); backdrop-filter: blur(15px);
-            border-bottom: 1px solid var(--brd);
-            display: flex; align-items: center; z-index: 1000;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
-        }
+        .ticker-wrap { position: fixed; top: 0; left: 0; right: 0; height: 55px; background: var(--card); backdrop-filter: blur(15px); border-bottom: 1px solid var(--brd); display: flex; align-items: center; z-index: 1000; box-shadow: 0 5px 20px rgba(0,0,0,0.05); }
         :root.dark .ticker-wrap { background: rgba(15, 15, 20, 0.85); box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
-        
-        .ticker-icon {
-            width: 55px; height: 100%;
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 24px; color: white; z-index: 2;
-        }
+        .ticker-icon { width: 55px; height: 100%; background: linear-gradient(135deg, #f59e0b, #d97706); display: flex; align-items: center; justify-content: center; font-size: 24px; color: white; z-index: 2; }
         .ticker-content { flex: 1; overflow: hidden; white-space: nowrap; position: relative; height: 100%; display: flex; align-items: center; }
         .ticker-content span { display: inline-block; font-size: 15px; font-weight: 700; color: #d97706; padding-left: 100%; animation: scroll-left 20s linear infinite; }
         :root.dark .ticker-content span { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.3); }
         @keyframes scroll-left { 0% { transform: translate3d(100%, 0, 0); } 100% { transform: translate3d(-150%, 0, 0); } }
 
         .con { max-width: 800px; margin: 0 auto; }
-
-        /* HEAD */
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
         
-        /* BRAND COLOR (FIXED) */
+        /* --- BRAND FIX START --- */
         .brand { 
-            font-size: 28px; font-weight: 900; 
-            /* Solid Dark Blue/Purple for Light Mode - Maximum Readability */
-            color: #2563eb; 
-            background: none;
-            -webkit-text-fill-color: #2563eb;
+            font-size: 28px; 
+            font-weight: 900; 
+            /* FORCE SOLID COLOR IN LIGHT MODE */
+            color: #1e3a8a !important; 
+            background: none !important;
+            -webkit-text-fill-color: #1e3a8a !important;
+            -webkit-background-clip: border-box !important;
         }
         :root.dark .brand { 
-            /* Gradient only for Dark Mode */
-            background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%);
-            -webkit-background-clip: text; 
-            -webkit-text-fill-color: transparent; 
-            color: transparent;
-            text-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+            /* FORCE GRADIENT IN DARK MODE */
+            background: linear-gradient(135deg, #ffffff 0%, #bae6fd 100%) !important;
+            -webkit-background-clip: text !important; 
+            -webkit-text-fill-color: transparent !important; 
+            color: transparent !important;
+            text-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
         }
+        /* --- BRAND FIX END --- */
         
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; color: var(--txt); display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
-
-        /* LAYOUT & CARD */
         .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
         .grid { display: grid; gap: 30px; }
-        
         .col-left { display: flex; flex-direction: column; }
         .col-right { display: flex; flex-direction: column; justify-content: space-between; }
+        @media (min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } .col-right { justify-content: center; height: 100%; gap: 20px; } }
 
-        @media (min-width: 768px) { 
-            .grid { grid-template-columns: 1fr 1fr; }
-            .col-right { justify-content: center; height: 100%; gap: 20px; }
-        }
-
-        /* PROFILE */
         .prof-container { display: flex; justify-content: flex-start; align-items: center; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid var(--brd); }
         .prof-info { display: flex; gap: 12px; align-items: center; width: 100%; }
         .av { width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #fffbef 0%, #ffedd5 100%); color: #92400e; display: flex; align-items: center; justify-content: center; font-size: 26px; position: relative; border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 0 15px rgba(251, 191, 36, 0.5); }
@@ -104,12 +82,10 @@
         .st.act { background: rgba(16,185,129,0.2); color: #34d399; }
         .st.in { background: rgba(239,68,68,0.2); color: #f87171; }
 
-        /* RENEW BUTTON */
         .renew-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px; margin-bottom: 20px; background: linear-gradient(135deg, #ec4899, #8b5cf6); color: white; text-decoration: none; font-weight: 700; font-size: 14px; border-radius: 14px; transition: 0.3s; box-shadow: 0 4px 15px rgba(236, 72, 153, 0.3); }
         .renew-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(236, 72, 153, 0.4); }
         .renew-btn:active { transform: scale(0.98); }
 
-        /* CHART */
         .chart-wrapper { background: rgba(0,0,0,0.03); border: 1px solid var(--brd); border-radius: 20px; padding: 14px 14px 10px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
         :root.dark .chart-wrapper { background: rgba(255, 255, 255, 0.03); }
         .usage-row { display: flex; flex-direction: column; gap: 6px; }
@@ -122,70 +98,49 @@
         :root.dark .usage-bar { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.08); }
         .usage-fill { height: 100%; width: 0%; border-radius: 999px; transition: width 0.8s, background 0.3s; }
 
-        /* BUTTONS */
         .btn { position: relative; display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 14px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; overflow: hidden; background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(255,255,255,0.5)); backdrop-filter: blur(10px); border: 1px solid rgba(0,0,0,0.1); color: var(--txt); transition: 0.3s; }
         :root.dark .btn { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); border-color: rgba(255,255,255,0.1); }
         .btn:active { transform: scale(0.97); } .btn:hover { transform: translateY(-2px); }
-        
         .btn-p { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #0369a1; border: 1px solid #7dd3fc; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2); }
         :root.dark .btn-p { background: rgba(56, 189, 248, 0.05); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); box-shadow: none; }
         .btn-p::before { content:''; position:absolute; inset:0; background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.8), transparent 70%); opacity: 0.6; filter: blur(10px); pointer-events: none; transition: 0.3s; }
-        
         .btn-s { background: rgba(0,0,0,0.05); border: 1px solid rgba(0, 0, 0, 0.15); color: #333; }
         :root.dark .btn-s { background: rgba(255,255,255,0.05); border: 1px solid rgba(255, 255, 255, 0.25); color: var(--txt); }
         .btn-dark { background: rgba(0,0,0,0.05); color: #333; border: 1px solid rgba(0,0,0,0.15); font-size: 12px; }
         :root.dark .btn-dark { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); color: var(--txt); }
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 
-        /* STATS */
         .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .sb { background: rgba(0,0,0,0.03); padding: 12px; border-radius: 12px; border: 1px solid var(--brd); }
         :root.dark .sb { background: rgba(255,255,255,0.05); }
         .sl { font-size: 11px; color: var(--mute); margin-bottom: 4px; } .sv { font-size: 14px; font-weight: 700; direction: ltr; text-align: left; }
 
-        /* DLS */
         .dls-header { font-size: 13px; font-weight: 700; color: var(--mute); margin-top: 20px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
         .dls-header::after { content: ''; flex: 1; height: 1px; background: var(--brd); }
-        
         .dls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .db { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: rgba(0,0,0,0.03); border-radius: 10px; text-decoration: none; color: var(--txt); font-size: 10px; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; }
         :root.dark .db { background: rgba(255,255,255,0.05); }
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
         .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
 
-        /* BRAND (FIXED) */
         .big-brand-box { position: relative; margin-top: 20px; text-align: center; padding: 5px 0; }
+        /* BIG BRAND FIX */
         .big-brand { 
-            font-size: 54px; 
-            font-weight: 900; 
-            letter-spacing: -1.5px; 
-            display: inline-block;
-            
-            /* Light Mode: Solid Color */
-            color: #1e293b;
-            background: none;
-            -webkit-text-fill-color: #1e293b;
-            
-            opacity: 0.15; 
-            transition: 0.5s; 
+            font-size: 54px; font-weight: 900; letter-spacing: -1.5px; display: inline-block;
+            /* Solid for Light */
+            color: #1e3a8a !important; background: none !important; -webkit-text-fill-color: #1e3a8a !important; -webkit-background-clip: border-box !important;
+            opacity: 0.1; transition: 0.5s; 
         }
         :root.dark .big-brand { 
             opacity: 0.8;
-            /* Dark Mode: Gradient */
-            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8); 
-            background-size: 300% auto;
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            color: transparent;
-            filter: none; 
+            /* Gradient for Dark */
+            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; background-size: 300% auto !important;
+            -webkit-background-clip: text !important; background-clip: text !important;
+            -webkit-text-fill-color: transparent !important; color: transparent !important;
             animation: shine 5s linear infinite;
         }
-        @keyframes shine { 
-            to { background-position: 200% center; } 
-        }
+        @keyframes shine { to { background-position: 200% center; } }
 
-        /* MODALS */
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
         .mbox { background: var(--card); padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: var(--txt); border: 1px solid var(--brd); }
         .tst { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: #10b981; color: white; padding: 12px 24px; border-radius: 30px; font-weight: 700; opacity: 0; transition: 0.3s; z-index: 1000; }
@@ -196,7 +151,6 @@
         .app-btn { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: rgba(0,0,0,0.05); border-radius: 12px; color: var(--txt); text-decoration: none; border: 1px solid var(--brd); transition: 0.2s; cursor: pointer; } :root.dark .app-btn { background: rgba(255,255,255,0.08); }
         .app-btn:hover { background: rgba(0,0,0,0.1); transform: translateX(5px); }
 
-        /* TABS */
         .tut-tabs { display: flex; gap: 5px; margin-bottom: 15px; background: var(--brd); padding: 4px; border-radius: 12px; }
         .tut-tab { flex: 1; padding: 8px; border-radius: 8px; cursor: pointer; color: var(--mute); font-size: 13px; border: none; background: transparent; transition: 0.2s; }
         .tut-tab.active { background: var(--card); color: var(--txt); font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
@@ -273,7 +227,7 @@
                     </div>
 
                     <div class="btn-grid">
-                        <!-- FIX: Use hc(null, this) to allow username injection -->
+                        <!-- IMPORTANT: onclick="hc(null, this)" USES THE JS VARIABLE WITH USERNAME -->
                         <button class="btn btn-s" onclick="hc(null, this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
@@ -313,10 +267,8 @@
                             </div>
                         </div>
 
-                        <!-- DOWNLOADS HEADER -->
                         <div class="dls-header">دانلود اپلیکیشن‌های اتصال</div>
 
-                        <!-- DOWNLOAD BUTTONS -->
                         <div class="dls">
                             <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
                             <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
@@ -324,7 +276,6 @@
                         </div>
                     </div>
 
-                    <!-- NEON BRAND -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
@@ -347,7 +298,6 @@
         </div>
     </div>
 
-    <!-- TUTORIAL MODAL -->
     <div class="mod" id="tutMod" onclick="if(event.target===this)cm('tutMod')">
         <div class="mbox">
             <h3 style="margin-bottom:15px">راهنمای اتصال</h3>
@@ -357,60 +307,18 @@
                 <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
             </div>
             
-            <!-- ANDROID -->
             <div id="t-android" class="tut-content active">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <div class="step-txt">
-                        <strong>دانلود برنامه</strong>
-                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <div class="step-txt">
-                        <strong>اتصال</strong>
-                        <p>دکمه "اتصال مستقیم" را بزنید</p>
-                    </div>
-                </div>
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
             </div>
-
-            <!-- IOS -->
             <div id="t-ios" class="tut-content">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <div class="step-txt">
-                        <strong>دانلود برنامه</strong>
-                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <div class="step-txt">
-                        <strong>اتصال</strong>
-                        <p>دکمه "اتصال مستقیم" را بزنید</p>
-                    </div>
-                </div>
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
             </div>
-
-            <!-- WINDOWS -->
             <div id="t-windows" class="tut-content">
-                <div class="step">
-                    <div class="step-num">1</div>
-                    <div class="step-txt">
-                        <strong>دانلود برنامه</strong>
-                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
-                    </div>
-                </div>
-                <div class="step">
-                    <div class="step-num">2</div>
-                    <div class="step-txt">
-                        <strong>اجرا و اتصال</strong>
-                        <p>لینک را کپی کرده و در برنامه Ctrl+V بزنید</p>
-                    </div>
-                </div>
+                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
+                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اجرا و اتصال</strong><p>لینک را کپی و در برنامه Ctrl+V بزنید</p></div></div>
             </div>
-            
             <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
         </div>
     </div>
@@ -423,11 +331,9 @@
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank" class="app-btn"><span>HappProxy</span><span>Play Store</span></a>
-            </div>
-            <br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
+            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
-
     <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
         <div class="mbox"><h3>آیفون</h3><div class="app-list"><a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>App Store</span></a><a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>App Store</span></a></div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-ios')">بستن</button></div>
     </div>
@@ -446,15 +352,12 @@
         var expStr = '{{ user.expire }}';
 
         {% raw %}
-        // INJECT USERNAME INTO HASH (THE FIX)
-        var rawSub = '{{ subscription_url }}';
-        var username = '{{ user.username }}';
+        // --- KEY FIX: Append username if not already present ---
+        if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         
-        // If template rendered correctly
-        if (rawSub && rawSub.indexOf('{{') === -1) {
-            subUrl = rawSub + '#' + username;
-        } else {
-            subUrl = window.location.href; // Fallback
+        var username = '{{ user.username }}';
+        if (username && username.indexOf('{{') === -1 && subUrl.indexOf('#') === -1) {
+            subUrl += '#' + username;
         }
 
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
@@ -530,19 +433,14 @@
             }
         }
 
-        // --- FIXED COPY FUNCTION ---
-        // Pass null as 1st arg to use global subUrl (with username)
+        // --- COPY FUNCTION USING GLOBAL VARIABLE ---
         function hc(t, btn) {
+            // Priority: Argument -> Global Variable
             if (!t || t.indexOf('{{') !== -1) t = subUrl;
             
-            // Modern Clipboard API
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
-            } else {
-                fbc(t, btn);
-            }
+            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
+            else fbc(t, btn);
         }
-        
         function fbc(t, btn) {
             var h = document.getElementById('cph');
             h.style.display = 'block'; h.value = t; h.focus(); h.select();
@@ -595,8 +493,8 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            // Add username to individual configs if they don't have hash
-                            if(z.indexOf('#') === -1) z += '#' + username;
+                            // APPEND USERNAME IF MISSING
+                            if (username && z.indexOf('#') === -1) z += '#' + username;
                             
                             var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             l.innerHTML += '<div style="background:rgba(0,0,0,0.05);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>' + n + '</span><button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px" onclick="hc(\'' + z + '\', this)">کپی</button></div>';
