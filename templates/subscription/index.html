@@ -47,18 +47,25 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
         
-        /* HEADER BRAND (Small) */
         .brand { 
             font-size: 28px; font-weight: 900; 
-            color: #1e293b; /* Solid Dark */
+            color: #1e293b !important; /* Solid Dark Blue */
+            background: none !important;
+            -webkit-text-fill-color: #1e293b !important;
+            -webkit-background-clip: border-box !important;
         }
         :root.dark .brand { 
-            background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-            text-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
+            background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%) !important;
+            -webkit-background-clip: text !important; 
+            -webkit-text-fill-color: transparent !important; 
+            color: transparent !important;
+            text-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
         }
         
+        .bot-link { display: inline-flex; align-items: center; font-size: 14px; font-weight: 700; color: #333; text-decoration: none; background: rgba(0,0,0,0.05); backdrop-filter: blur(12px); padding: 10px 20px; border-radius: 16px; border: 1px solid rgba(0,0,0,0.15); transition: 0.3s; width: fit-content; }
+        :root.dark .bot-link { color: white; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.15); }
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; color: var(--txt); display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
+
         .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
         .grid { display: grid; gap: 30px; }
         .col-left { display: flex; flex-direction: column; }
@@ -117,30 +124,39 @@
 
         .big-brand-box { position: relative; margin-top: 20px; text-align: center; padding: 5px 0; }
         
-        /* --- BRAND FIX (BIG TEXT) --- */
+        /* --- BIG BRAND ANIMATION FIX --- */
+        @keyframes breathe {
+            0% { transform: scale(1); opacity: 0.15; }
+            50% { transform: scale(1.05); opacity: 0.25; }
+            100% { transform: scale(1); opacity: 0.15; }
+        }
+        @keyframes breathe-dark {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+
         .big-brand { 
             font-size: 54px; font-weight: 900; letter-spacing: -1.5px; 
             display: inline-block;
             
-            /* Light Mode: Solid Dark Blue - 100% VISIBLE */
-            color: #1e3a8a !important; 
-            background: none !important;
+            /* Light Mode */
+            color: #1e3a8a !important; background: none !important;
             -webkit-text-fill-color: #1e3a8a !important; 
-            opacity: 1 !important; /* Force visible */
-            filter: none !important;
+            opacity: 0.15;
+            animation: breathe 4s ease-in-out infinite; /* Breathing Animation */
         }
         :root.dark .big-brand { 
-            /* Dark Mode: Gradient */
+            /* Dark Mode */
             background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; 
             background-size: 300% auto !important;
             -webkit-background-clip: text !important; 
             background-clip: text !important;
             -webkit-text-fill-color: transparent !important; 
             color: transparent !important;
-            opacity: 0.8 !important;
-            animation: shine 5s linear infinite;
+            opacity: 0.8;
+            animation: breathe-dark 4s ease-in-out infinite; /* Dark mode breathing */
         }
-        @keyframes shine { to { background-position: 200% center; } }
 
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
         .mbox { background: var(--card); padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: var(--txt); border: 1px solid var(--brd); }
@@ -228,7 +244,7 @@
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
+                        <button class="btn btn-s" onclick="hc(null, this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
 
@@ -487,16 +503,13 @@
         }
 
         // --- FIXED COPY FUNCTION ---
-        // If text is passed as "{{ subscription_url }}" string, ignore it and use finalSubUrl
         function hc(t, btn) {
-            if (!t || t.indexOf('{{') !== -1 || t === rawSub) {
-                t = finalSubUrl;
-            }
+            // Priority: Argument -> Global Variable
+            if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
             
             if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
             else fbc(t, btn);
         }
-        
         function fbc(t, btn) {
             var h = document.getElementById('cph');
             h.style.display = 'block'; h.value = t; h.focus(); h.select();
