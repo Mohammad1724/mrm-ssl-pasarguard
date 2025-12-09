@@ -63,17 +63,20 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
         
-        /* BRAND COLOR (FIXED FOR BETTER VISIBILITY) */
+        /* BRAND COLOR (FIXED) */
         .brand { 
-            font-size: 28px; font-weight: 800; 
-            /* Darker, bolder colors for Light Mode */
-            background: linear-gradient(135deg, #1e293b 0%, #475569 100%); 
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+            font-size: 28px; font-weight: 900; 
+            /* Solid Dark Blue/Purple for Light Mode - Maximum Readability */
+            color: #2563eb; 
+            background: none;
+            -webkit-text-fill-color: #2563eb;
         }
         :root.dark .brand { 
-            /* Lighter, brighter colors for Dark Mode */
+            /* Gradient only for Dark Mode */
             background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            color: transparent;
             text-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
         }
         
@@ -150,7 +153,7 @@
         .db.rec { border-color: #f59e0b; background: rgba(245,158,11,0.1); }
         .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
 
-        /* BRAND (FIXED FOR VISIBILITY) */
+        /* BRAND (FIXED) */
         .big-brand-box { position: relative; margin-top: 20px; text-align: center; padding: 5px 0; }
         .big-brand { 
             font-size: 54px; 
@@ -158,28 +161,25 @@
             letter-spacing: -1.5px; 
             display: inline-block;
             
-            /* Dark, solid gradient for Light Mode */
-            background: linear-gradient(90deg, #334155, #64748b, #1e293b); 
-            background-size: 300% auto; 
-            -webkit-background-clip: text; 
-            background-clip: text; 
-            -webkit-text-fill-color: transparent; 
-            color: transparent; 
+            /* Light Mode: Solid Color */
+            color: #1e293b;
+            background: none;
+            -webkit-text-fill-color: #1e293b;
             
-            opacity: 0.2; /* Subtle look */
+            opacity: 0.15; 
             transition: 0.5s; 
-            animation: shine 5s linear infinite;
         }
         :root.dark .big-brand { 
             opacity: 0.8;
-            /* Bright gradient for Dark Mode */
+            /* Dark Mode: Gradient */
             background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8); 
             background-size: 300% auto;
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
             color: transparent;
-            filter: none;
+            filter: none; 
+            animation: shine 5s linear infinite;
         }
         @keyframes shine { 
             to { background-position: 200% center; } 
@@ -273,7 +273,8 @@
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
+                        <!-- FIX: Use hc(null, this) to allow username injection -->
+                        <button class="btn btn-s" onclick="hc(null, this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
 
@@ -445,8 +446,16 @@
         var expStr = '{{ user.expire }}';
 
         {% raw %}
-        if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        else subUrl += '#' + '{{ user.username }}';
+        // INJECT USERNAME INTO HASH (THE FIX)
+        var rawSub = '{{ subscription_url }}';
+        var username = '{{ user.username }}';
+        
+        // If template rendered correctly
+        if (rawSub && rawSub.indexOf('{{') === -1) {
+            subUrl = rawSub + '#' + username;
+        } else {
+            subUrl = window.location.href; // Fallback
+        }
 
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
@@ -521,11 +530,19 @@
             }
         }
 
+        // --- FIXED COPY FUNCTION ---
+        // Pass null as 1st arg to use global subUrl (with username)
         function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = subUrl;
-            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
-            else fbc(t, btn);
+            
+            // Modern Clipboard API
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
+            } else {
+                fbc(t, btn);
+            }
         }
+        
         function fbc(t, btn) {
             var h = document.getElementById('cph');
             h.style.display = 'block'; h.value = t; h.focus(); h.select();
@@ -578,6 +595,9 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
+                            // Add username to individual configs if they don't have hash
+                            if(z.indexOf('#') === -1) z += '#' + username;
+                            
                             var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             l.innerHTML += '<div style="background:rgba(0,0,0,0.05);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>' + n + '</span><button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px" onclick="hc(\'' + z + '\', this)">کپی</button></div>';
                         }
