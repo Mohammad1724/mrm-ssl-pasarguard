@@ -7,6 +7,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
 
+        /* --- VARIABLES --- */
         :root {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.1);
@@ -46,14 +47,18 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
         
+        /* --- BRAND STYLE (ULTRA VISIBLE) --- */
         .brand { 
-            font-size: 28px; font-weight: 900; 
-            color: #1e293b !important; 
+            font-size: 28px; 
+            font-weight: 900; 
+            /* LIGHT MODE: SOLID BLACK/BLUE */
+            color: #0f172a !important; 
             background: none !important;
-            -webkit-text-fill-color: #1e293b !important;
-            -webkit-background-clip: border-box !important;
+            -webkit-text-fill-color: initial !important; 
+            opacity: 1 !important;
         }
         :root.dark .brand { 
+            /* DARK MODE: BRIGHT GRADIENT */
             background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%) !important;
             -webkit-background-clip: text !important; 
             -webkit-text-fill-color: transparent !important; 
@@ -119,21 +124,31 @@
         .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
 
         .big-brand-box { position: relative; margin-top: 20px; text-align: center; padding: 5px 0; }
+        
+        /* --- BIG BRAND FIX --- */
         .big-brand { 
-            font-size: 54px; font-weight: 900; letter-spacing: -1.5px; display: inline-block;
-            color: #1e3a8a !important; background: none !important; -webkit-text-fill-color: #1e3a8a !important; 
-            opacity: 0.15;
-            animation: breathe 4s ease-in-out infinite; 
+            font-size: 54px; font-weight: 900; letter-spacing: -1.5px; 
+            display: inline-block;
+            
+            /* Light Mode: Subtle Solid Gray */
+            color: #cbd5e1 !important; 
+            background: none !important;
+            -webkit-text-fill-color: initial !important; 
+            opacity: 1 !important;
+            filter: none !important;
         }
         :root.dark .big-brand { 
-            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; background-size: 300% auto !important;
-            -webkit-background-clip: text !important; background-clip: text !important;
-            -webkit-text-fill-color: transparent !important; color: transparent !important;
-            opacity: 0.8;
-            animation: breathe-dark 4s ease-in-out infinite; 
+            /* Dark Mode: Gradient */
+            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; 
+            background-size: 300% auto !important;
+            -webkit-background-clip: text !important; 
+            background-clip: text !important;
+            -webkit-text-fill-color: transparent !important; 
+            color: transparent !important;
+            opacity: 0.8 !important;
+            animation: shine 5s linear infinite;
         }
-        @keyframes breathe { 0% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.05); opacity: 0.25; } 100% { transform: scale(1); opacity: 0.15; } }
-        @keyframes breathe-dark { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }
+        @keyframes shine { to { background-position: 200% center; } }
 
         .mod { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 500; }
         .mbox { background: var(--card); padding: 24px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; color: var(--txt); border: 1px solid var(--brd); }
@@ -221,7 +236,8 @@
                     </div>
 
                     <div class="btn-grid">
-                        <button class="btn btn-s" onclick="hc(null, this)">کپی لینک</button>
+                        <!-- REMOVED USERNAME INJECTION -->
+                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
 
@@ -304,17 +320,58 @@
                 <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
             </div>
             
+            <!-- ANDROID -->
             <div id="t-android" class="tut-content active">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- IOS -->
             <div id="t-ios" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- WINDOWS -->
             <div id="t-windows" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اجرا و اتصال</strong><p>لینک را کپی کرده و در برنامه Ctrl+V بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اجرا و اتصال</strong>
+                        <p>لینک را کپی کرده و در برنامه Ctrl+V بزنید</p>
+                    </div>
+                </div>
             </div>
             
             <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
@@ -329,7 +386,8 @@
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank" class="app-btn"><span>HappProxy</span><span>Play Store</span></a>
-            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
+            </div>
+            <br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
 
@@ -351,21 +409,8 @@
         var expStr = '{{ user.expire }}';
 
         {% raw %}
-        // --- FORCE URL CONSTRUCTION ---
-        // 1. Get Base URL
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        
-        // 2. Get Username
-        var username = '{{ user.username }}';
-        if (username.indexOf('{{') !== -1) username = ''; // Fallback if template fails
-        
-        // 3. Construct Final URL (Always use this!)
-        var finalSubUrl = subUrl;
-        if (username && finalSubUrl.indexOf('#') === -1) {
-            finalSubUrl += '#' + username;
-        }
-
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + finalSubUrl;
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
 
         // THEME LOGIC
         var root = document.documentElement;
@@ -438,24 +483,11 @@
             }
         }
 
-        // --- OVERRIDE COPY LOGIC ---
-        // This function now IGNORES what is passed in 't' if 't' is the default URL,
-        // and ALWAYS uses 'finalSubUrl' (which includes #username)
         function hc(t, btn) {
-            var textToCopy = finalSubUrl;
-            
-            // Only use 't' if it's a specific config (from sc() function), otherwise use full url
-            if (t && t !== subUrl && t.indexOf('{{') === -1) {
-                textToCopy = t;
-            }
-
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(textToCopy).then(() => st(btn)).catch(() => fbc(textToCopy, btn));
-            } else {
-                fbc(textToCopy, btn);
-            }
+            if (!t || t.indexOf('{{') !== -1) t = subUrl;
+            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
+            else fbc(t, btn);
         }
-        
         function fbc(t, btn) {
             var h = document.getElementById('cph');
             h.style.display = 'block'; h.value = t; h.focus(); h.select();
@@ -491,16 +523,12 @@
         }
 
         function openApp(app) {
-            var t = finalSubUrl; // ALWAYS USE FINAL URL
-            var n = document.title; 
-            var link = '';
-            
+            var t = subUrl; var n = document.title; var link = '';
             if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'v2raytun') link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'happ') link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch (e) { link = t; } }
-            
             window.location.href = link; setTimeout(() => cm('appMod'), 500);
         }
 
@@ -512,7 +540,6 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            if (username && z.indexOf('#') === -1) z += '#' + username;
                             var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             l.innerHTML += '<div style="background:rgba(0,0,0,0.05);padding:8px;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center"><span>' + n + '</span><button class="btn btn-s" style="width:auto;height:30px;padding:0 15px;font-size:12px;min-width:60px" onclick="hc(\'' + z + '\', this)">کپی</button></div>';
                         }
