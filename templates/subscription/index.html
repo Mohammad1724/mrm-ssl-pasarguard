@@ -7,6 +7,7 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;800;900&display=swap');
 
+        /* --- VARIABLES --- */
         :root {
             --bg: #f5f5f5; --txt: #1a1a1a; --mute: #666;
             --card: rgba(255, 255, 255, 0.95); --brd: rgba(0, 0, 0, 0.1);
@@ -46,25 +47,16 @@
         .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
         .brand-box { display: flex; flex-direction: column; gap: 8px; }
         
-        /* --- BRAND FIX START --- */
+        /* HEADER BRAND (Small) */
         .brand { 
-            font-size: 28px; 
-            font-weight: 900; 
-            /* FORCE SOLID COLOR IN LIGHT MODE */
-            color: #1e3a8a !important; 
-            background: none !important;
-            -webkit-text-fill-color: #1e3a8a !important;
-            -webkit-background-clip: border-box !important;
+            font-size: 28px; font-weight: 900; 
+            color: #1e293b; /* Solid Dark */
         }
         :root.dark .brand { 
-            /* FORCE GRADIENT IN DARK MODE */
-            background: linear-gradient(135deg, #ffffff 0%, #bae6fd 100%) !important;
-            -webkit-background-clip: text !important; 
-            -webkit-text-fill-color: transparent !important; 
-            color: transparent !important;
-            text-shadow: 0 0 25px rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, #ffffff 0%, #a5f3fc 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
+            text-shadow: 0 0 25px rgba(255, 255, 255, 0.15);
         }
-        /* --- BRAND FIX END --- */
         
         .theme-btn { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--brd); background: rgba(255,255,255,0.1); font-size: 20px; cursor: pointer; color: var(--txt); display: flex; align-items: center; justify-content: center; transition: 0.2s; backdrop-filter: blur(5px); }
         .card { background: var(--card); border: 1px solid var(--brd); border-radius: 24px; padding: 24px; backdrop-filter: blur(20px); transition: 0.3s; }
@@ -124,19 +116,28 @@
         .db:hover { background: rgba(0,0,0,0.1); transform: translateY(-2px); }
 
         .big-brand-box { position: relative; margin-top: 20px; text-align: center; padding: 5px 0; }
-        /* BIG BRAND FIX */
+        
+        /* --- BRAND FIX (BIG TEXT) --- */
         .big-brand { 
-            font-size: 54px; font-weight: 900; letter-spacing: -1.5px; display: inline-block;
-            /* Solid for Light */
-            color: #1e3a8a !important; background: none !important; -webkit-text-fill-color: #1e3a8a !important; -webkit-background-clip: border-box !important;
-            opacity: 0.1; transition: 0.5s; 
+            font-size: 54px; font-weight: 900; letter-spacing: -1.5px; 
+            display: inline-block;
+            
+            /* Light Mode: Solid Dark Blue - 100% VISIBLE */
+            color: #1e3a8a !important; 
+            background: none !important;
+            -webkit-text-fill-color: #1e3a8a !important; 
+            opacity: 1 !important; /* Force visible */
+            filter: none !important;
         }
         :root.dark .big-brand { 
-            opacity: 0.8;
-            /* Gradient for Dark */
-            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; background-size: 300% auto !important;
-            -webkit-background-clip: text !important; background-clip: text !important;
-            -webkit-text-fill-color: transparent !important; color: transparent !important;
+            /* Dark Mode: Gradient */
+            background: linear-gradient(90deg, #38bdf8, #f472b6, #a78bfa, #38bdf8) !important; 
+            background-size: 300% auto !important;
+            -webkit-background-clip: text !important; 
+            background-clip: text !important;
+            -webkit-text-fill-color: transparent !important; 
+            color: transparent !important;
+            opacity: 0.8 !important;
             animation: shine 5s linear infinite;
         }
         @keyframes shine { to { background-position: 200% center; } }
@@ -227,8 +228,7 @@
                     </div>
 
                     <div class="btn-grid">
-                        <!-- IMPORTANT: onclick="hc(null, this)" USES THE JS VARIABLE WITH USERNAME -->
-                        <button class="btn btn-s" onclick="hc(null, this)">کپی لینک</button>
+                        <button class="btn btn-s" onclick="hc('{{ subscription_url }}', this)">کپی لینک</button>
                         <button class="btn btn-s" onclick="om('qrm')">QR Code</button>
                     </div>
 
@@ -267,8 +267,10 @@
                             </div>
                         </div>
 
+                        <!-- DOWNLOADS HEADER -->
                         <div class="dls-header">دانلود اپلیکیشن‌های اتصال</div>
 
+                        <!-- DOWNLOAD BUTTONS -->
                         <div class="dls">
                             <div class="db" id="da" onclick="om('dl-and')"><span>🤖</span>Android</div>
                             <div class="db" id="di" onclick="om('dl-ios')"><span>🍏</span>iOS</div>
@@ -276,6 +278,7 @@
                         </div>
                     </div>
 
+                    <!-- NEON BRAND -->
                     <div class="big-brand-box">
                         <div class="big-brand" id="brandTxt" data-text="__BRAND__">__BRAND__</div>
                     </div>
@@ -298,6 +301,7 @@
         </div>
     </div>
 
+    <!-- TUTORIAL MODAL -->
     <div class="mod" id="tutMod" onclick="if(event.target===this)cm('tutMod')">
         <div class="mbox">
             <h3 style="margin-bottom:15px">راهنمای اتصال</h3>
@@ -307,18 +311,60 @@
                 <button class="tut-tab" onclick="tab('windows')">ویندوز</button>
             </div>
             
+            <!-- ANDROID -->
             <div id="t-android" class="tut-content active">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- IOS -->
             <div id="t-ios" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اتصال</strong><p>دکمه "اتصال مستقیم" را بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اتصال</strong>
+                        <p>دکمه "اتصال مستقیم" را بزنید</p>
+                    </div>
+                </div>
             </div>
+
+            <!-- WINDOWS -->
             <div id="t-windows" class="tut-content">
-                <div class="step"><div class="step-num">1</div><div class="step-txt"><strong>دانلود برنامه</strong><p>از لینک‌های پایین صفحه دانلود کنید</p></div></div>
-                <div class="step"><div class="step-num">2</div><div class="step-txt"><strong>اجرا و اتصال</strong><p>لینک را کپی و در برنامه Ctrl+V بزنید</p></div></div>
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-txt">
+                        <strong>دانلود برنامه</strong>
+                        <p>برنامه را از لینک‌های پایین صفحه دانلود کنید</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-txt">
+                        <strong>اجرا و اتصال</strong>
+                        <p>لینک را کپی کرده و در برنامه Ctrl+V بزنید</p>
+                    </div>
+                </div>
             </div>
+            
             <br><button class="btn btn-s" style="width:100%" onclick="cm('tutMod')">بستن</button>
         </div>
     </div>
@@ -331,9 +377,11 @@
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-btn"><span>Hiddify</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-btn"><span>v2rayTun</span><span>Play Store</span></a>
                 <a href="https://play.google.com/store/apps/details?id=com.happproxy" target="_blank" class="app-btn"><span>HappProxy</span><span>Play Store</span></a>
-            </div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
+            </div>
+            <br><button class="btn btn-s" style="width:100%" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
+
     <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
         <div class="mbox"><h3>آیفون</h3><div class="app-list"><a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-btn"><span>V2Box</span><span>App Store</span></a><a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-btn"><span>Streisand</span><span>App Store</span></a></div><br><button class="btn btn-s" style="width:100%" onclick="cm('dl-ios')">بستن</button></div>
     </div>
@@ -352,15 +400,20 @@
         var expStr = '{{ user.expire }}';
 
         {% raw %}
-        // --- KEY FIX: Append username if not already present ---
+        // --- FIXED USERNAME INJECTION ---
+        var rawSub = '{{ subscription_url }}';
+        var username = '{{ user.username }}';
+        
+        // Ensure username is added only if missing
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         
-        var username = '{{ user.username }}';
-        if (username && username.indexOf('{{') === -1 && subUrl.indexOf('#') === -1) {
-            subUrl += '#' + username;
+        // This is the global variable we will use for copying
+        var finalSubUrl = subUrl;
+        if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) {
+            finalSubUrl += '#' + username;
         }
 
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + subUrl;
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + finalSubUrl;
 
         // THEME LOGIC
         var root = document.documentElement;
@@ -433,14 +486,17 @@
             }
         }
 
-        // --- COPY FUNCTION USING GLOBAL VARIABLE ---
+        // --- FIXED COPY FUNCTION ---
+        // If text is passed as "{{ subscription_url }}" string, ignore it and use finalSubUrl
         function hc(t, btn) {
-            // Priority: Argument -> Global Variable
-            if (!t || t.indexOf('{{') !== -1) t = subUrl;
+            if (!t || t.indexOf('{{') !== -1 || t === rawSub) {
+                t = finalSubUrl;
+            }
             
             if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
             else fbc(t, btn);
         }
+        
         function fbc(t, btn) {
             var h = document.getElementById('cph');
             h.style.display = 'block'; h.value = t; h.focus(); h.select();
@@ -476,12 +532,16 @@
         }
 
         function openApp(app) {
-            var t = subUrl; var n = document.title; var link = '';
+            var t = finalSubUrl; // Use modified URL
+            var n = document.title; 
+            var link = '';
+            
             if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'v2raytun') link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'happ') link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch (e) { link = t; } }
+            
             window.location.href = link; setTimeout(() => cm('appMod'), 500);
         }
 
@@ -493,7 +553,7 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            // APPEND USERNAME IF MISSING
+                            // APPEND USERNAME TO INDIVIDUAL CONFIGS
                             if (username && z.indexOf('#') === -1) z += '#' + username;
                             
                             var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
