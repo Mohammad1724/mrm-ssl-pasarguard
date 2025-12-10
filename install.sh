@@ -2,6 +2,7 @@
 
 # Installer for MRM Manager v3.3
 INSTALL_DIR="/opt/mrm-manager"
+# لینک مستقیم به فایل‌های خام (حتماً چک کنید که فایل‌ها در این مسیر باشند)
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
 # Colors
@@ -20,7 +21,7 @@ fi
 echo -e "${BLUE}Installing MRM Manager v3.3...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-# List of files to install (Removed monitor.sh)
+# List of all files to install
 FILES=(
     "utils.sh"
     "ui.sh"
@@ -32,6 +33,7 @@ FILES=(
     "backup.sh"
     "domain_separator.sh"
     "port_manager.sh"
+    "migrator.sh"
     "main.sh"
 )
 
@@ -45,7 +47,7 @@ install_file() {
     local FILE=$1
     local IS_OPTIONAL=$2
     
-    # 1. Try Local Install
+    # 1. Try Local Install (Priority)
     if [ -f "./$FILE" ]; then
         cp "./$FILE" "$INSTALL_DIR/$FILE"
         chmod +x "$INSTALL_DIR/$FILE"
@@ -53,7 +55,8 @@ install_file() {
         return 0
     fi
 
-    # 2. Try Online Install
+    # 2. Try Online Install (GitHub)
+    # -s: Silent, -L: Follow Redirects, -k: Insecure SSL (just in case), -f: Fail fast
     if curl -s -L -k -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
         chmod +x "$INSTALL_DIR/$FILE"
         echo -e "${GREEN}✔ Downloaded: $FILE${NC}"
@@ -70,7 +73,7 @@ install_file() {
     fi
 }
 
-echo -e "${YELLOW}Fetching files from GitHub...${NC}"
+echo -e "${YELLOW}Fetching files...${NC}"
 
 # Install Core Files
 for FILE in "${FILES[@]}"; do
@@ -78,6 +81,7 @@ for FILE in "${FILES[@]}"; do
     if [ $? -ne 0 ]; then
         echo ""
         echo -e "${RED}CRITICAL ERROR: Could not install core files.${NC}"
+        echo -e "Please check if '${YELLOW}$FILE${NC}' exists in your GitHub repo."
         exit 1
     fi
 done
@@ -93,7 +97,7 @@ chmod +x /usr/local/bin/mrm
 
 echo ""
 echo -e "${GREEN}✔ Installation Complete!${NC}"
-echo -e "${YELLOW}Type 'mrm' to run.${NC}"
+echo -e "${YELLOW}Type 'mrm' to run the manager.${NC}"
 echo ""
 
 # Run
