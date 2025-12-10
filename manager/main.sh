@@ -11,6 +11,7 @@ source /opt/mrm-manager/inbound.sh
 source /opt/mrm-manager/backup.sh
 source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/port_manager.sh
+source /opt/mrm-manager/migrator.sh
 
 # --- HELPER FUNCTIONS ---
 edit_file() {
@@ -32,11 +33,12 @@ tools_menu() {
         echo "3) Port Manager (Single/Dual Port)"
         echo "4) Theme Manager (Subscription Page)"
         echo "5) Inbound Wizard (Create Config)"
-        echo "6) Edit Panel Config (.env)"
-        echo "7) Edit Node Config (.env)"
-        echo "8) Restart Panel Service"
-        echo "9) Restart Node Service"
-        echo "10) Show Node SSL Paths"
+        echo "6) Migration Tools (Pasarguard -> Rebeka)"
+        echo "7) Edit Panel Config (.env)"
+        echo "8) Edit Node Config (.env)"
+        echo "9) Restart Panel Service"
+        echo "10) Restart Node Service"
+        echo "11) Show Node SSL Paths"
         echo "0) Back"
         echo ""
         read -p "Select: " T_OPT
@@ -46,11 +48,12 @@ tools_menu() {
             3) port_menu ;;
             4) theme_menu ;;
             5) inbound_menu ;;
-            6) edit_file "$PANEL_ENV" ;;
-            7) edit_file "$NODE_ENV" ;;
-            8) restart_service "panel"; pause ;;
-            9) restart_service "node"; pause ;;
-            10) show_node_ssl ;;
+            6) migrator_menu ;;
+            7) edit_file "$PANEL_ENV" ;;
+            8) edit_file "$NODE_ENV" ;;
+            9) restart_service "panel"; pause ;;
+            10) restart_service "node"; pause ;;
+            11) show_node_ssl ;;
             0) return ;;
             *) ;;
         esac
