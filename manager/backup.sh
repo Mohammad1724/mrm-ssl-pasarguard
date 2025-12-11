@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# --- CONFIG ---
+# --- CONFIGURATION ---
 BACKUP_DIR="/root/mrm-backups"
 TG_CONFIG="/root/.mrm_telegram"
-MAX_BACKUPS=10
 
 # Colors
 RED='\033[0;31m'
@@ -13,17 +12,15 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# --- HELPER FUNCTIONS ---
-
-# Function to clear input buffer and pause
-safe_pause() {
+# --- FORCED PAUSE ---
+# این تابع جلوی بسته شدن سریع را می‌گیرد
+force_pause() {
     echo ""
-    # Clear input buffer
-    read -t 0.1 -n 10000 discard 2>/dev/null
-    read -n 1 -s -r -p "Press any key to continue..."
-    echo ""
+    echo -e "${YELLOW}--- Press ENTER to continue ---${NC}"
+    read -p ""
 }
 
+# --- DETECT PANEL ---
 detect_panel() {
     if [ -d "/opt/rebecca" ]; then
         PANEL_NAME="Rebecca"
@@ -34,24 +31,22 @@ detect_panel() {
         PANEL_DIR="/opt/pasarguard"
         DATA_DIR="/var/lib/pasarguard"
     else
-        PANEL_NAME="Unknown"
+        PANEL_NAME="Marzban"
         PANEL_DIR="/opt/marzban"
         DATA_DIR="/var/lib/marzban"
     fi
 }
 
+# --- TELEGRAM SETUP ---
 setup_telegram() {
     clear
-    echo -e "${CYAN}=== TELEGRAM SETUP ===${NC}"
+    echo -e "${CYAN}=== TELEGRAM CONFIG ===${NC}"
     
-    local CUR_TOKEN=""
-    local CUR_CHAT=""
-    
+    # Read current config
     if [ -f "$TG_CONFIG" ]; then
         CUR_TOKEN=$(grep "^TG_TOKEN=" "$TG_CONFIG" | cut -d'"' -f2)
         CUR_CHAT=$(grep "^TG_CHAT=" "$TG_CONFIG" | cut -d'"' -f2)
         echo -e "Current Chat ID: ${GREEN}$CUR_CHAT${NC}"
-        echo -e "Current Token:   ${GREEN}${CUR_TOKEN:0:10}......${NC}"
     else
         echo "Not configured."
     fi
@@ -65,74 +60,105 @@ setup_telegram() {
         echo "TG_CHAT=\"$CHATID\"" >> "$TG_CONFIG"
         echo -e "${GREEN}Saved.${NC}"
         
-        echo "Sending test message..."
-        local RES=$(curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+        echo "Testing connection..."
+        # Try sending a simple message
+        curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHATID" \
-            -d text="✅ MRM Backup Service Connected!")
+            -d text="✅ Connection Test OK" > /tmp/tg_test.log
             
-        if echo "$RES" | grep -q '"ok":true'; then
-            echo -e "${GREEN}✔ Test Successful!${NC}"
+        if grep -q '"ok":true' /tmp/tg_test.log; then
+             echo -e "${GREEN}✔ Connection Successful!${NC}"
         else
-            echo -e "${RED}✘ Test Failed!${NC}"
-            echo "Response: $RES"
+             echo -e "${RED}✘ Connection Failed!${NC}"
+             cat /tmp/tg_test.log
         fi
-    else
-        echo "Cancelled."
     fi
-    safe_pause
+    force_pause
 }
 
+# --- SEND LOGIC ---
 send_to_telegram() {
     local FILE="$1"
     
-    # Reload Config
-    if [ ! -f "$TG_CONFIG" ]; then return 1; fi
+    echo -e "${BLUE}----------------------------------------${NC}"
+    echo -e "${BLUE}       STARTING TELEGRAM UPLOAD         ${NC}"
+    echo -e "${BLUE}----------------------------------------${NC}"
+
+    if [ ! -f "$TG_CONFIG" ]; then
+        echo -e "${RED}Error: Telegram not configured.${NC}"
+        return 1
+    fi
+
+    # Read variables cleanly
     local TG_TOKEN=$(grep "^TG_TOKEN=" "$TG_CONFIG" | cut -d'"' -f2)
     local TG_CHAT=$(grep "^TG_CHAT=" "$TG_CONFIG" | cut -d'"' -f2)
 
-    if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then return 1; fi
+    if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+        echo -e "${RED}Error: Config file empty or invalid.${NC}"
+        return 1
+    fi
 
-    echo -e "${BLUE}>> Uploading to Telegram (Please wait)...${NC}"
+    echo -e "Target: Chat ID $TG_CHAT"
+    echo -e "File:   $FILE"
     
-    local CAPTION="📦 Backup: $PANEL_NAME
-📅 $(date '+%Y-%m-%d %H:%M')
-💾 Size: $(du -h "$FILE" | cut -f1)"
+    # Check file size
+    local FSIZE=$(du -k "$FILE" | cut -f1)
+    echo -e "Size:   ${FSIZE} KB"
+    
+    if [ "$FSIZE" -gt 49000 ]; then
+        echo -e "${RED}Warning: File is larger than 50MB. Telegram Bot API might reject it.${NC}"
+    fi
 
-    # Remove -s (silent) to show errors if any
-    # Added --connect-timeout to fail faster if network is bad
-    curl -v --connect-timeout 20 \
+    echo -e "${YELLOW}>> Uploading... (Please Wait)${NC}"
+
+    # --- THE CRITICAL CURL COMMAND ---
+    # We capture stdout and stderr to a log file to show you EXACTLY what happened
+    local CAPTION="#Backup $PANEL_NAME $(date +%F_%R)"
+    
+    curl -v --connect-timeout 30 \
          -F chat_id="$TG_CHAT" \
          -F caption="$CAPTION" \
          -F document=@"$FILE" \
-         "https://api.telegram.org/bot$TG_TOKEN/sendDocument" > /tmp/tg_result.json 2>&1
+         "https://api.telegram.org/bot$TG_TOKEN/sendDocument" > /tmp/tg_debug.log 2>&1
+         
+    local EXIT_CODE=$?
     
-    local CURL_EXIT=$?
-    
-    if [ $CURL_EXIT -eq 0 ] && grep -q '"ok":true' /tmp/tg_result.json; then
-        echo -e "${GREEN}✔ Upload Successful!${NC}"
-        return 0
+    echo ""
+    echo -e "${BLUE}----------------------------------------${NC}"
+    echo -e "${BLUE}           UPLOAD RESULT                ${NC}"
+    echo -e "${BLUE}----------------------------------------${NC}"
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo -e "${RED}✘ CURL FAILED (Exit Code: $EXIT_CODE)${NC}"
+        echo "Possible reasons: Network timeout, DNS issue, or Proxy needed."
+        echo "Last lines of log:"
+        tail -n 10 /tmp/tg_debug.log
     else
-        echo -e "${RED}✘ Upload Failed!${NC}"
-        echo -e "${YELLOW}Debug Info:${NC}"
-        cat /tmp/tg_result.json | grep -o '"description":"[^"]*"' 
-        return 1
+        # Check if Telegram said "ok":true
+        if grep -q '"ok":true' /tmp/tg_debug.log; then
+            echo -e "${GREEN}✔ SUCCESS: Telegram accepted the file.${NC}"
+        else
+            echo -e "${RED}✘ TELEGRAM API ERROR${NC}"
+            echo "Response from Telegram:"
+            grep "{" /tmp/tg_debug.log
+        fi
     fi
 }
 
+# --- BACKUP LOGIC ---
 create_backup() {
     local MODE="$1"
     detect_panel
     
     if [ "$MODE" != "auto" ]; then
         clear
-        echo -e "${CYAN}=== BACKUP PROCESS ===${NC}"
-        echo -e "Panel: ${GREEN}$PANEL_NAME${NC}"
+        echo -e "${CYAN}Creating Backup for $PANEL_NAME...${NC}"
     fi
-
+    
     if [ ! -d "$PANEL_DIR" ]; then
         echo -e "${RED}Panel directory not found!${NC}"
-        [ "$MODE" != "auto" ] && safe_pause
-        return 1
+        [ "$MODE" != "auto" ] && force_pause
+        return
     fi
 
     mkdir -p "$BACKUP_DIR"
@@ -142,8 +168,9 @@ create_backup() {
     mkdir -p "$TMP"
 
     # 1. DB
-    echo -ne "Dumping DB... "
-    local CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "pasarguard|marzban|rebecca" | head -1 | awk '{print $1}')
+    echo -ne "Exporting DB... "
+    # Try multiple ways to find the container
+    local CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "pasarguard|marzban|rebecca|panel" | head -1 | awk '{print $1}')
     
     if [ -n "$CID" ]; then
         if docker exec "$CID" marzban-cli database dump --target /tmp/db_dump >/dev/null 2>&1; then
@@ -151,54 +178,55 @@ create_backup() {
             echo -e "${GREEN}OK (CLI)${NC}"
         elif [ -f "$DATA_DIR/db.sqlite3" ]; then
             cp "$DATA_DIR/db.sqlite3" "$TMP/"
-            echo -e "${GREEN}OK (Raw)${NC}"
+            echo -e "${GREEN}OK (Raw Copy)${NC}"
         else
             echo -e "${YELLOW}Failed${NC}"
         fi
     else
+        # Container down? Try raw copy
         if [ -f "$DATA_DIR/db.sqlite3" ]; then
             cp "$DATA_DIR/db.sqlite3" "$TMP/"
-            echo -e "${GREEN}OK (Offline)${NC}"
+            echo -e "${GREEN}OK (Offline Copy)${NC}"
         else
-            echo -e "${RED}No DB found${NC}"
+            echo -e "${RED}No DB Found${NC}"
         fi
     fi
 
     # 2. Files
-    echo -ne "Archiving... "
+    echo -ne "Copying Files... "
     [ -d "$PANEL_DIR" ] && cp -r "$PANEL_DIR" "$TMP/config"
     [ -d "$DATA_DIR" ] && cp -r "$DATA_DIR" "$TMP/data"
     echo -e "${GREEN}OK${NC}"
 
-    # 3. Zip
+    # 3. Compress
+    echo -ne "Compressing... "
     cd "$BACKUP_DIR"
-    tar -czf "${NAME}.tar.gz" -C "/tmp" "$NAME"
+    tar -czf "${NAME}.tar.gz" -C "/tmp" "$NAME" >/dev/null 2>&1
     rm -rf "$TMP"
-    
+    echo -e "${GREEN}Done${NC}"
+
     local FINAL_FILE="$BACKUP_DIR/${NAME}.tar.gz"
 
-    echo ""
     if [ -f "$FINAL_FILE" ]; then
-        echo -e "${GREEN}✔ Created: $FINAL_FILE${NC}"
-        
-        # Check Telegram Config before trying
-        if [ -f "$TG_CONFIG" ]; then
-            send_to_telegram "$FINAL_FILE"
-        else
-            echo -e "${YELLOW}Telegram not configured.${NC}"
-        fi
+        echo -e "${GREEN}Backup stored at: $FINAL_FILE${NC}"
+        # CALL SENDER
+        send_to_telegram "$FINAL_FILE"
     else
-        echo -e "${RED}Failed to create file.${NC}"
+        echo -e "${RED}Failed to create tar file.${NC}"
     fi
 
+    # ALWAYS PAUSE IN MANUAL MODE
     if [ "$MODE" != "auto" ]; then
-        safe_pause
+        force_pause
     fi
 }
 
+# --- CRON SETUP ---
 setup_cron() {
     clear
-    echo -e "${CYAN}=== AUTO BACKUP ===${NC}"
+    echo "Current Cron:"
+    crontab -l 2>/dev/null | grep "backup.sh" || echo "None"
+    echo ""
     echo "1) Every 6 Hours"
     echo "2) Daily"
     echo "3) Disable"
@@ -208,21 +236,21 @@ setup_cron() {
     (crontab -l 2>/dev/null | grep -v "backup.sh") | crontab -
 
     case $O in
-        1) (crontab -l 2>/dev/null; echo "0 */6 * * * $CMD") | crontab -; echo "Enabled (6h)." ;;
-        2) (crontab -l 2>/dev/null; echo "0 0 * * * $CMD") | crontab -; echo "Enabled (Daily)." ;;
+        1) (crontab -l 2>/dev/null; echo "0 */6 * * * $CMD") | crontab -; echo "Set to 6h." ;;
+        2) (crontab -l 2>/dev/null; echo "0 0 * * * $CMD") | crontab -; echo "Set to Daily." ;;
         *) echo "Disabled." ;;
     esac
-    safe_pause
+    force_pause
 }
 
 # --- MENU ---
 backup_menu() {
     while true; do
         clear
-        echo -e "${BLUE}=== BACKUP MANAGER ===${NC}"
-        echo "1) Create Backup & Send"
+        echo -e "${BLUE}=== BACKUP MENU ===${NC}"
+        echo "1) Create Backup & Send (Debug Mode)"
         echo "2) Telegram Settings"
-        echo "3) Auto Backup Schedule"
+        echo "3) Auto Backup"
         echo "0) Back"
         echo ""
         read -p "Select: " OPT
@@ -236,13 +264,13 @@ backup_menu() {
     done
 }
 
-# --- ENTRY POINT ---
+# --- MAIN ENTRY ---
 if [ "$1" == "auto" ]; then
     create_backup "auto"
     exit 0
 fi
 
-# Run menu if executed directly
+# If run directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     backup_menu
 fi
