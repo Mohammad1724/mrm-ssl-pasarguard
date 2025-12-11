@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Load Modules
+# Load Modules (backup.sh excluded - runs separately to avoid conflicts)
 source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ui.sh
 source /opt/mrm-manager/ssl.sh
@@ -8,7 +8,6 @@ source /opt/mrm-manager/node.sh
 source /opt/mrm-manager/theme.sh
 source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/inbound.sh
-source /opt/mrm-manager/backup.sh
 source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/port_manager.sh
 source /opt/mrm-manager/migrator.sh
@@ -68,7 +67,7 @@ while true; do
     clear
     ui_header "MRM PASARGUARD MANAGER v1.1"
     ui_status_bar
-    
+
     echo "  1) SSL Certificates"
     echo "  2) Backup & Restore"
     echo "  3) Tools & Settings"
@@ -79,7 +78,7 @@ while true; do
 
     case $OPTION in
         1) ssl_menu ;;
-        2) backup_menu ;;
+        2) bash /opt/mrm-manager/backup.sh ;;
         3) tools_menu ;;
         0) exit 0 ;;
         *) ;;
