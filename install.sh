@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Installer for MRM Manager v3.3
+# Installer for MRM Manager v1.1
 INSTALL_DIR="/opt/mrm-manager"
 # لینک مستقیم به فایل‌های خام (حتماً چک کنید که فایل‌ها در این مسیر باشند)
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
