@@ -1,33 +1,26 @@
 #!/usr/bin/env bash
-# migrate_pasarguard_to_rebecca.sh
-# Single-file production-ready migration from Pasarguard -> Rebecca
-# Fixed: Paths, Installer URL, Race Conditions, Rollback
+# Pasarguard -> Rebecca Enterprise Migrator (MySQL Edition)
+# Features: Dry-Run, Rollback, MySQL Injection, Safe Backup
 
 set -euo pipefail -o errtrace
 
 ### -------------------------
-### Configuration (CORRECTED)
+### Configuration
 ### -------------------------
-# مسیرهای رسمی ربکا (Rebecca)
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
 REBECCA_DIR="${REBECCA_DIR:-/opt/rebecca}"
-REBECCA_DATA_DIR="${REBECCA_DATA_DIR:-/var/lib/rebecca}" 
-
+REBECCA_DATA_DIR="${REBECCA_DATA_DIR:-/var/lib/rebecca}"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/migration}"
-TEMP_DB="${TEMP_DB:-/tmp/migration_export_$$.sqlite3}"
+TEMP_DB="${TEMP_DB:-/tmp/pasarguard_export_$$.sqlite3}"
 TEMP_INSTALLER="${TEMP_INSTALLER:-/tmp/rebecca_installer_$$.sh}"
 LOG_FILE="${LOG_FILE:-/var/log/mrm_migration.log}"
-EXPORT_IN_CONTAINER="/tmp/dump.sqlite3"
+EXPORT_IN_CONTAINER="/tmp/dump_migration"
 
-# Internal path (Rebecca is a fork of Marzban, so internal path is usually /var/lib/marzban)
-REBECCA_SQLITE_PATH="${REBECCA_SQLITE_PATH:-/var/lib/marzban/db.sqlite3}" 
+# Official Rebecca Installer
+INSTALL_SCRIPT_URL="https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh"
 
-# Official Installer URL
-REBECCA_INSTALL_URL="${REBECCA_INSTALL_URL:-https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh}"
-
-DB_WAIT_TIMEOUT="${DB_WAIT_TIMEOUT:-60}"
-CONTAINER_START_TIMEOUT="${CONTAINER_START_TIMEOUT:-30}"
-VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-30}"
+DB_WAIT_TIMEOUT="${DB_WAIT_TIMEOUT:-90}"
+VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-60}"
 READ_TIMEOUT="${READ_TIMEOUT:-300}"
 
 # Colors
@@ -41,19 +34,18 @@ NC="$(tput sgr0 2>/dev/null || echo '')"
 ### -------------------------
 ### CLI args
 ### -------------------------
-DRY_RUN_DEFAULT="${DRY_RUN:-false}" 
-DRY_RUN="$DRY_RUN_DEFAULT"
+DRY_RUN="${DRY_RUN:-false}"
 CONFIRM=false
 VERBOSE=false
 
-usage() {
+usage(){
   cat <<EOF
 Usage: $0 [options]
 Options:
   --pasarguard-dir PATH   (default: $PASARGUARD_DIR)
   --rebecca-dir PATH      (default: $REBECCA_DIR)
-  --dry-run               show actions and don't execute destructive steps
-  --confirm               required to actually perform non-dry-run changes
+  --dry-run               simulate execution
+  --confirm               execute real migration
   --verbose               verbose logging
   -h|--help               show this help
 EOF
@@ -71,13 +63,27 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ "$CONFIRM" = true ]; then DRY_RUN=false; elif [ "$DRY_RUN" = false ]; then
+  echo "Error: Use --confirm for real execution or --dry-run for preview."; exit 2;
+fi
+
 ### -------------------------
-### Logging + helpers
+### Logging helpers
 ### -------------------------
-_run() {
+ensure_logfile(){
+  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+  touch "$LOG_FILE" 2>/dev/null || { LOG_FILE="/tmp/mrm_migration.log"; touch "$LOG_FILE"; }
+}
+log(){ echo "[$(date +'%F %T')] $*" | tee -a "$LOG_FILE"; }
+info(){ echo -e "${BLUE}→${NC} $*"; log "$*"; }
+ok(){ echo -e "${GREEN}✓${NC} $*"; log "$*"; }
+warn(){ echo -e "${YELLOW}⚠${NC} $*"; log "$*"; }
+err(){ echo -e "${RED}✗${NC} $*" >&2; log "[ERROR] $*"; }
+
+_run(){
   local desc="$1"; shift
   local cmd="$*"
-  echo "[$(date +'%F %T')] [RUN] $desc -> $cmd" | tee -a "$LOG_FILE"
+  log "[RUN] $desc -> $cmd"
   if [ "$DRY_RUN" = true ]; then
     [ "$VERBOSE" = true ] && echo "[DRY-RUN] $cmd"
     return 0
@@ -86,23 +92,17 @@ _run() {
   return "${PIPESTATUS[0]}"
 }
 
-log() { echo "[$(date +'%F %T')] $*" | tee -a "$LOG_FILE"; }
-info() { echo -e "${BLUE}→${NC} $*" | tee -a "$LOG_FILE"; }
-ok() { echo -e "${GREEN}✓${NC} $*" | tee -a "$LOG_FILE"; }
-warn() { echo -e "${YELLOW}⚠${NC} $*" | tee -a "$LOG_FILE" >&2; }
-err() { echo -e "${RED}✗${NC} $*" | tee -a "$LOG_FILE" >&2; }
-
-pause() { read -t "$READ_TIMEOUT" -rp "Press Enter to continue..." || true; }
+pause(){ read -t "$READ_TIMEOUT" -rp "Press Enter to continue..." || true; }
 
 ### -------------------------
 ### Rollback stack
 ### -------------------------
-declare -a ROLLBACK_CMD_STACK=()
-push_rollback_cmd() { ROLLBACK_CMD_STACK+=("$*"); }
-run_rollback_cmds() {
+declare -a ROLLBACK_CMDS=()
+push_rollback(){ ROLLBACK_CMDS+=("$*"); }
+run_rollback(){
   err "Migration failed — running rollback"
-  for ((i=${#ROLLBACK_CMD_STACK[@]}-1;i>=0;i--)); do
-    cmd="${ROLLBACK_CMD_STACK[i]}"
+  for ((i=${#ROLLBACK_CMDS[@]}-1;i>=0;i--)); do
+    cmd="${ROLLBACK_CMDS[i]}"
     log "ROLLBACK: $cmd"
     if [ "$DRY_RUN" = false ]; then
       bash -c "$cmd" 2>&1 | tee -a "$LOG_FILE" || log "Rollback step failed (ignored)"
@@ -111,240 +111,282 @@ run_rollback_cmds() {
   ok "Rollback finished"
   pause
 }
+trap 'rc=$?; if [ $rc -ne 0 ]; then run_rollback; fi; exit $rc' ERR
 
-trap 'rc=$?; if [ $rc -ne 0 ]; then run_rollback_cmds; fi; exit $rc' ERR
-
-### -------------------------
-### Utility functions
-### -------------------------
-ensure_logfile() {
-  mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
-  touch "$LOG_FILE" 2>/dev/null
+enable_rollback(){
+  push_rollback "cd '$PASARGUARD_DIR' && docker compose up -d || true"
+  info "Rollback enabled (Safety Net)"
 }
 
-get_file_size_bytes() {
-  local f="$1"
-  if [ ! -f "$f" ]; then echo 0; return; fi
-  stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo 0
-}
-
-check_command_exists() { command -v "$1" >/dev/null 2>&1; }
-
-check_dependencies() {
-  local deps=(docker git wget tar sqlite3 awk sed grep head)
-  local miss=()
-  for d in "${deps[@]}"; do
-    check_command_exists "$d" || miss+=("$d")
+### -------------------------
+### Utilities
+### -------------------------
+check_command_exists(){ command -v "$1" >/dev/null 2>&1; }
+check_dependencies(){
+  local missing=()
+  for c in docker wget tar sqlite3 awk sed grep head curl; do
+    check_command_exists "$c" || missing+=("$c")
   done
-  if [ "${#miss[@]}" -gt 0 ]; then
-    err "Missing: ${miss[*]}"
-    return 1
-  fi
+  if [ "${#missing[@]}" -gt 0 ]; then err "Missing: ${missing[*]}"; return 1; fi
   ok "Dependencies OK"
 }
 
-safe_cd() { cd "$1" 2>/dev/null || { err "cd $1 failed"; return 1; } }
+get_file_size_bytes(){
+  local f="$1"; [ -f "$f" ] || { echo 0; return; }
+  stat -c%s "$f" 2>/dev/null || wc -c < "$f" | tr -d ' '
+}
+
+safe_cd(){ cd "$1" 2>/dev/null || return 1; }
 
 ### -------------------------
 ### Container detection
 ### -------------------------
-find_pasarguard_container() {
-  safe_cd "$PASARGUARD_DIR" || return 1
-  # Try explicit service name or image name
-  local cid
-  cid=$(docker compose ps -q marzban 2>/dev/null || \
-        docker compose ps -q pasarguard 2>/dev/null || \
-        docker ps --format '{{.ID}} {{.Names}}' | grep -vE "postgres|mysql|node" | grep -iE "pasarguard|marzban" | awk '{print $1}' | head -1)
-  echo "${cid:-}"
+find_container_by_image_or_name(){
+  local dir="$1" keyword="$2"
+  safe_cd "$dir" || return 1
+  local ids=$(docker compose ps -q 2>/dev/null || true)
+  for cid in $ids; do
+    local img=$(docker inspect --format '{{.Config.Image}}' "$cid" 2>/dev/null)
+    local name=$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null)
+    if echo "$img $name" | grep -qiE "$keyword"; then echo "$cid"; return 0; fi
+  done
+  echo "$ids" | head -1
 }
 
-wait_for_cli_ready() {
-  local cid="$1" timeout="${2:-$DB_WAIT_TIMEOUT}"
-  local elapsed=0
+find_pasarguard_container(){ find_container_by_image_or_name "$PASARGUARD_DIR" "marzban|pasarguard|panel|backend|node"; }
+find_rebecca_container(){ find_container_by_image_or_name "$REBECCA_DIR" "marzban|rebecka|rebecca|rebeka|backend|panel"; }
+
+detect_marzban_cli(){
+  local cid="$1"
+  if docker exec "$cid" sh -c 'command -v marzban-cli >/dev/null 2>&1'; then echo "marzban-cli"; return 0; fi
+  echo "python3 -m marzban.cli"; return 0
+}
+
+wait_for_cli_ready(){
+  local cid="$1" timeout="${2:-$DB_WAIT_TIMEOUT}" elapsed=0
   while [ "$elapsed" -lt "$timeout" ]; do
-    if docker exec "$cid" sh -c 'command -v marzban-cli >/dev/null 2>&1'; then
+    if docker exec "$cid" sh -c 'command -v marzban-cli >/dev/null 2>&1 || python3 -c "import marzban" >/dev/null 2>&1' >/dev/null 2>&1; then
+      ok "CLI ready in $cid"
       return 0
     fi
     sleep 2; elapsed=$((elapsed+2))
   done
+  warn "CLI not available after ${timeout}s"
   return 1
 }
 
 ### -------------------------
-### Export Pasarguard DB
+### Safe .env updater
 ### -------------------------
-export_pasarguard_db() {
-  info "STEP 1: Export Pasarguard DB"
-  safe_cd "$PASARGUARD_DIR" || return 1
-
-  local cid
-  cid=$(find_pasarguard_container)
-  if [ -z "$cid" ]; then
-    info "Pasarguard not running: starting temporarily"
-    _run "Start Pasarguard" "docker compose up -d"
-    push_rollback_cmd "cd '$PASARGUARD_DIR' && docker compose down"
-    sleep 10
-    cid=$(find_pasarguard_container)
+update_env_key(){
+  local key="$1"; local val="$2"; local file="$3"
+  [ -z "$key" ] && return 0
+  [ ! -f "$file" ] && { echo "${key}=${val}" > "$file"; return 0; }
+  if grep -q "^${key}=" "$file"; then
+    tmp=$(mktemp)
+    awk -v k="$key" -v v="$val" 'BEGIN{FS=OFS="="} $1==k{$2=v; print; next} {print}' "$file" > "$tmp"
+    mv "$tmp" "$file"
+  else
+    echo "${key}=${val}" >> "$file"
   fi
-  [ -z "$cid" ] && { err "Cannot locate Pasarguard container"; return 1; }
-  
-  wait_for_cli_ready "$cid" || warn "CLI check timeout"
-
-  # Sync & Dump
-  _run "Sync DB" "docker exec $cid marzban-cli sync || true"
-  _run "Dump DB" "docker exec $cid marzban-cli database dump --target \"$EXPORT_IN_CONTAINER\""
-
-  # Copy to host
-  _run "Copy to host" "docker cp '${cid}:${EXPORT_IN_CONTAINER}' '$TEMP_DB'"
-  
-  if [ "$DRY_RUN" = false ]; then
-    local hsize=$(get_file_size_bytes "$TEMP_DB")
-    [ "$hsize" -ge 8192 ] || { err "Exported DB too small"; return 1; }
-    
-    # Header check
-    if ! head -c 16 "$TEMP_DB" | grep -q "SQLite format 3"; then
-        err "Invalid SQLite format"; return 1;
-    fi
-  fi
-
-  push_rollback_cmd "rm -f '$TEMP_DB'"
-  ok "Export DONE"
 }
 
 ### -------------------------
-### Download & Install Rebecca
+### Step 1: Export DB
 ### -------------------------
-install_rebecca_official() {
-  info "STEP 2: Installing Rebecca (Official)"
-  
-  # Download
-  _run "Download Installer" "wget -q -O '$TEMP_INSTALLER' '$REBECCA_INSTALL_URL'"
-  chmod +x "$TEMP_INSTALLER"
-  push_rollback_cmd "rm -f '$TEMP_INSTALLER'"
+export_pasarguard_db(){
+  info "STEP 1: Exporting Pasarguard Data"
+  safe_cd "$PASARGUARD_DIR" || { err "Dir missing"; return 1; }
 
-  # Run
-  info "Running Installer..."
+  cid=$(find_pasarguard_container) || true
+  if [ -z "${cid:-}" ]; then
+    info "Starting Pasarguard..."
+    _run "start" "docker compose up -d"
+    push_rollback "cd '$PASARGUARD_DIR' && docker compose down || true"
+    sleep 10
+    cid=$(find_pasarguard_container) || true
+  fi
+  [ -z "${cid:-}" ] && { err "Container not found"; return 1; }
+  ok "Container: $cid"
+
+  wait_for_cli_ready "$cid" || warn "CLI check timeout"
+  inv=$(detect_marzban_cli "$cid")
+
+  _run "sync" "docker exec '$cid' sh -c '$inv sync || true'"
+  _run "dump" "docker exec '$cid' sh -c '$inv database dump --target \"$EXPORT_IN_CONTAINER\"'"
+
   if [ "$DRY_RUN" = false ]; then
-    # Run official installer non-interactively if possible, or assume user interaction
-    # Using 'bash script install' pattern
-    bash "$TEMP_INSTALLER" install 2>&1 | tee -a "$LOG_FILE"
-    
-    [ -d "$REBECCA_DIR" ] || { err "Rebecca dir not found"; return 1; }
-    push_rollback_cmd "cd '$REBECCA_DIR' && docker compose down -v; rm -rf '$REBECCA_DIR'"
+    docker exec "$cid" sh -c "[ -f '$EXPORT_IN_CONTAINER' ]" || { err "Dump failed"; return 1; }
+  fi
+
+  _run "copy" "docker cp '$cid:$EXPORT_IN_CONTAINER' '$TEMP_DB'"
+  
+  if [ "$DRY_RUN" = false ]; then
+    size=$(get_file_size_bytes "$TEMP_DB")
+    [ "$size" -ge 8192 ] || { err "Export too small"; return 1; }
+  fi
+
+  push_rollback "rm -f '$TEMP_DB' || true"
+  return 0
+}
+
+### -------------------------
+### Step 2: Backup
+### -------------------------
+create_backup(){
+  info "Creating Backup"
+  mkdir -p "$BACKUP_ROOT"
+  ts=$(date +%Y%m%d_%H%M%S)
+  bdir="$BACKUP_ROOT/pre_migration_$ts"
+  mkdir -p "$bdir"
+  [ -d "$PASARGUARD_DIR" ] && _run "tar configs" "tar --exclude='*/node_modules' -C '$(dirname "$PASARGUARD_DIR")' -czf '$bdir/pasarguard_dir.tar.gz' '$(basename "$PASARGUARD_DIR")'"
+  [ -f "$TEMP_DB" ] && _run "copy db" "cp -f '$TEMP_DB' '$bdir/exported_db.sqlite3'"
+  ok "Backup: $bdir"
+  push_rollback "rm -rf '$bdir' || true"
+  echo "$bdir"
+}
+
+### -------------------------
+### Step 3: Install Rebecca (MySQL)
+### -------------------------
+install_rebecca(){
+  info "Downloading Rebecca Installer"
+  _run "wget" "wget -q -O '$TEMP_INSTALLER' '$INSTALL_SCRIPT_URL'"
+  [ "$DRY_RUN" = false ] && chmod +x "$TEMP_INSTALLER" && push_rollback "rm -f '$TEMP_INSTALLER' || true"
+
+  info "Installing Rebecca (MySQL Mode)"
+  if [ "$DRY_RUN" = false ]; then
+    # --database mysql ensures docker-compose.yml is generated for MySQL
+    bash "$TEMP_INSTALLER" install --database mysql 2>&1 | tee -a "$LOG_FILE" || { err "Install failed"; return 1; }
+    [ -d "$REBECCA_DIR" ] || { err "Install dir missing"; return 1; }
+    push_rollback "cd '$REBECCA_DIR' && docker compose down -v; rm -rf '$REBECCA_DIR'"
   fi
   ok "Rebecca Installed"
 }
 
 ### -------------------------
-### Stop Pasarguard
+### Step 4: Stop Old
 ### -------------------------
-stop_pasarguard() {
-  info "STEP 3: Stopping Pasarguard"
+stop_pasarguard(){
+  info "Stopping Pasarguard"
   safe_cd "$PASARGUARD_DIR"
-  push_rollback_cmd "cd '$PASARGUARD_DIR' && docker compose up -d"
-  _run "Stop Pasarguard" "docker compose down"
+  push_rollback "cd '$PASARGUARD_DIR' && docker compose up -d"
+  _run "stop" "docker compose down"
   ok "Pasarguard Stopped"
 }
 
 ### -------------------------
-### Inject & Start Rebecca
+### Step 5: Migrate Configs
 ### -------------------------
-inject_and_start_rebecca() {
-  info "STEP 4: Injecting Data & Starting Rebecca"
-  safe_cd "$REBECCA_DIR" || return 1
+migrate_configs(){
+  info "Migrating Configs"
+  [ -f "$PASARGUARD_DIR/.env" ] || return 0
+  
+  # Merge keys (Do NOT overwrite DB URL)
+  while IFS= read -r line; do
+    [[ "$line" =~ ^(JWT_|UVICORN_|XRAY_|SUDO_) ]] || continue
+    key=$(echo "$line" | cut -d= -f1)
+    val=$(echo "$line" | cut -d= -f2-)
+    update_env_key "$key" "$val" "$REBECCA_DIR/.env"
+  done < "$PASARGUARD_DIR/.env"
 
-  # Stop first
-  _run "Stop Rebecca" "docker compose down"
-  
-  # Create containers (No Start) - CRITICAL FOR RACE CONDITION
-  _run "Create Containers" "docker compose up --no-start"
-  
-  # Find Container
-  local cid
-  cid=$(docker compose ps -q | xargs docker inspect --format '{{.Id}} {{.Config.Image}}' | grep -vE "mysql|node" | head -1 | awk '{print $1}')
-  
-  if [ -z "$cid" ]; then err "Rebecca container not found"; return 1; fi
-  
-  # Inject DB
-  _run "Make dir" "docker exec -u 0 '$cid' mkdir -p $(dirname "$REBECCA_SQLITE_PATH")"
-  _run "Inject DB" "docker cp '$TEMP_DB' '$cid:$REBECCA_SQLITE_PATH'"
-  _run "Fix Perms" "docker exec -u 0 '$cid' chown 1000:1000 '$REBECCA_SQLITE_PATH'"
-
-  # Migrate Certs (Host to Host)
+  # Certs
   if [ -d "/var/lib/pasarguard/certs" ]; then
-      info "Moving Certs..."
-      mkdir -p "$REBECCA_DATA_DIR/certs"
-      cp -r /var/lib/pasarguard/certs/. "$REBECCA_DATA_DIR/certs/"
+    target="$REBECCA_DATA_DIR/certs"
+    mkdir -p "$target"
+    _run "copy certs" "cp -a /var/lib/pasarguard/certs/. '$target/'"
   fi
-
-  # Configure Env (Force SQLite)
-  if [ -f .env ]; then
-      sed -i '/^SQLALCHEMY_DATABASE_URL=/d' .env
-      sed -i '/^POSTGRES_/d' .env
-      echo "SQLALCHEMY_DATABASE_URL=sqlite:////var/lib/marzban/db.sqlite3" >> .env
-      
-      # Copy critical vars from old env
-      if [ -f "$PASARGUARD_DIR/.env" ]; then
-          grep -E '^(JWT_|UVICORN_|XRAY_)' "$PASARGUARD_DIR/.env" >> .env || true
-      fi
-  fi
-
-  # START
-  _run "Start Rebecca" "docker compose start"
-  ok "Rebecca Started"
+  ok "Configs Migrated"
 }
 
 ### -------------------------
-### Verification
+### Step 6: Inject Data (MySQL Restore)
 ### -------------------------
-verify_rebecca() {
-  info "STEP 5: Verifying..."
+inject_into_rebecca(){
+  info "Injecting Data into Rebecca (MySQL)"
   safe_cd "$REBECCA_DIR"
   
-  sleep 5
-  if docker compose ps | grep -q "Up"; then
-      local port=$(grep '^UVICORN_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "8000")
-      echo ""
-      echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-      echo -e "${GREEN}  MIGRATION SUCCESSFUL!                    ${NC}"
-      echo -e "${GREEN}  Rebecca Panel: http://IP:${port}         ${NC}"
-      echo -e "${GREEN}  Credentials: Same as before              ${NC}"
-      echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  else
-      err "Rebecca failed to start."
+  _run "start" "docker compose up -d"
+  
+  if [ "$DRY_RUN" = false ]; then
+    info "Waiting for MySQL init (20s)..."
+    sleep 20
+    
+    rcid=$(find_rebecca_container)
+    [ -n "$rcid" ] || { err "Rebecca container missing"; return 1; }
+    
+    # 1. Copy dump file into container
+    _run "copy dump" "docker cp '$TEMP_DB' '$rcid:/tmp/restore_source'"
+    
+    # 2. Run Restore Command (imports SQLite dump into MySQL)
+    inv=$(detect_marzban_cli "$rcid")
+    info "Restoring data..."
+    if docker exec "$rcid" sh -c "$inv database restore --source /tmp/restore_source"; then
+      ok "Database Restored Successfully"
+    else
+      err "Restore failed. Check logs."
       return 1
+    fi
+    
+    _run "restart" "docker compose restart"
   fi
+  
+  push_rollback "cd '$REBECCA_DIR' && docker compose down -v"
+}
+
+### -------------------------
+### Step 7: Verify
+### -------------------------
+verify_rebecca(){
+  info "Verifying..."
+  safe_cd "$REBECCA_DIR"
+  local elapsed=0
+  while [ $elapsed -lt "$VERIFY_TIMEOUT" ]; do
+    if docker compose ps | grep -qi "Up"; then
+      ok "Rebecca Running"
+      return 0
+    fi
+    sleep 2; elapsed=$((elapsed+2))
+  done
+  err "Verification failed"
+  return 1
 }
 
 ### -------------------------
 ### Main
 ### -------------------------
-main() {
+main(){
   ensure_logfile
-  clear
-  echo -e "${CYAN}════════════════════════════════════════════${NC}"
-  echo -e "${YELLOW}   PASARGUARD -> REBECCA MIGRATOR (Final)   ${NC}"
-  echo -e "${CYAN}════════════════════════════════════════════${NC}"
-  
+  info "MIGRATION STARTED (Target: Rebecca MySQL)"
   check_dependencies || exit 1
-  if [ ! -d "$PASARGUARD_DIR" ]; then err "Pasarguard not found"; exit 1; fi
+  [ -d "$PASARGUARD_DIR" ] || { err "Pasarguard not found"; exit 1; }
 
   echo ""
-  warn "This will STOP Pasarguard and install Rebecca."
-  read -rp "Type 'migrate' to confirm: " c
+  warn "This will stop Pasarguard, install Rebecca (MySQL), and migrate data."
+  read -t "$READ_TIMEOUT" -rp "Type 'migrate' to confirm: " c || c=""
   [ "$c" != "migrate" ] && exit 0
-
-  # Start
+  
+  enable_rollback
+  
   export_pasarguard_db || exit 1
+  create_backup || exit 1
   download_rebeka_installer || exit 1
-  install_rebeka_official || exit 1
+  install_rebecca_official || exit 1 # Installs with MySQL
   stop_pasarguard || exit 1
-  inject_and_start_rebecca || exit 1
+  migrate_configs || exit 1
+  inject_into_rebecca || exit 1      # Imports data into MySQL
   verify_rebecca || exit 1
-
-  # Cleanup
-  rm -f "$TEMP_DB" "$TEMP_INSTALLER"
+  
   trap - ERR
+  _run "cleanup" "rm -f '$TEMP_DB' '$TEMP_INSTALLER'"
+  
+  echo ""
+  ok "MIGRATION COMPLETE"
+  echo "Rebecca is running on MySQL."
+  echo "Login with your OLD credentials."
+  pause
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
