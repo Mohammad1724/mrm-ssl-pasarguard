@@ -115,7 +115,7 @@ send_to_telegram() {
     # We capture stdout and stderr to a log file to show you EXACTLY what happened
     local CAPTION="#Backup $PANEL_NAME $(date +%F_%R)"
     
-    curl -v --connect-timeout 30 \
+    curl -s --connect-timeout 30 \
          -F chat_id="$TG_CHAT" \
          -F caption="$CAPTION" \
          -F document=@"$FILE" \
