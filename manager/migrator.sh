@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 2.0
-# Features:
-#   - TimescaleDB/PostgreSQL → MySQL
-#   - SQLite → MySQL
-#   - Full Rollback Support
-#   - Data Integrity Checks
+# Version: 5.0 (Final - Based on Official Documentation)
+#
+# Pasarguard Docs:
+#   - Install: /opt/pasarguard
+#   - Data: /var/lib/pasarguard
+#   - CLI: pasarguard cli
+#   - Databases: TimescaleDB, PostgreSQL, MySQL, MariaDB, SQLite
+#   - Async Drivers: asyncpg, asyncmy, aiosqlite
+#
+# Rebecca Docs:
+#   - Install: /opt/rebecca
+#   - Data: /var/lib/rebecca
+#   - CLI: rebecca cli
+#   - Databases: MySQL, MariaDB, SQLite
 #==============================================================================
 
 #==============================================================================
-# SAFETY SETTINGS
+# SAFETY
 #==============================================================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     set -o pipefail
@@ -20,22 +28,27 @@ fi
 # CONFIGURATION
 #==============================================================================
 
-# Pasarguard
+# Pasarguard Paths (from official docs)
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
 PASARGUARD_DATA="${PASARGUARD_DATA:-/var/lib/pasarguard}"
 
-# Rebecca
+# Rebecca Paths (from official docs)
 REBECCA_DIR="${REBECCA_DIR:-/opt/rebecca}"
 REBECCA_DATA="${REBECCA_DATA:-/var/lib/rebecca}"
 
-# Backup & Temp
+# Install URLs (official)
+REBECCA_INSTALL_URL="https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh"
+
+# Backup & Logging
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
-TEMP_DIR="/tmp/mrm-migration-$$"
 LOG_FILE="${LOG_FILE:-/var/log/mrm_migration.log}"
+
+# Temp directory
+TEMP_DIR=""
 
 # Timeouts
 CONTAINER_TIMEOUT=120
-MYSQL_WAIT=30
+MYSQL_WAIT=60
 
 # Colors
 RED='\033[0;31m'
@@ -50,51 +63,45 @@ BOLD='\033[1m'
 # HELPER FUNCTIONS
 #==============================================================================
 
+create_temp_dir() {
+    TEMP_DIR=$(mktemp -d /tmp/mrm-migration-XXXXXX)
+    if [ ! -d "$TEMP_DIR" ]; then
+        TEMP_DIR="/tmp/mrm-migration-$$-$(date +%s)"
+        mkdir -p "$TEMP_DIR"
+    fi
+}
+
+cleanup_temp() {
+    if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ] && [[ "$TEMP_DIR" == /tmp/* ]]; then
+        rm -rf "$TEMP_DIR" 2>/dev/null
+    fi
+}
+
 init_migration() {
+    create_temp_dir
     mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || LOG_FILE="/tmp/mrm_migration.log"
     mkdir -p "$BACKUP_ROOT" 2>/dev/null
-    mkdir -p "$TEMP_DIR" 2>/dev/null
-    echo "" >> "$LOG_FILE"
-    echo "========================================" >> "$LOG_FILE"
-    echo "Migration Started: $(date)" >> "$LOG_FILE"
-    echo "========================================" >> "$LOG_FILE"
+    
+    {
+        echo ""
+        echo "========================================"
+        echo "Migration Started: $(date)"
+        echo "Temp Dir: $TEMP_DIR"
+        echo "========================================"
+    } >> "$LOG_FILE"
 }
 
-log() { 
-    echo "[$(date +'%F %T')] $*" >> "$LOG_FILE"
-}
-
-info() { 
-    echo -e "${BLUE}→${NC} $*"
-    log "INFO: $*"
-}
-
-ok() { 
-    echo -e "${GREEN}✓${NC} $*"
-    log "OK: $*"
-}
-
-warn() { 
-    echo -e "${YELLOW}⚠${NC} $*"
-    log "WARN: $*"
-}
-
-err() { 
-    echo -e "${RED}✗${NC} $*" >&2
-    log "ERROR: $*"
-}
+log() { echo "[$(date +'%F %T')] $*" >> "$LOG_FILE"; }
+info() { echo -e "${BLUE}→${NC} $*"; log "INFO: $*"; }
+ok() { echo -e "${GREEN}✓${NC} $*"; log "OK: $*"; }
+warn() { echo -e "${YELLOW}⚠${NC} $*"; log "WARN: $*"; }
+err() { echo -e "${RED}✗${NC} $*" >&2; log "ERROR: $*"; }
 
 safe_pause() {
     echo ""
     echo -e "${YELLOW}Press any key to continue...${NC}"
     read -n 1 -s -r
     echo ""
-}
-
-cleanup_temp() {
-    if [ -d "$TEMP_DIR" ] && [[ "$TEMP_DIR" == /tmp/* ]]; then
-        rm -rf "$TEMP_DIR" 2>/dev/null
-    fi
 }
 
 #==============================================================================
@@ -105,31 +112,22 @@ check_dependencies() {
     info "Checking dependencies..."
     
     local missing=()
+    local deps="docker curl tar gzip python3 sqlite3"
     
-    # Required commands
-    for cmd in docker curl tar gzip; do
+    for cmd in $deps; do
         if ! command -v "$cmd" &>/dev/null; then
             missing+=("$cmd")
         fi
     done
     
-    # Python3 check
-    if ! command -v python3 &>/dev/null; then
-        missing+=("python3")
-    fi
-    
     if [ ${#missing[@]} -gt 0 ]; then
         err "Missing commands: ${missing[*]}"
-        echo ""
-        echo "Install with:"
-        echo "  apt update && apt install -y ${missing[*]}"
+        echo "Install with: apt update && apt install -y ${missing[*]}"
         return 1
     fi
     
-    # Docker running check
     if ! docker info &>/dev/null; then
         err "Docker is not running!"
-        echo "Start with: systemctl start docker"
         return 1
     fi
     
@@ -138,7 +136,7 @@ check_dependencies() {
 }
 
 #==============================================================================
-# DATABASE DETECTION
+# DATABASE DETECTION (Updated for Pasarguard async drivers)
 #==============================================================================
 
 detect_db_type() {
@@ -151,50 +149,128 @@ detect_db_type() {
     fi
     
     local env_file="$panel_dir/.env"
-    local db_type="unknown"
     
     if [ -f "$env_file" ]; then
-        local db_url=$(grep -E "^(DATABASE_URL|SQLALCHEMY_DATABASE_URL|DB_URL)=" "$env_file" 2>/dev/null | head -1 | cut -d'=' -f2-)
+        local db_url
+        db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL\s*=" "$env_file" 2>/dev/null | head -1 | sed 's/.*=\s*//' | tr -d '"' | tr -d "'")
         
-        if echo "$db_url" | grep -qiE "postgresql|timescale"; then
-            db_type="postgresql"
-        elif echo "$db_url" | grep -qi "mysql"; then
-            db_type="mysql"
-        elif echo "$db_url" | grep -qi "sqlite"; then
-            db_type="sqlite"
+        # Pasarguard uses async drivers
+        if echo "$db_url" | grep -qiE "postgresql\+asyncpg|timescale"; then
+            echo "timescaledb"
+            return 0
+        elif echo "$db_url" | grep -qiE "postgresql"; then
+            echo "postgresql"
+            return 0
+        elif echo "$db_url" | grep -qiE "mysql\+asyncmy|mysql"; then
+            echo "mysql"
+            return 0
+        elif echo "$db_url" | grep -qiE "mariadb"; then
+            echo "mariadb"
+            return 0
+        elif echo "$db_url" | grep -qiE "sqlite\+aiosqlite|sqlite"; then
+            echo "sqlite"
+            return 0
         fi
     fi
     
-    # Fallback: Check for SQLite file
-    if [ "$db_type" == "unknown" ] && [ -f "$data_dir/db.sqlite3" ]; then
-        db_type="sqlite"
+    # Fallback: check for SQLite file
+    if [ -f "$data_dir/db.sqlite3" ]; then
+        echo "sqlite"
+        return 0
     fi
     
-    echo "$db_type"
+    echo "unknown"
+    return 1
+}
+
+get_db_credentials() {
+    local panel_dir="$1"
+    local env_file="$panel_dir/.env"
+    
+    if [ ! -f "$env_file" ]; then
+        return 1
+    fi
+    
+    # Extract from SQLALCHEMY_DATABASE_URL
+    local db_url
+    db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL\s*=" "$env_file" 2>/dev/null | head -1 | sed 's/.*=\s*//' | tr -d '"' | tr -d "'")
+    
+    # Parse URL: protocol://user:pass@host:port/database
+    # Example: postgresql+asyncpg://user:password@localhost/pasarguard
+    
+    DB_USER=$(echo "$db_url" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+    DB_PASS=$(echo "$db_url" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    DB_HOST=$(echo "$db_url" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+    DB_NAME=$(echo "$db_url" | sed -n 's|.*/\([^?]*\).*|\1|p')
+    
+    # Defaults
+    [ -z "$DB_HOST" ] && DB_HOST="localhost"
+    [ -z "$DB_NAME" ] && DB_NAME="pasarguard"
+    
+    export DB_USER DB_PASS DB_HOST DB_NAME
 }
 
 #==============================================================================
 # CONTAINER MANAGEMENT
 #==============================================================================
 
-get_container_id() {
-    local dir="$1"
+find_panel_container() {
+    local project_dir="$1"
     
-    if [ ! -d "$dir" ]; then
+    if [ ! -d "$project_dir" ]; then
         return 1
     fi
     
-    (cd "$dir" && docker compose ps -q 2>/dev/null | head -1)
+    local container_ids
+    container_ids=$(cd "$project_dir" && docker compose ps -q 2>/dev/null)
+    
+    if [ -z "$container_ids" ]; then
+        return 1
+    fi
+    
+    # Return first container (usually the panel)
+    echo "$container_ids" | head -1
+}
+
+find_db_container() {
+    local project_dir="$1"
+    local db_type="$2"
+    
+    if [ ! -d "$project_dir" ]; then
+        return 1
+    fi
+    
+    local container_ids
+    container_ids=$(cd "$project_dir" && docker compose ps -q 2>/dev/null)
+    
+    if [ -z "$container_ids" ]; then
+        return 1
+    fi
+    
+    local cid
+    for cid in $container_ids; do
+        case "$db_type" in
+            "mysql"|"mariadb")
+                if docker exec "$cid" mysql --version &>/dev/null 2>&1; then
+                    echo "$cid"
+                    return 0
+                fi
+                ;;
+            "postgresql"|"timescaledb")
+                if docker exec "$cid" psql --version &>/dev/null 2>&1; then
+                    echo "$cid"
+                    return 0
+                fi
+                ;;
+        esac
+    done
+    
+    return 1
 }
 
 is_container_running() {
     local dir="$1"
-    
-    if [ ! -d "$dir" ]; then
-        return 1
-    fi
-    
-    (cd "$dir" && docker compose ps 2>/dev/null | grep -q "Up")
+    [ -d "$dir" ] && (cd "$dir" && docker compose ps 2>/dev/null | grep -qE "Up|running")
 }
 
 start_panel() {
@@ -208,18 +284,18 @@ start_panel() {
         return 1
     fi
     
-    (cd "$dir" && docker compose up -d 2>&1 | tee -a "$LOG_FILE")
+    (cd "$dir" && docker compose up -d 2>&1) | tee -a "$LOG_FILE"
     
-    # Wait for container
     local elapsed=0
     while [ $elapsed -lt $CONTAINER_TIMEOUT ]; do
         if is_container_running "$dir"; then
             ok "$name started"
+            sleep 5
             return 0
         fi
         sleep 3
         elapsed=$((elapsed + 3))
-        echo -ne "  Waiting... ${elapsed}s / ${CONTAINER_TIMEOUT}s\r"
+        echo -ne "  Waiting... ${elapsed}s\r"
     done
     echo ""
     
@@ -236,7 +312,8 @@ stop_panel() {
     fi
     
     info "Stopping $name..."
-    (cd "$dir" && docker compose down 2>&1 | tee -a "$LOG_FILE")
+    (cd "$dir" && docker compose down 2>&1) | tee -a "$LOG_FILE"
+    sleep 3
     ok "$name stopped"
 }
 
@@ -245,7 +322,7 @@ stop_panel() {
 #==============================================================================
 
 create_backup() {
-    info "Creating full backup..."
+    info "Creating full backup of Pasarguard..."
     
     local ts=$(date +%Y%m%d_%H%M%S)
     local backup_dir="$BACKUP_ROOT/backup_$ts"
@@ -254,101 +331,87 @@ create_backup() {
     # Save for rollback
     echo "$backup_dir" > "$BACKUP_ROOT/.last_backup"
     
-    # Backup Pasarguard config
+    # Backup config
     if [ -d "$PASARGUARD_DIR" ]; then
-        info "  Backing up Pasarguard config..."
+        info "  Backing up config..."
         tar -czf "$backup_dir/pasarguard_config.tar.gz" \
             -C "$(dirname "$PASARGUARD_DIR")" \
             "$(basename "$PASARGUARD_DIR")" 2>/dev/null && ok "  Config saved"
     fi
     
-    # Backup Pasarguard data
+    # Backup data
     if [ -d "$PASARGUARD_DATA" ]; then
-        info "  Backing up Pasarguard data (may take time)..."
+        info "  Backing up data (may take time)..."
         tar -czf "$backup_dir/pasarguard_data.tar.gz" \
             -C "$(dirname "$PASARGUARD_DATA")" \
             "$(basename "$PASARGUARD_DATA")" 2>/dev/null && ok "  Data saved"
     fi
     
-    # Detect and backup database
+    # Detect database type
     local db_type=$(detect_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
     echo "$db_type" > "$backup_dir/db_type.txt"
     
-    case "$db_type" in
-        "postgresql")
-            info "  Exporting PostgreSQL/TimescaleDB..."
-            export_postgresql "$backup_dir/database.sql"
-            ;;
-        "sqlite")
-            info "  Copying SQLite database..."
-            if [ -f "$PASARGUARD_DATA/db.sqlite3" ]; then
-                cp "$PASARGUARD_DATA/db.sqlite3" "$backup_dir/database.sqlite3"
-                ok "  SQLite copied"
-            fi
-            ;;
-        "mysql")
-            info "  Exporting MySQL..."
-            export_mysql "$PASARGUARD_DIR" "$backup_dir/database.sql"
-            ;;
-    esac
+    # Export database
+    info "  Exporting database ($db_type)..."
+    export_database "$db_type" "$backup_dir"
     
-    # Metadata
+    # Save metadata
     cat > "$backup_dir/metadata.txt" << EOF
-Backup Date: $(date)
+Backup Created: $(date)
 Panel: Pasarguard
-Directory: $PASARGUARD_DIR
+Config: $PASARGUARD_DIR
 Data: $PASARGUARD_DATA
 Database: $db_type
+Hostname: $(hostname)
 EOF
     
     ok "Backup complete: $backup_dir"
     echo "$backup_dir"
 }
 
-#==============================================================================
-# DATABASE EXPORT FUNCTIONS
-#==============================================================================
+export_database() {
+    local db_type="$1"
+    local backup_dir="$2"
+    
+    # Ensure Pasarguard is running
+    if ! is_container_running "$PASARGUARD_DIR"; then
+        start_panel "$PASARGUARD_DIR" "Pasarguard" || return 1
+        sleep 10
+    fi
+    
+    case "$db_type" in
+        "sqlite")
+            if [ -f "$PASARGUARD_DATA/db.sqlite3" ]; then
+                cp "$PASARGUARD_DATA/db.sqlite3" "$backup_dir/database.sqlite3"
+                ok "  SQLite exported"
+            fi
+            ;;
+        "timescaledb"|"postgresql")
+            export_postgresql "$backup_dir/database.sql"
+            ;;
+        "mysql"|"mariadb")
+            export_mysql "$backup_dir/database.sql"
+            ;;
+    esac
+}
 
 export_postgresql() {
     local output_file="$1"
     
-    if ! is_container_running "$PASARGUARD_DIR"; then
-        start_panel "$PASARGUARD_DIR" "Pasarguard"
-        sleep 10
-    fi
-    
-    # Find PostgreSQL container
-    local pg_cid=$(cd "$PASARGUARD_DIR" && docker compose ps -q 2>/dev/null | while read cid; do
-        if docker exec "$cid" psql --version &>/dev/null; then
-            echo "$cid"
-            break
-        fi
-    done)
+    local pg_cid=$(find_db_container "$PASARGUARD_DIR" "postgresql")
     
     if [ -z "$pg_cid" ]; then
-        # Try by name
-        pg_cid=$(cd "$PASARGUARD_DIR" && docker compose ps --format '{{.Names}}' 2>/dev/null | while read name; do
-            if echo "$name" | grep -qiE "postgres|timescale|db"; then
-                docker ps -q --filter "name=$name" | head -1
-                break
-            fi
-        done)
-    fi
-    
-    if [ -z "$pg_cid" ]; then
-        err "PostgreSQL container not found"
+        err "  PostgreSQL container not found"
         return 1
     fi
     
-    # Get credentials
-    local db_name=$(grep -E "^POSTGRES_DB=" "$PASARGUARD_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "marzban")
-    local db_user=$(grep -E "^POSTGRES_USER=" "$PASARGUARD_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "postgres")
+    get_db_credentials "$PASARGUARD_DIR"
     
-    info "  Dumping database: $db_name"
+    local user="${DB_USER:-postgres}"
+    local db="${DB_NAME:-pasarguard}"
     
-    if docker exec "$pg_cid" pg_dump -U "$db_user" -d "$db_name" --no-owner --no-acl > "$output_file" 2>/dev/null; then
-        local size=$(du -h "$output_file" 2>/dev/null | cut -f1)
-        ok "  PostgreSQL exported ($size)"
+    if docker exec "$pg_cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+        ok "  PostgreSQL/TimescaleDB exported"
         return 0
     fi
     
@@ -357,31 +420,26 @@ export_postgresql() {
 }
 
 export_mysql() {
-    local panel_dir="$1"
-    local output_file="$2"
+    local output_file="$1"
     
-    if ! is_container_running "$panel_dir"; then
-        return 1
-    fi
-    
-    # Find MySQL container
-    local mysql_cid=$(cd "$panel_dir" && docker compose ps -q 2>/dev/null | while read cid; do
-        if docker exec "$cid" mysql --version &>/dev/null; then
-            echo "$cid"
-            break
-        fi
-    done)
+    local mysql_cid=$(find_db_container "$PASARGUARD_DIR" "mysql")
     
     if [ -z "$mysql_cid" ]; then
-        err "MySQL container not found"
+        err "  MySQL container not found"
         return 1
     fi
     
-    # Get credentials
-    local db_name=$(grep -E "^MYSQL_DATABASE=" "$panel_dir/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' || echo "marzban")
-    local db_pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$panel_dir/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
+    get_db_credentials "$PASARGUARD_DIR"
     
-    if docker exec "$mysql_cid" mysqldump -uroot -p"$db_pass" "$db_name" > "$output_file" 2>/dev/null; then
+    # Also check env vars
+    local pass="${DB_PASS}"
+    if [ -z "$pass" ] && [ -f "$PASARGUARD_DIR/.env" ]; then
+        pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$PASARGUARD_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    fi
+    
+    local db="${DB_NAME:-pasarguard}"
+    
+    if docker exec "$mysql_cid" mysqldump -uroot -p"$pass" --single-transaction "$db" > "$output_file" 2>/dev/null; then
         ok "  MySQL exported"
         return 0
     fi
@@ -394,6 +452,29 @@ export_mysql() {
 # DATABASE CONVERSION
 #==============================================================================
 
+convert_to_mysql() {
+    local source_file="$1"
+    local output_file="$2"
+    local source_type="$3"
+    
+    case "$source_type" in
+        "sqlite")
+            convert_sqlite_to_mysql "$source_file" "$output_file"
+            ;;
+        "postgresql"|"timescaledb")
+            convert_postgresql_to_mysql "$source_file" "$output_file"
+            ;;
+        "mysql"|"mariadb")
+            cp "$source_file" "$output_file"
+            ok "No conversion needed (already MySQL/MariaDB)"
+            ;;
+        *)
+            err "Unknown source type: $source_type"
+            return 1
+            ;;
+    esac
+}
+
 convert_sqlite_to_mysql() {
     local sqlite_file="$1"
     local output_file="$2"
@@ -401,17 +482,11 @@ convert_sqlite_to_mysql() {
     info "Converting SQLite → MySQL..."
     
     if [ ! -f "$sqlite_file" ]; then
-        err "SQLite file not found: $sqlite_file"
+        err "SQLite file not found"
         return 1
     fi
     
-    # Check sqlite3 command
-    if ! command -v sqlite3 &>/dev/null; then
-        err "sqlite3 command not found. Install: apt install sqlite3"
-        return 1
-    fi
-    
-    # First dump SQLite to SQL
+    # Dump SQLite
     local temp_sql="$TEMP_DIR/sqlite_dump.sql"
     sqlite3 "$sqlite_file" .dump > "$temp_sql" 2>/dev/null
     
@@ -420,70 +495,56 @@ convert_sqlite_to_mysql() {
         return 1
     fi
     
-    # Convert using Python
-    python3 << PYEOF
+    # Convert
+    export INPUT_SQL="$temp_sql"
+    export OUTPUT_SQL="$output_file"
+    
+    python3 << 'PYEOF'
 import re
-import sys
+import os
 
-input_file = "$temp_sql"
-output_file = "$output_file"
+input_file = os.environ['INPUT_SQL']
+output_file = os.environ['OUTPUT_SQL']
 
-try:
-    with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
-        content = f.read()
-    
-    # Conversions
-    replacements = [
-        # Remove SQLite specific
-        (r'BEGIN TRANSACTION;', 'START TRANSACTION;'),
-        (r'PRAGMA.*?;', ''),
-        (r'CREATE TABLE IF NOT EXISTS', 'CREATE TABLE IF NOT EXISTS'),
-        
-        # Data types
-        (r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY'),
-        (r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY'),
-        (r'\bINTEGER\b', 'INT'),
-        (r'\bREAL\b', 'DOUBLE'),
-        (r'\bBLOB\b', 'LONGBLOB'),
-        
-        # Booleans
-        (r"'t'", "'1'"),
-        (r"'f'", "'0'"),
-        
-        # Quotes to backticks
-        (r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'\`\1\`'),
-        
-        # AUTOINCREMENT
-        (r'AUTOINCREMENT', 'AUTO_INCREMENT'),
-    ]
-    
-    for pattern, replacement in replacements:
-        content = re.sub(pattern, replacement, content, flags=re.IGNORECASE | re.MULTILINE)
-    
-    # Header
-    header = """-- Converted from SQLite to MySQL by MRM Migrator
+with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
+    content = f.read()
+
+# Conversions
+replacements = [
+    (r'BEGIN TRANSACTION;', 'START TRANSACTION;'),
+    (r'PRAGMA.*?;\n?', ''),
+    (r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY'),
+    (r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY'),
+    (r'\bINTEGER\b', 'INT'),
+    (r'\bREAL\b', 'DOUBLE'),
+    (r'\bBLOB\b', 'LONGBLOB'),
+    (r'\bAUTOINCREMENT\b', 'AUTO_INCREMENT'),
+    (r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`'),
+]
+
+for pattern, replacement in replacements:
+    content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
+
+# Fix booleans in INSERT
+def fix_bool(m):
+    return m.group(0).replace("'t'", "'1'").replace("'f'", "'0'")
+content = re.sub(r'INSERT INTO.*?;', fix_bool, content, flags=re.IGNORECASE | re.DOTALL)
+
+header = """-- SQLite to MySQL Conversion
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 
 """
-    
-    footer = """
+footer = "\n\nSET FOREIGN_KEY_CHECKS = 1;\n"
 
-SET FOREIGN_KEY_CHECKS = 1;
-"""
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(header + content + footer)
-    
-    print("OK")
-    
-except Exception as e:
-    print(f"ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
+with open(output_file, 'w', encoding='utf-8') as f:
+    f.write(header + content + footer)
+
+print("OK")
 PYEOF
     
-    if [ $? -eq 0 ]; then
+    if [ $? -eq 0 ] && [ -s "$output_file" ]; then
         ok "Conversion complete"
         return 0
     fi
@@ -496,118 +557,100 @@ convert_postgresql_to_mysql() {
     local pg_file="$1"
     local output_file="$2"
     
-    info "Converting PostgreSQL → MySQL..."
+    info "Converting PostgreSQL/TimescaleDB → MySQL..."
     
     if [ ! -f "$pg_file" ]; then
-        err "PostgreSQL dump not found: $pg_file"
+        err "PostgreSQL dump not found"
         return 1
     fi
     
-    python3 << PYEOF
+    export INPUT_SQL="$pg_file"
+    export OUTPUT_SQL="$output_file"
+    
+    python3 << 'PYEOF'
 import re
-import sys
+import os
 
-input_file = "$pg_file"
-output_file = "$output_file"
+input_file = os.environ['INPUT_SQL']
+output_file = os.environ['OUTPUT_SQL']
 
-try:
-    with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
-        content = f.read()
-    
-    # Remove PostgreSQL specific statements
-    remove_patterns = [
-        r'--.*$',  # Comments
-        r'SET .*?;',
-        r'SELECT pg_catalog\..*?;',
-        r'\\\\connect.*',
-        r'CREATE EXTENSION.*?;',
-        r'COMMENT ON.*?;',
-        r'ALTER TABLE.*OWNER TO.*?;',
-        r'GRANT.*?;',
-        r'REVOKE.*?;',
-        r'CREATE SCHEMA.*?;',
-        r'SET search_path.*?;',
-    ]
-    
-    for pattern in remove_patterns:
-        content = re.sub(pattern, '', content, flags=re.MULTILINE | re.IGNORECASE)
-    
-    # Data type conversions
-    type_replacements = [
-        (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
-        (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
-        (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
-        (r'\bBOOLEAN\b', 'TINYINT(1)'),
-        (r'\bTIMESTAMP WITH TIME ZONE\b', 'DATETIME'),
-        (r'\bTIMESTAMP WITHOUT TIME ZONE\b', 'DATETIME'),
-        (r'\bTIMESTAMPTZ\b', 'DATETIME'),
-        (r'\bBYTEA\b', 'LONGBLOB'),
-        (r'\bUUID\b', 'VARCHAR(36)'),
-        (r'\bJSONB\b', 'JSON'),
-        (r'\bJSON\b', 'JSON'),
-        (r'\bINET\b', 'VARCHAR(45)'),
-        (r'\bCIDR\b', 'VARCHAR(45)'),
-        (r'\bMACAADDR\b', 'VARCHAR(17)'),
-        (r'\bINTERVAL\b', 'VARCHAR(50)'),
-        (r'\bMONEY\b', 'DECIMAL(19,4)'),
-        (r'\bDOUBLE PRECISION\b', 'DOUBLE'),
-        (r'\bCHARACTER VARYING\b', 'VARCHAR'),
-        (r'\bCHARACTER\b', 'CHAR'),
-    ]
-    
-    for pattern, replacement in type_replacements:
-        content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
-    
-    # Boolean values
-    content = re.sub(r"'t'::boolean", "'1'", content)
-    content = re.sub(r"'f'::boolean", "'0'", content)
-    content = re.sub(r'\btrue\b', "'1'", content, flags=re.IGNORECASE)
-    content = re.sub(r'\bfalse\b', "'0'", content, flags=re.IGNORECASE)
-    
-    # Remove casting
-    content = re.sub(r'::\w+(\[\])?', '', content)
-    
-    # Sequences (not needed in MySQL)
-    content = re.sub(r'CREATE SEQUENCE.*?;', '', content, flags=re.DOTALL | re.IGNORECASE)
-    content = re.sub(r'ALTER SEQUENCE.*?;', '', content, flags=re.DOTALL | re.IGNORECASE)
-    content = re.sub(r"nextval\('.*?'\)", 'NULL', content)
-    content = re.sub(r"setval\('.*?'.*?\)", '', content)
-    
-    # NOW() 
-    content = re.sub(r'CURRENT_TIMESTAMP', 'NOW()', content, flags=re.IGNORECASE)
-    
-    # Quotes
-    content = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'\`\1\`', content)
-    
-    # Array types (remove [])
-    content = re.sub(r'\[\]', '', content)
-    
-    # Clean empty lines
-    content = re.sub(r'\n\s*\n\s*\n+', '\n\n', content)
-    
-    header = """-- Converted from PostgreSQL to MySQL by MRM Migrator
+with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
+    content = f.read()
+
+# Remove PostgreSQL specific
+remove_patterns = [
+    r'^SET\s+\w+\s*=.*?;$',
+    r'^SELECT\s+pg_catalog\..*?;$',
+    r'^\\connect.*$',
+    r'^CREATE\s+EXTENSION.*?;$',
+    r'^COMMENT\s+ON.*?;$',
+    r'^ALTER\s+TABLE.*?OWNER\s+TO.*?;$',
+    r'^GRANT\s+.*?;$',
+    r'^REVOKE\s+.*?;$',
+    r'^CREATE\s+SCHEMA.*?;$',
+    r'^CREATE\s+SEQUENCE.*?;$',
+    r'^ALTER\s+SEQUENCE.*?;$',
+    # TimescaleDB specific
+    r'^SELECT\s+create_hypertable.*?;$',
+    r'^SELECT\s+set_chunk_time_interval.*?;$',
+]
+
+for pattern in remove_patterns:
+    content = re.sub(pattern, '', content, flags=re.MULTILINE | re.IGNORECASE)
+
+# Type conversions
+type_conv = [
+    (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
+    (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
+    (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
+    (r'\bBOOLEAN\b', 'TINYINT(1)'),
+    (r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME'),
+    (r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME'),
+    (r'\bTIMESTAMPTZ\b', 'DATETIME'),
+    (r'\bBYTEA\b', 'LONGBLOB'),
+    (r'\bUUID\b', 'VARCHAR(36)'),
+    (r'\bJSONB?\b', 'JSON'),
+    (r'\bINET\b', 'VARCHAR(45)'),
+    (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
+]
+
+for pattern, replacement in type_conv:
+    content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
+
+# Booleans
+content = re.sub(r"'t'::boolean", "'1'", content)
+content = re.sub(r"'f'::boolean", "'0'", content)
+
+# Remove casts
+content = re.sub(r'::\w+(\[\])?', '', content)
+
+# Sequences
+content = re.sub(r"nextval\('[^']*'(::\w+)?\)", 'NULL', content, flags=re.IGNORECASE)
+
+# CURRENT_TIMESTAMP
+content = re.sub(r'\bCURRENT_TIMESTAMP\b', 'NOW()', content, flags=re.IGNORECASE)
+
+# Identifiers
+content = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', content)
+
+# Clean empty lines
+content = re.sub(r'\n\s*\n\s*\n+', '\n\n', content)
+
+header = """-- PostgreSQL/TimescaleDB to MySQL Conversion
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';
 
 """
-    
-    footer = """
+footer = "\n\nSET FOREIGN_KEY_CHECKS = 1;\n"
 
-SET FOREIGN_KEY_CHECKS = 1;
-"""
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(header + content + footer)
-    
-    print("OK")
-    
-except Exception as e:
-    print(f"ERROR: {e}", file=sys.stderr)
-    sys.exit(1)
+with open(output_file, 'w', encoding='utf-8') as f:
+    f.write(header + content + footer)
+
+print("OK")
 PYEOF
     
-    if [ $? -eq 0 ]; then
+    if [ $? -eq 0 ] && [ -s "$output_file" ]; then
         ok "Conversion complete"
         return 0
     fi
@@ -617,103 +660,116 @@ PYEOF
 }
 
 #==============================================================================
+# REBECCA CHECKS
+#==============================================================================
+
+check_rebecca_installed() {
+    [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]
+}
+
+check_rebecca_mysql() {
+    [ -f "$REBECCA_DIR/.env" ] && grep -qiE "(mysql|mariadb)" "$REBECCA_DIR/.env" 2>/dev/null
+}
+
+install_rebecca_prompt() {
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}   Rebecca is not installed                    ${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Installation command:"
+    echo -e "  ${CYAN}sudo bash -c \"\$(curl -sL $REBECCA_INSTALL_URL)\" @ install --database mysql${NC}"
+    echo ""
+    
+    read -p "Install Rebecca now? (y/n): " install_now
+    
+    if [ "$install_now" = "y" ]; then
+        info "Downloading Rebecca installer..."
+        if curl -sL "$REBECCA_INSTALL_URL" -o /tmp/rebecca_install.sh; then
+            chmod +x /tmp/rebecca_install.sh
+            bash /tmp/rebecca_install.sh install --database mysql
+            rm -f /tmp/rebecca_install.sh
+            
+            if check_rebecca_installed; then
+                ok "Rebecca installed"
+                return 0
+            fi
+        fi
+        err "Installation failed"
+        return 1
+    fi
+    
+    return 1
+}
+
+#==============================================================================
 # IMPORT TO REBECCA
 #==============================================================================
 
 wait_for_mysql() {
-    local rebecca_dir="$1"
-    local timeout="$2"
+    local timeout="$1"
+    info "Waiting for MySQL..."
     
-    info "Waiting for MySQL to be ready..."
-    
-    local mysql_cid=""
     local elapsed=0
-    
     while [ $elapsed -lt $timeout ]; do
-        mysql_cid=$(cd "$rebecca_dir" && docker compose ps -q 2>/dev/null | while read cid; do
-            if docker exec "$cid" mysql --version &>/dev/null 2>&1; then
-                echo "$cid"
-                break
-            fi
-        done)
-        
+        local mysql_cid=$(find_db_container "$REBECCA_DIR" "mysql")
         if [ -n "$mysql_cid" ]; then
-            # Try to connect
-            local db_pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$rebecca_dir/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
-            if docker exec "$mysql_cid" mysql -uroot -p"$db_pass" -e "SELECT 1" &>/dev/null 2>&1; then
-                ok "MySQL is ready"
+            local pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+            if docker exec "$mysql_cid" mysql -uroot -p"$pass" -e "SELECT 1" &>/dev/null; then
+                ok "MySQL ready"
                 return 0
             fi
         fi
-        
         sleep 3
         elapsed=$((elapsed + 3))
-        echo -ne "  Waiting... ${elapsed}s / ${timeout}s\r"
+        echo -ne "  Waiting... ${elapsed}s\r"
     done
     echo ""
-    
-    err "MySQL not ready after ${timeout}s"
+    warn "MySQL may not be ready"
     return 1
 }
 
-import_mysql() {
+import_to_rebecca() {
     local sql_file="$1"
     
-    info "Importing data to Rebecca MySQL..."
+    info "Importing to Rebecca MySQL..."
     
     if [ ! -f "$sql_file" ]; then
-        err "SQL file not found: $sql_file"
+        err "SQL file not found"
         return 1
     fi
     
-    if [ ! -d "$REBECCA_DIR" ]; then
-        err "Rebecca not found"
-        return 1
-    fi
-    
-    # Get MySQL credentials
-    local db_name=$(grep -E "^MYSQL_DATABASE=" "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
-    local db_pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"')
-    
+    # Get credentials
+    local db_name=$(grep -E "^MYSQL_DATABASE=" "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    local db_pass=$(grep -E "^MYSQL_ROOT_PASSWORD=" "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     db_name="${db_name:-marzban}"
     
-    # Find MySQL container
-    local mysql_cid=$(cd "$REBECCA_DIR" && docker compose ps -q 2>/dev/null | while read cid; do
-        if docker exec "$cid" mysql --version &>/dev/null 2>&1; then
-            echo "$cid"
-            break
-        fi
-    done)
+    local mysql_cid=$(find_db_container "$REBECCA_DIR" "mysql")
     
     if [ -z "$mysql_cid" ]; then
-        err "MySQL container not found in Rebecca"
+        err "MySQL container not found"
         return 1
     fi
     
-    info "  Importing to database: $db_name"
+    info "  Database: $db_name"
     
-    # Copy file to container
+    # Copy and import
     docker cp "$sql_file" "$mysql_cid:/tmp/import.sql" 2>/dev/null
     
-    # Import
     if docker exec "$mysql_cid" mysql -uroot -p"$db_pass" "$db_name" -e "source /tmp/import.sql" 2>/dev/null; then
-        ok "Data imported successfully"
         docker exec "$mysql_cid" rm -f /tmp/import.sql 2>/dev/null
+        ok "Import successful"
         return 0
     fi
     
-    # Alternative method
-    warn "Standard import failed, trying alternative..."
+    # Alternative
+    warn "Trying alternative method..."
     if docker exec -i "$mysql_cid" mysql -uroot -p"$db_pass" "$db_name" < "$sql_file" 2>/dev/null; then
-        ok "Data imported (alternative method)"
+        ok "Import successful (alternative)"
         return 0
     fi
     
     err "Import failed"
-    echo ""
-    echo "Manual import may be needed:"
-    echo "  1. Copy: docker cp $sql_file CONTAINER:/tmp/import.sql"
-    echo "  2. Import: docker exec -it CONTAINER mysql -uroot -p DB_NAME < /tmp/import.sql"
     return 1
 }
 
@@ -724,17 +780,12 @@ import_mysql() {
 migrate_configs() {
     info "Migrating configurations..."
     
-    if [ ! -f "$PASARGUARD_DIR/.env" ]; then
-        warn "Pasarguard .env not found"
+    if [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ]; then
+        warn "Config files missing"
         return 0
     fi
     
-    if [ ! -f "$REBECCA_DIR/.env" ]; then
-        warn "Rebecca .env not found"
-        return 1
-    fi
-    
-    # Variables to migrate
+    # Variables to migrate (common between both panels)
     local vars=(
         "SUDO_USERNAME"
         "SUDO_PASSWORD"
@@ -743,41 +794,56 @@ migrate_configs() {
         "UVICORN_SSL_CERTFILE"
         "UVICORN_SSL_KEYFILE"
         "JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
+        "TELEGRAM_API_TOKEN"
+        "TELEGRAM_ADMIN_ID"
+        "TELEGRAM_PROXY_URL"
+        "WEBHOOK_ADDRESS"
+        "WEBHOOK_SECRET"
         "XRAY_JSON"
         "XRAY_EXECUTABLE_PATH"
         "XRAY_ASSETS_PATH"
         "XRAY_SUBSCRIPTION_URL_PREFIX"
-        "SUBSCRIPTION_URL_PREFIX"
+        "XRAY_FALLBACKS_INBOUND_TAG"
+        "XRAY_EXCLUDE_INBOUND_TAGS"
+        "CUSTOM_TEMPLATES_DIRECTORY"
+        "SUBSCRIPTION_PAGE_TEMPLATE"
     )
     
-    local migrated=0
+    local count=0
     for var in "${vars[@]}"; do
         local value=$(grep "^${var}=" "$PASARGUARD_DIR/.env" 2>/dev/null | cut -d'=' -f2-)
         if [ -n "$value" ]; then
             sed -i "/^${var}=/d" "$REBECCA_DIR/.env" 2>/dev/null
             echo "${var}=${value}" >> "$REBECCA_DIR/.env"
-            migrated=$((migrated + 1))
+            count=$((count + 1))
         fi
     done
     
-    ok "Migrated $migrated configuration variables"
+    ok "Migrated $count variables"
     
     # Copy certificates
     if [ -d "$PASARGUARD_DATA/certs" ]; then
-        info "Copying SSL certificates..."
+        info "  Copying certificates..."
         mkdir -p "$REBECCA_DATA/certs"
         cp -r "$PASARGUARD_DATA/certs/"* "$REBECCA_DATA/certs/" 2>/dev/null
-        ok "Certificates copied"
+        ok "  Certificates copied"
     fi
     
     # Copy Xray config
     if [ -f "$PASARGUARD_DATA/xray_config.json" ]; then
-        info "Copying Xray config..."
+        info "  Copying Xray config..."
+        mkdir -p "$REBECCA_DATA"
         cp "$PASARGUARD_DATA/xray_config.json" "$REBECCA_DATA/" 2>/dev/null
-        ok "Xray config copied"
+        ok "  Xray config copied"
     fi
     
-    return 0
+    # Copy templates (note: Pasarguard uses xray/, older versions used v2ray/)
+    if [ -d "$PASARGUARD_DATA/templates" ]; then
+        info "  Copying templates..."
+        mkdir -p "$REBECCA_DATA/templates"
+        cp -r "$PASARGUARD_DATA/templates/"* "$REBECCA_DATA/templates/" 2>/dev/null
+        ok "  Templates copied"
+    fi
 }
 
 #==============================================================================
@@ -786,16 +852,14 @@ migrate_configs() {
 
 do_rollback() {
     clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       ROLLBACK TO PASARGUARD               ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}         ROLLBACK TO PASARGUARD              ${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
     if [ ! -f "$BACKUP_ROOT/.last_backup" ]; then
-        err "No backup information found"
-        echo ""
-        echo "Available backups in $BACKUP_ROOT:"
-        ls -la "$BACKUP_ROOT" 2>/dev/null || echo "  (none)"
+        err "No backup found"
+        ls -la "$BACKUP_ROOT" 2>/dev/null || echo "(empty)"
         safe_pause
         return 1
     fi
@@ -803,29 +867,20 @@ do_rollback() {
     local backup_dir=$(cat "$BACKUP_ROOT/.last_backup")
     
     if [ ! -d "$backup_dir" ]; then
-        err "Backup directory not found: $backup_dir"
+        err "Backup missing: $backup_dir"
         safe_pause
         return 1
     fi
     
-    echo -e "Backup found: ${GREEN}$backup_dir${NC}"
+    echo -e "Backup: ${GREEN}$backup_dir${NC}"
+    [ -f "$backup_dir/metadata.txt" ] && cat "$backup_dir/metadata.txt"
     echo ""
     
-    if [ -f "$backup_dir/metadata.txt" ]; then
-        echo "Backup info:"
-        cat "$backup_dir/metadata.txt"
-        echo ""
-    fi
-    
-    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${RED}  WARNING: This will stop Rebecca and       ${NC}"
-    echo -e "${RED}  restore Pasarguard from backup!           ${NC}"
-    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    echo -e "${RED}This will stop Rebecca and restore Pasarguard!${NC}"
     read -p "Type 'rollback' to confirm: " confirm
     
     if [ "$confirm" != "rollback" ]; then
-        info "Rollback cancelled"
+        info "Cancelled"
         safe_pause
         return 0
     fi
@@ -833,43 +888,36 @@ do_rollback() {
     echo ""
     init_migration
     
-    # Step 1: Stop Rebecca
-    info "Step 1: Stopping Rebecca..."
-    stop_panel "$REBECCA_DIR" "Rebecca"
+    # Stop Rebecca
+    [ -d "$REBECCA_DIR" ] && is_container_running "$REBECCA_DIR" && stop_panel "$REBECCA_DIR" "Rebecca"
     
-    # Step 2: Restore config
+    # Restore config
     if [ -f "$backup_dir/pasarguard_config.tar.gz" ]; then
-        info "Step 2: Restoring Pasarguard config..."
+        info "Restoring config..."
         rm -rf "$PASARGUARD_DIR" 2>/dev/null
         mkdir -p "$(dirname "$PASARGUARD_DIR")"
         tar -xzf "$backup_dir/pasarguard_config.tar.gz" -C "$(dirname "$PASARGUARD_DIR")" 2>/dev/null
         ok "Config restored"
     fi
     
-    # Step 3: Restore data
+    # Restore data
     if [ -f "$backup_dir/pasarguard_data.tar.gz" ]; then
-        info "Step 3: Restoring Pasarguard data..."
+        info "Restoring data..."
         rm -rf "$PASARGUARD_DATA" 2>/dev/null
         mkdir -p "$(dirname "$PASARGUARD_DATA")"
         tar -xzf "$backup_dir/pasarguard_data.tar.gz" -C "$(dirname "$PASARGUARD_DATA")" 2>/dev/null
         ok "Data restored"
     fi
     
-    # Step 4: Start Pasarguard
-    info "Step 4: Starting Pasarguard..."
+    # Start Pasarguard
+    info "Starting Pasarguard..."
     if start_panel "$PASARGUARD_DIR" "Pasarguard"; then
-        echo ""
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}      ROLLBACK COMPLETED SUCCESSFULLY!       ${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo "Pasarguard has been restored and is running."
+        echo -e "${GREEN}Rollback complete!${NC}"
     else
-        err "Failed to start Pasarguard"
-        echo "You may need to start it manually:"
-        echo "  cd $PASARGUARD_DIR && docker compose up -d"
+        err "Start failed. Try: cd $PASARGUARD_DIR && docker compose up -d"
     fi
     
+    cleanup_temp
     safe_pause
 }
 
@@ -881,265 +929,129 @@ do_migration() {
     init_migration
     
     clear
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}     PASARGUARD → REBECCA MIGRATION WIZARD       ${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}      PASARGUARD → REBECCA MIGRATION WIZARD        ${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
-    # Pre-checks
-    if ! check_dependencies; then
-        safe_pause
-        return 1
-    fi
-    
+    # Checks
+    check_dependencies || { safe_pause; cleanup_temp; return 1; }
     echo ""
     
     # Check Pasarguard
     if [ ! -d "$PASARGUARD_DIR" ]; then
-        err "Pasarguard not found at $PASARGUARD_DIR"
-        safe_pause
-        return 1
+        err "Pasarguard not found: $PASARGUARD_DIR"
+        safe_pause; cleanup_temp; return 1
     fi
     ok "Pasarguard found"
     
     # Detect database
     local db_type=$(detect_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
-    echo -e "Database type: ${CYAN}$db_type${NC}"
+    echo -e "Database: ${CYAN}$db_type${NC}"
     
-    if [ "$db_type" == "unknown" ] || [ "$db_type" == "not_found" ]; then
-        err "Could not detect database type"
-        safe_pause
-        return 1
+    if [ "$db_type" = "unknown" ]; then
+        err "Unknown database type"
+        safe_pause; cleanup_temp; return 1
     fi
     
     # Check Rebecca
-    if [ ! -d "$REBECCA_DIR" ]; then
-        echo ""
-        echo -e "${YELLOW}Rebecca is not installed!${NC}"
-        echo ""
-        echo "Please install Rebecca first:"
-        echo "  1. Download Rebecca installer"
-        echo "  2. Choose MySQL as database type"
-        echo "  3. Complete installation"
-        echo "  4. Run this migration again"
-        echo ""
-        safe_pause
-        return 1
+    if ! check_rebecca_installed; then
+        install_rebecca_prompt || { safe_pause; cleanup_temp; return 1; }
+    else
+        ok "Rebecca found"
     fi
-    ok "Rebecca found"
     
-    # Summary
-    echo ""
-    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  Migration Summary:${NC}"
-    echo -e "  Source:   ${CYAN}Pasarguard ($db_type)${NC}"
-    echo -e "  Target:   ${CYAN}Rebecca (MySQL)${NC}"
-    echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    if ! check_rebecca_mysql; then
+        err "Rebecca not using MySQL. Reinstall with --database mysql"
+        safe_pause; cleanup_temp; return 1
+    fi
+    ok "Rebecca MySQL verified"
     
-    echo -e "${RED}⚠ WARNING ⚠${NC}"
-    echo "This will:"
-    echo "  1. Create a full backup of Pasarguard"
-    echo "  2. Export and convert database to MySQL"
-    echo "  3. Stop Pasarguard"
-    echo "  4. Import data to Rebecca"
+    # Confirmation
     echo ""
-    read -p "Type 'migrate' to start: " confirm
+    echo -e "${BOLD}Migration: ${CYAN}Pasarguard ($db_type)${NC} → ${CYAN}Rebecca (MySQL)${NC}"
+    echo ""
+    echo -e "${RED}⚠ This will stop Pasarguard and migrate all data ⚠${NC}"
+    read -p "Type 'migrate' to confirm: " confirm
     
     if [ "$confirm" != "migrate" ]; then
-        info "Migration cancelled"
-        safe_pause
-        return 0
+        info "Cancelled"
+        safe_pause; cleanup_temp; return 0
     fi
     
     echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
     
-    #--------------------------------------
-    # STEP 1: Backup
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 1/6] Creating Backup${NC}"
+    # Step 1: Backup
+    echo -e "${BOLD}[1/6] Backup${NC}"
     local backup_dir=$(create_backup)
-    
-    if [ -z "$backup_dir" ] || [ ! -d "$backup_dir" ]; then
-        err "Backup failed!"
-        safe_pause
-        return 1
-    fi
+    [ -z "$backup_dir" ] && { err "Backup failed"; safe_pause; cleanup_temp; return 1; }
     echo ""
     
-    #--------------------------------------
-    # STEP 2: Export Database
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 2/6] Exporting Database${NC}"
-    local source_dump="$TEMP_DIR/source_dump.sql"
-    local convert_needed=false
+    # Step 2: Get source
+    echo -e "${BOLD}[2/6] Prepare Database${NC}"
+    local source_file=""
     
     case "$db_type" in
-        "postgresql")
-            if [ -f "$backup_dir/database.sql" ]; then
-                cp "$backup_dir/database.sql" "$source_dump"
-                ok "Using backed up PostgreSQL dump"
-            else
-                export_postgresql "$source_dump" || { err "Export failed"; safe_pause; return 1; }
-            fi
-            convert_needed=true
-            ;;
         "sqlite")
-            if [ -f "$backup_dir/database.sqlite3" ]; then
-                # Convert from SQLite file
-                source_dump="$backup_dir/database.sqlite3"
-                ok "Using backed up SQLite database"
-            elif [ -f "$PASARGUARD_DATA/db.sqlite3" ]; then
-                source_dump="$PASARGUARD_DATA/db.sqlite3"
-                ok "Using live SQLite database"
-            else
-                err "SQLite database not found"
-                safe_pause
-                return 1
-            fi
-            convert_needed=true
+            source_file="$backup_dir/database.sqlite3"
+            [ ! -f "$source_file" ] && source_file="$PASARGUARD_DATA/db.sqlite3"
             ;;
-        "mysql")
-            if [ -f "$backup_dir/database.sql" ]; then
-                cp "$backup_dir/database.sql" "$source_dump"
-                ok "Using backed up MySQL dump"
-            else
-                export_mysql "$PASARGUARD_DIR" "$source_dump" || { err "Export failed"; safe_pause; return 1; }
-            fi
-            convert_needed=false
+        *)
+            source_file="$backup_dir/database.sql"
             ;;
     esac
+    
+    [ ! -f "$source_file" ] && { err "Source not found"; safe_pause; cleanup_temp; return 1; }
+    ok "Source ready: $source_file"
     echo ""
     
-    #--------------------------------------
-    # STEP 3: Convert Database
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 3/6] Converting Database${NC}"
-    local mysql_dump="$TEMP_DIR/mysql_import.sql"
-    
-    if [ "$convert_needed" = true ]; then
-        case "$db_type" in
-            "postgresql")
-                convert_postgresql_to_mysql "$source_dump" "$mysql_dump" || { err "Conversion failed"; safe_pause; return 1; }
-                ;;
-            "sqlite")
-                convert_sqlite_to_mysql "$source_dump" "$mysql_dump" || { err "Conversion failed"; safe_pause; return 1; }
-                ;;
-        esac
-    else
-        cp "$source_dump" "$mysql_dump"
-        ok "No conversion needed (already MySQL)"
-    fi
-    
-    # Save converted dump to backup
-    cp "$mysql_dump" "$backup_dir/mysql_converted.sql" 2>/dev/null
+    # Step 3: Convert
+    echo -e "${BOLD}[3/6] Convert Database${NC}"
+    local mysql_file="$TEMP_DIR/mysql_import.sql"
+    convert_to_mysql "$source_file" "$mysql_file" "$db_type" || { safe_pause; cleanup_temp; return 1; }
+    cp "$mysql_file" "$backup_dir/mysql_converted.sql" 2>/dev/null
     echo ""
     
-    #--------------------------------------
-    # STEP 4: Stop Pasarguard
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 4/6] Stopping Pasarguard${NC}"
+    # Step 4: Stop Pasarguard
+    echo -e "${BOLD}[4/6] Stop Pasarguard${NC}"
     stop_panel "$PASARGUARD_DIR" "Pasarguard"
     echo ""
     
-    #--------------------------------------
-    # STEP 5: Migrate Configs
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 5/6] Migrating Configurations${NC}"
+    # Step 5: Migrate configs
+    echo -e "${BOLD}[5/6] Migrate Configs${NC}"
     migrate_configs
     echo ""
     
-    #--------------------------------------
-    # STEP 6: Import to Rebecca
-    #--------------------------------------
-    echo -e "${BOLD}[STEP 6/6] Importing to Rebecca${NC}"
+    # Step 6: Import
+    echo -e "${BOLD}[6/6] Import to Rebecca${NC}"
+    is_container_running "$REBECCA_DIR" || start_panel "$REBECCA_DIR" "Rebecca"
+    wait_for_mysql "$MYSQL_WAIT"
     
-    # Start Rebecca if not running
-    if ! is_container_running "$REBECCA_DIR"; then
-        start_panel "$REBECCA_DIR" "Rebecca" || { err "Failed to start Rebecca"; safe_pause; return 1; }
-    fi
+    local import_ok=true
+    import_to_rebecca "$mysql_file" || import_ok=false
     
-    # Wait for MySQL
-    wait_for_mysql "$REBECCA_DIR" "$MYSQL_WAIT" || { 
-        warn "MySQL may not be ready, attempting import anyway..."
-    }
-    
-    # Import
-    import_mysql "$mysql_dump"
-    local import_result=$?
-    
-    # Restart Rebecca
+    # Restart
     info "Restarting Rebecca..."
     (cd "$REBECCA_DIR" && docker compose restart 2>/dev/null)
     sleep 5
     
+    # Done
     echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    
-    if [ $import_result -eq 0 ]; then
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}      MIGRATION COMPLETED SUCCESSFULLY!           ${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    if [ "$import_ok" = true ]; then
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}        MIGRATION COMPLETED SUCCESSFULLY!           ${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     else
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${YELLOW}    MIGRATION COMPLETED WITH WARNINGS             ${NC}"
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo "Data import may need manual attention."
-        echo "SQL file saved: $backup_dir/mysql_converted.sql"
+        echo -e "${YELLOW}Migration completed with warnings${NC}"
+        echo "SQL file: $backup_dir/mysql_converted.sql"
     fi
     
     echo ""
-    echo -e "Backup saved:   ${CYAN}$backup_dir${NC}"
-    echo -e "To rollback:    ${CYAN}Use option 2 in menu${NC}"
-    echo ""
-    echo "Login to Rebecca with your existing credentials."
-    echo ""
+    echo -e "Backup: ${CYAN}$backup_dir${NC}"
+    echo -e "Dashboard: ${CYAN}https://YOUR_DOMAIN:8000/dashboard/${NC}"
+    echo "Login with your existing credentials."
     
-    safe_pause
-}
-
-#==============================================================================
-# VIEW FUNCTIONS
-#==============================================================================
-
-view_backups() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}         AVAILABLE BACKUPS                  ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
-    echo "Backup Directory: $BACKUP_ROOT"
-    echo ""
-    
-    if [ -d "$BACKUP_ROOT" ]; then
-        ls -lh "$BACKUP_ROOT" 2>/dev/null | grep -v "^total"
-    else
-        echo "(No backups)"
-    fi
-    
-    echo ""
-    
-    if [ -f "$BACKUP_ROOT/.last_backup" ]; then
-        echo -e "Last backup: ${GREEN}$(cat "$BACKUP_ROOT/.last_backup")${NC}"
-    fi
-    
-    safe_pause
-}
-
-view_log() {
-    clear
-    if [ -f "$LOG_FILE" ]; then
-        echo -e "${CYAN}Log File: $LOG_FILE${NC}"
-        echo ""
-        tail -100 "$LOG_FILE"
-        echo ""
-        echo "(Showing last 100 lines)"
-    else
-        echo "No log file found."
-    fi
+    cleanup_temp
     safe_pause
 }
 
@@ -1147,38 +1059,50 @@ view_log() {
 # MENU
 #==============================================================================
 
+view_backups() {
+    clear
+    echo -e "${CYAN}Backups: $BACKUP_ROOT${NC}"
+    echo ""
+    ls -lh "$BACKUP_ROOT" 2>/dev/null | grep -v "^total" || echo "(empty)"
+    [ -f "$BACKUP_ROOT/.last_backup" ] && echo -e "\nLast: $(cat "$BACKUP_ROOT/.last_backup")"
+    safe_pause
+}
+
+view_log() {
+    clear
+    [ -f "$LOG_FILE" ] && tail -80 "$LOG_FILE" || echo "No log"
+    safe_pause
+}
+
 migrator_menu() {
     while true; do
         clear
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${YELLOW}           MIGRATION TOOLS                    ${NC}"
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}            MIGRATION TOOLS                    ${NC}"
+        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
         echo -e "  ${GREEN}1)${NC} Migrate Pasarguard → Rebecca"
         echo -e "  ${RED}2)${NC} Rollback to Pasarguard"
         echo ""
         echo -e "  ${CYAN}3)${NC} View Backups"
-        echo -e "  ${CYAN}4)${NC} View Migration Log"
+        echo -e "  ${CYAN}4)${NC} View Log"
         echo ""
         echo -e "  ${YELLOW}0)${NC} Back"
         echo ""
-        echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         
         read -p "Select: " opt
-        
         case "$opt" in
             1) do_migration ;;
             2) do_rollback ;;
             3) view_backups ;;
             4) view_log ;;
-            0) cleanup_temp; return ;;
-            *) ;;
+            0) return ;;
         esac
     done
 }
 
 #==============================================================================
-# ENTRY POINT
+# ENTRY
 #==============================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
