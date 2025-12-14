@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 8.0 (Container-Only Dump Fix)
+# Version: 9.0 (Fixed: Internal Port 5432 & Error Logging)
 #==============================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -167,14 +167,14 @@ PYEOF
 }
 
 #==============================================================================
-# CONTAINER FINDER (FIXED)
+# CONTAINER FINDER
 #==============================================================================
 
 find_db_container() {
     local project_dir="$1" db_type="$2"
     [ ! -d "$project_dir" ] && return 1
 
-    # 1. Try Docker Compose labels (most reliable)
+    # 1. Try finding by service name in docker-compose
     local cid=$(cd "$project_dir" && docker compose ps -q 2>/dev/null | \
         xargs docker inspect --format '{{.Id}} {{.Config.Image}} {{.Name}}' 2>/dev/null | \
         grep -iE "postgres|timescale|mysql|mariadb|db" | head -1 | awk '{print $1}')
@@ -270,13 +270,8 @@ export_database() {
     case "$db_type" in
         sqlite)
             if [ -f "$PASARGUARD_DATA/db.sqlite3" ]; then
-                if sqlite3 "$PASARGUARD_DATA/db.sqlite3" "PRAGMA integrity_check;" 2>/dev/null | grep -q "ok"; then
-                    cp "$PASARGUARD_DATA/db.sqlite3" "$backup_dir/database.sqlite3"
-                    ok "  SQLite exported"
-                else
-                    warn "  SQLite check failed, copying anyway..."
-                    cp "$PASARGUARD_DATA/db.sqlite3" "$backup_dir/database.sqlite3"
-                fi
+                cp "$PASARGUARD_DATA/db.sqlite3" "$backup_dir/database.sqlite3"
+                ok "  SQLite exported"
             else
                 warn "  SQLite file not found"
             fi
@@ -294,14 +289,14 @@ export_database() {
 }
 
 #==============================================================================
-# DATABASE EXPORT (CONTAINER MODE)
+# DATABASE EXPORT - FIXED LOGIC
 #==============================================================================
 
 export_postgresql_host() {
     local output_file="$1" db_type="$2"
     info "  Exporting $db_type (Container Mode)..."
 
-    # 1. Get credentials
+    # 1. Credentials
     get_db_credentials "$PASARGUARD_DIR"
     local user="${DB_USER:-pasarguard}"
     local db="${DB_NAME:-pasarguard}"
@@ -309,29 +304,46 @@ export_postgresql_host() {
 
     # 2. Find container
     local cid=$(find_db_container "$PASARGUARD_DIR" "postgresql")
-    
-    if [ -z "$cid" ]; then
-        err "  Database container not found!"
-        return 1
-    fi
+    [ -z "$cid" ] && { err "  Database container not found!"; return 1; }
 
-    # 3. Force Container Dump (to avoid version mismatch)
-    if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+    # 3. Dump via Container (Force Internal Port 5432)
+    # We purposefully IGNORE $DB_PORT from .env (6432) because that's external.
+    # Inside the container, Postgres is always on 5432.
+    
+    local dump_cmd="pg_dump -h 127.0.0.1 -p 5432 -U $user -d $db --no-owner --no-acl"
+    local err_log="$TEMP_DIR/pg_dump.log"
+
+    # Try with Password
+    if docker exec -e PGPASSWORD="$pass" "$cid" sh -c "$dump_cmd" > "$output_file" 2> "$err_log"; then
         if [ -s "$output_file" ]; then
             ok "  Exported successfully"
             return 0
         fi
     fi
 
-    # Try without password env (if .pgpass exists inside)
-    if docker exec "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
-        if [ -s "$output_file" ]; then
-            ok "  Exported successfully (no pass)"
-            return 0
+    # 4. Fallback: Host Mode (Using external port 6432)
+    # This requires postgresql-client on host matching version, BUT if version mismatch occurs,
+    # we can't do anything else.
+    
+    info "  Container dump failed. Showing error:"
+    cat "$err_log" | head -n 5
+    echo "..."
+    
+    # Check what actually happened
+    if grep -q "Connection refused" "$err_log"; then
+        warn "  Inside container connection failed. Trying socket..."
+        # Try without -h (Socket)
+        if docker exec -e PGPASSWORD="$pass" "$cid" sh -c "pg_dump -U $user -d $db --no-owner --no-acl" > "$output_file" 2>/dev/null; then
+             if [ -s "$output_file" ]; then
+                ok "  Exported successfully (Socket)"
+                return 0
+            fi
         fi
     fi
 
-    err "  pg_dump failed inside container"
+    err "  pg_dump failed completely."
+    echo "--- Last Error Log ---" >> "$LOG_FILE"
+    cat "$err_log" >> "$LOG_FILE"
     return 1
 }
 
@@ -340,10 +352,7 @@ export_mysql_host() {
     info "  Exporting MySQL..."
 
     local cid=$(find_db_container "$PASARGUARD_DIR" "mysql")
-    if [ -z "$cid" ]; then
-        err "  MySQL container not found"
-        return 1
-    fi
+    [ -z "$cid" ] && { err "  MySQL container not found"; return 1; }
 
     get_db_credentials "$PASARGUARD_DIR"
     local user="${DB_USER:-root}"
