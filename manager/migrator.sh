@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 7.0 (Fix: PostgreSQL Version Mismatch)
+# Version: 8.0 (Container-Only Dump Fix)
 #==============================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -167,26 +167,25 @@ PYEOF
 }
 
 #==============================================================================
-# CONTAINER
+# CONTAINER FINDER (FIXED)
 #==============================================================================
 
 find_db_container() {
     local project_dir="$1" db_type="$2"
     [ ! -d "$project_dir" ] && return 1
-    local containers
-    containers=$(cd "$project_dir" && docker compose ps -q 2>/dev/null)
-    [ -z "$containers" ] && return 1
 
-    local cid
-    for cid in $containers; do
-        case "$db_type" in
-            mysql|mariadb)
-                docker exec "$cid" mysql --version &>/dev/null && { echo "$cid"; return 0; } ;;
-            postgresql|timescaledb)
-                docker exec "$cid" psql --version &>/dev/null && { echo "$cid"; return 0; } ;;
-        esac
-    done
-    return 1
+    # 1. Try Docker Compose labels (most reliable)
+    local cid=$(cd "$project_dir" && docker compose ps -q 2>/dev/null | \
+        xargs docker inspect --format '{{.Id}} {{.Config.Image}} {{.Name}}' 2>/dev/null | \
+        grep -iE "postgres|timescale|mysql|mariadb|db" | head -1 | awk '{print $1}')
+    
+    if [ -n "$cid" ]; then
+        echo "$cid"
+        return 0
+    fi
+
+    # 2. Try simple name matching
+    docker ps --format '{{.ID}} {{.Names}}' | grep -iE "pasarguard.*(db|postgres|timescale|mysql)" | head -1 | awk '{print $1}'
 }
 
 is_running() {
@@ -294,10 +293,13 @@ export_database() {
     esac
 }
 
-# Optimized for Version Mismatch (Container First, Host Fallback)
+#==============================================================================
+# DATABASE EXPORT (CONTAINER MODE)
+#==============================================================================
+
 export_postgresql_host() {
     local output_file="$1" db_type="$2"
-    info "  Exporting $db_type..."
+    info "  Exporting $db_type (Container Mode)..."
 
     # 1. Get credentials
     get_db_credentials "$PASARGUARD_DIR"
@@ -307,71 +309,52 @@ export_postgresql_host() {
 
     # 2. Find container
     local cid=$(find_db_container "$PASARGUARD_DIR" "postgresql")
+    
+    if [ -z "$cid" ]; then
+        err "  Database container not found!"
+        return 1
+    fi
 
-    # 3. Try Container (Matches DB version)
-    if [ -n "$cid" ]; then
-        if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
-            if [ -s "$output_file" ]; then
-                ok "  Exported (via container)"
-                return 0
-            fi
+    # 3. Force Container Dump (to avoid version mismatch)
+    if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+        if [ -s "$output_file" ]; then
+            ok "  Exported successfully"
+            return 0
         fi
     fi
 
-    # 4. Try Host (Fallback)
-    local host="${DB_HOST:-127.0.0.1}"
-    local port_opt=""
-    [ -n "$DB_PORT" ] && port_opt="-p $DB_PORT"
-    local err_log="$TEMP_DIR/pg_dump_error.log"
-
-    info "  Falling back to host pg_dump..."
-    if ! command -v pg_dump &>/dev/null; then
-        apt-get update -qq && apt-get install -y postgresql-client -qq
+    # Try without password env (if .pgpass exists inside)
+    if docker exec "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+        if [ -s "$output_file" ]; then
+            ok "  Exported successfully (no pass)"
+            return 0
+        fi
     fi
 
-    if [ -n "$pass" ]; then
-        PGPASSWORD="$pass" pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2> "$err_log"
-    else
-        pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2> "$err_log"
-    fi
-
-    if [ -s "$output_file" ]; then
-        ok "  Exported (via host)"
-        return 0
-    fi
-
-    err "  pg_dump failed"
-    [ -f "$err_log" ] && tail -n 5 "$err_log" >> "$LOG_FILE"
+    err "  pg_dump failed inside container"
     return 1
 }
 
 export_mysql_host() {
     local output_file="$1"
-    info "  Exporting MySQL via host mysqldump..."
+    info "  Exporting MySQL..."
 
-    if ! command -v mysqldump &>/dev/null; then
-        apt-get update -qq && apt-get install -y default-mysql-client -qq
+    local cid=$(find_db_container "$PASARGUARD_DIR" "mysql")
+    if [ -z "$cid" ]; then
+        err "  MySQL container not found"
+        return 1
     fi
 
     get_db_credentials "$PASARGUARD_DIR"
-    local host="${DB_HOST:-127.0.0.1}"
-    local port_opt=""
-    [ -n "$DB_PORT" ] && port_opt="--port=$DB_PORT"
     local user="${DB_USER:-root}"
     local db="${DB_NAME:-pasarguard}"
     local pass="$DB_PASS"
-    local err_log="$TEMP_DIR/mysqldump_error.log"
 
-    if [ -n "$pass" ]; then
-        mysqldump -h "$host" $port_opt -u"$user" -p"$pass" "$db" > "$output_file" 2> "$err_log"
-    else
-        mysqldump -h "$host" $port_opt -u"$user" "$db" > "$output_file" 2> "$err_log"
-    fi
-
-    if [ -s "$output_file" ]; then
-        ok "  MySQL exported"
+    if docker exec "$cid" mysqldump -u"$user" -p"$pass" --single-transaction "$db" > "$output_file" 2>/dev/null; then
+        ok "  Exported successfully"
         return 0
     fi
+
     err "  mysqldump failed"
     return 1
 }
