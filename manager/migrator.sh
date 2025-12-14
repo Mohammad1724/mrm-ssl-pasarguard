@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 9.1 (Final Fix: PostgreSQL Connection)
+# Version: 9.2 (Final Fix: Switch User Method)
 #==============================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -294,12 +294,12 @@ export_database() {
 }
 
 #==============================================================================
-# DATABASE EXPORT - FIXED LOGIC (v9.1)
+# DATABASE EXPORT - FIXED LOGIC (v9.2)
 #==============================================================================
 
 export_postgresql_host() {
     local output_file="$1" db_type="$2"
-    info "  Exporting $db_type (Container Mode)..."
+    info "  Exporting $db_type (Smart Mode)..."
 
     # 1. Credentials
     get_db_credentials "$PASARGUARD_DIR"
@@ -313,25 +313,19 @@ export_postgresql_host() {
 
     local err_log="$TEMP_DIR/pg_dump.log"
 
-    # 3. Method A: Try localhost (standard)
-    info "    Trying connection to 127.0.0.1..."
-    if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -h 127.0.0.1 -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2> "$err_log"; then
-        [ -s "$output_file" ] && { ok "  Exported (127.0.0.1)"; return 0; }
+    # 3. Method A: Try as 'postgres' user inside container (Best for internal auth)
+    info "    Trying dump as 'postgres' user..."
+    if docker exec "$cid" pg_dump -U postgres -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+        [ -s "$output_file" ] && { ok "  Exported (postgres user)"; return 0; }
     fi
 
-    # 4. Method B: Try Socket (No host)
-    info "    Trying socket connection..."
+    # 4. Method B: Try with Password (socket)
+    info "    Trying dump with password..."
     if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
-        [ -s "$output_file" ] && { ok "  Exported (Socket)"; return 0; }
+        [ -s "$output_file" ] && { ok "  Exported (password)"; return 0; }
     fi
 
-    # 5. Method C: Try 'localhost'
-    info "    Trying connection to localhost..."
-    if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -h localhost -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
-        [ -s "$output_file" ] && { ok "  Exported (localhost)"; return 0; }
-    fi
-
-    # 6. Method D: Try Host pg_dump (last resort, risk of version mismatch)
+    # 5. Method C: Host pg_dump (Last resort)
     info "    Falling back to host pg_dump..."
     if ! command -v pg_dump &>/dev/null; then
         apt-get update -qq && apt-get install -y postgresql-client -qq
@@ -340,8 +334,16 @@ export_postgresql_host() {
     local host="${DB_HOST:-127.0.0.1}"
     local port_opt="-p ${DB_PORT:-5432}"
     
-    if PGPASSWORD="$pass" pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>> "$err_log"; then
-        [ -s "$output_file" ] && { ok "  Exported (Host)"; return 0; }
+    # We must use the external port from .env (usually 6432)
+    # But if it's 127.0.0.1, we can only connect if we are on host
+    if [ -n "$pass" ]; then
+        PGPASSWORD="$pass" pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>> "$err_log"
+    else
+        pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>> "$err_log"
+    fi
+
+    if [ -s "$output_file" ]; then
+        ok "  Exported (Host)"; return 0;
     fi
 
     err "  pg_dump failed completely."
@@ -591,7 +593,7 @@ migrate_configs() {
 }
 
 #==============================================================================
-# ROLLBACK
+# ROLLBACK (FIXED)
 #==============================================================================
 
 do_rollback() {
