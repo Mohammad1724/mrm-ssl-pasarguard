@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 6.2 (Bugfix: syntax error in rollback)
+# Version: 7.0 (Fix: PostgreSQL Version Mismatch)
 #==============================================================================
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -294,25 +294,40 @@ export_database() {
     esac
 }
 
+# Optimized for Version Mismatch (Container First, Host Fallback)
 export_postgresql_host() {
     local output_file="$1" db_type="$2"
-    info "  Exporting $db_type via host pg_dump..."
+    info "  Exporting $db_type..."
 
-    if ! command -v pg_dump &>/dev/null; then
-        info "  Installing postgresql-client..."
-        apt-get update -qq && apt-get install -y postgresql-client -qq
-    fi
-
+    # 1. Get credentials
     get_db_credentials "$PASARGUARD_DIR"
-    local host="${DB_HOST:-127.0.0.1}"
-    local port_opt=""
-    [ -n "$DB_PORT" ] && port_opt="-p $DB_PORT"
     local user="${DB_USER:-pasarguard}"
     local db="${DB_NAME:-pasarguard}"
     local pass="$DB_PASS"
+
+    # 2. Find container
+    local cid=$(find_db_container "$PASARGUARD_DIR" "postgresql")
+
+    # 3. Try Container (Matches DB version)
+    if [ -n "$cid" ]; then
+        if docker exec -e PGPASSWORD="$pass" "$cid" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+            if [ -s "$output_file" ]; then
+                ok "  Exported (via container)"
+                return 0
+            fi
+        fi
+    fi
+
+    # 4. Try Host (Fallback)
+    local host="${DB_HOST:-127.0.0.1}"
+    local port_opt=""
+    [ -n "$DB_PORT" ] && port_opt="-p $DB_PORT"
     local err_log="$TEMP_DIR/pg_dump_error.log"
 
-    info "    host=$host user=$user db=$db port=${DB_PORT:-default}"
+    info "  Falling back to host pg_dump..."
+    if ! command -v pg_dump &>/dev/null; then
+        apt-get update -qq && apt-get install -y postgresql-client -qq
+    fi
 
     if [ -n "$pass" ]; then
         PGPASSWORD="$pass" pg_dump -h "$host" $port_opt -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2> "$err_log"
@@ -321,7 +336,7 @@ export_postgresql_host() {
     fi
 
     if [ -s "$output_file" ]; then
-        ok "  $db_type exported"
+        ok "  Exported (via host)"
         return 0
     fi
 
@@ -614,7 +629,6 @@ do_rollback() {
         ok "Data restored"
     fi
 
-    # Fixed syntax here: removed parentheses in function call
     info "Starting Pasarguard..."
     if start_panel "$PASARGUARD_DIR" "Pasarguard"; then
         echo -e "${GREEN}Rollback complete.${NC}"
