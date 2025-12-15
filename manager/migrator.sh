@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.1 (Fix: MySQL Import Error & Syntax Fixes)
+# Version: 10.2 (Fix: Binary Mode Import & Backslash Escape)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -227,11 +227,11 @@ export_migration_postgresql() {
 
     minfo "  Running pg_dump (Safe Mode)..."
     
-    # CRITICAL FIX: Added --attribute-inserts and --disable-dollar-quoting
-    # This forces standard SQL output (INSERT INTO) instead of PostgreSQL COPY
-    local PG_FLAGS="--no-owner --no-acl --attribute-inserts --disable-dollar-quoting"
+    # CRITICAL: --inserts creates INSERT statements instead of COPY
+    # --no-comments removes PostgreSQL comments
+    local PG_FLAGS="--no-owner --no-acl --inserts --no-comments"
 
-    # Try with user (no password if trust/local)
+    # Try with user
     if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
@@ -300,7 +300,7 @@ try:
     c = re.sub(r'\bINTEGER\b', 'INT', c, flags=re.I)
     c = re.sub(r'\bREAL\b', 'DOUBLE', c, flags=re.I)
     c = re.sub(r'\bBLOB\b', 'LONGBLOB', c, flags=re.I)
-    c = re.sub(r'"([a-zA-Z_]\w*)"', r'\`\1\`', c)
+    c = re.sub(r'"([a-zA-Z_]\w*)"', r'`\1`', c)
     with open(dst_file, 'w') as f:
         f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n" + c + "\n\nSET FOREIGN_KEY_CHECKS=1;\n")
 except Exception as e:
@@ -328,35 +328,43 @@ try:
     with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # 1. Remove PostgreSQL specific blocks
+    # 1. Remove PostgreSQL client commands (CRITICAL: \connect, \c, etc.)
+    sql = re.sub(r'^\\[a-zA-Z].*$', '', sql, flags=re.M)
+    
+    # 2. Remove PostgreSQL specific statements
     patterns = [
         r'CREATE SEQUENCE[^;]+;',
         r'ALTER SEQUENCE[^;]+;',
-        r'ALTER TABLE\s+[\w`"]+\s+ALTER COLUMN\s+[\w`"]+\s+SET DEFAULT\s+nextval[^;]+;',
+        r'ALTER TABLE\s+[^\s]+\s+ALTER COLUMN\s+[^\s]+\s+SET DEFAULT\s+nextval[^;]+;',
         r'CREATE TYPE[^;]+;',
-        r'SELECT pg_catalog[^;]+;',
-        r'SET\s+\w+[^;]+;',
-        r'\\connect.*',
+        r'SELECT pg_catalog\.[^;]+;',
+        r'SELECT setval\([^;]+;',
+        r"SET\s+\w+\s*=\s*'[^']*'\s*;",
+        r'SET\s+\w+\s*=\s*\w+\s*;',
+        r'SET\s+\w+\s+TO\s+[^;]+;',
         r'COMMENT ON[^;]+;',
         r'CREATE EXTENSION[^;]+;',
         r'GRANT\s+[^;]+;',
-        r'REVOKE\s+[^;]+;'
+        r'REVOKE\s+[^;]+;',
+        r'ALTER TABLE[^;]+OWNER TO[^;]+;',
+        r'ALTER [A-Z]+[^;]+OWNER TO[^;]+;',
     ]
 
     for p in patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-    # 2. Clean up schemas and defaults
+    # 3. Remove SQL comments
+    sql = re.sub(r'--[^\n]*\n', '\n', sql)
+
+    # 4. Clean up schemas and defaults
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
-    
-    # Aggressively clean defaults with nextval
-    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'::regclass\)", 'DEFAULT NULL', sql, flags=re.I)
+    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'::regclass\)", '', sql, flags=re.I)
 
-    # 3. Data Type Mapping
+    # 5. Data Type Mapping
     types = [
-        (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
-        (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
+        (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
+        (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
         (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
         (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
@@ -365,30 +373,62 @@ try:
         (r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME'),
         (r'\bTIMESTAMPTZ\b', 'DATETIME'),
         (r'\bJSONB\b', 'JSON'),
+        (r'\bJSON\b', 'JSON'),
         (r'\bUUID\b', 'VARCHAR(36)'),
         (r'\bBYTEA\b', 'LONGBLOB'),
         (r'\bINET\b', 'VARCHAR(45)'),
-        (r'\bCHARACTER\s+VARYING\b', 'VARCHAR'),
-        (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE')
+        (r'\bCIDR\b', 'VARCHAR(45)'),
+        (r'\bMACCHARACTER\b', 'VARCHAR(17)'),
+        (r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)'),
+        (r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)'),
+        (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
+        (r'\bREAL\b', 'FLOAT'),
+        (r'\bSMALLINT\b', 'SMALLINT'),
+        (r'\bBIGINT\b', 'BIGINT'),
+        (r'\bINTEGER\b', 'INT'),
     ]
     
     for p, r in types:
         sql = re.sub(p, r, sql, flags=re.I)
 
-    # 4. Value corrections
+    # 6. Value corrections
     sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
     sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
-    sql = re.sub(r'\btrue\b', '1', sql, flags=re.I)
-    sql = re.sub(r'\bfalse\b', '0', sql, flags=re.I)
-    sql = re.sub(r'::\w+(\[\])?', '', sql) 
-    sql = re.sub(r"nextval\('[^']+'::regclass\)", 'NULL', sql, flags=re.I)
+    sql = re.sub(r"'t'", "'1'", sql)
+    sql = re.sub(r"'f'", "'0'", sql)
+    sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
+    sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
+    
+    # Remove type casts like ::text, ::integer, ::jsonb[]
+    sql = re.sub(r'::\w+(\[\])?', '', sql)
+    
+    # Remove nextval calls
+    sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # 5. Quotes
+    # 7. Quotes: PostgreSQL "name" -> MySQL `name`
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
+    
+    # 8. Fix CREATE TABLE issues
+    # Remove CONSTRAINT with complex expressions
+    sql = re.sub(r',\s*CONSTRAINT\s+`[^`]+`\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
+    
+    # 9. Clean multiple empty lines
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
+    
+    # 10. Remove empty statements
+    sql = re.sub(r';\s*;', ';', sql)
 
-    header = "SET NAMES utf8mb4; SET FOREIGN_KEY_CHECKS=0; SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
-    footer = "\n\nSET FOREIGN_KEY_CHECKS=1;"
+    header = """SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS=0;
+SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
+SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0;
+
+"""
+    footer = """
+
+SET SQL_NOTES=@OLD_SQL_NOTES;
+SET FOREIGN_KEY_CHECKS=1;
+"""
 
     with open(dst_file, 'w', encoding='utf-8') as f:
         f.write(header + sql + footer)
@@ -397,6 +437,8 @@ try:
         
 except Exception as e:
     print(f"  Python Error: {e}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 PYEOF
 
@@ -435,32 +477,58 @@ import_migration_to_rebecca() {
     minfo "Importing to Rebecca..."
     [ ! -f "$sql" ] && { merr "SQL not found"; return 1; }
 
-    local db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'" || echo "marzban")
+    local db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
+    [ -z "$db" ] && db="marzban"
     local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
     local cname=$(find_migration_mysql_container)
 
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
-    # 1. Copy file to container (Robust method)
-    minfo "  Copying SQL file to container..."
-    docker cp "$sql" "$cname:/tmp/migration_dump.sql"
+    # Show SQL file info
+    local sql_size=$(du -h "$sql" | cut -f1)
+    local sql_lines=$(wc -l < "$sql")
+    minfo "  SQL file: $sql_size, $sql_lines lines"
 
-    # 2. Reset DB and Import
+    # Reset DB
+    minfo "  Resetting database..."
+    docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS \`$db\`; CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+
+    # Import using stdin with binary mode (CRITICAL: prevents \c interpretation)
     local err_file="$MIGRATION_TEMP/mysql_import.err"
-    minfo "  Running MySQL import..."
+    minfo "  Running MySQL import (binary mode)..."
 
-    docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS $db; CREATE DATABASE $db;" 2>/dev/null
-
-    if docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "SOURCE /tmp/migration_dump.sql" > "$err_file" 2>&1; then
-        mok "Import successful"
+    if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" < "$sql" 2> "$err_file"; then
+        # Count tables
+        local tables=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | wc -l)
+        mok "Import successful! ($tables tables created)"
+        
+        # Show table names
+        minfo "  Tables:"
+        docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | while read t; do
+            echo "    - $t"
+        done
+        
         return 0
     else
         merr "Import failed! Error details:"
-        cat "$err_file" | tail -10
+        # Filter out password warning
+        grep -v "Using a password" "$err_file" | tail -15
         mlog "MySQL Error: $(cat $err_file)"
+        
+        # Try to find problematic line
+        local line_num=$(grep -oP 'at line \K[0-9]+' "$err_file" 2>/dev/null | head -1)
+        if [ -n "$line_num" ]; then
+            echo ""
+            mwarn "Problematic line $line_num:"
+            sed -n "${line_num}p" "$sql" | head -c 300
+            echo ""
+            echo "..."
+        fi
+        
         echo ""
-        echo "Check full log at: $MIGRATION_LOG"
+        echo "Full SQL file: $sql"
+        echo "Check log: $MIGRATION_LOG"
         return 1
     fi
 }
@@ -495,7 +563,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.1        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.2        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -542,6 +610,7 @@ do_full_migration() {
     local mysql_sql="$MIGRATION_TEMP/mysql_import.sql"
     convert_migration_to_mysql "$src" "$mysql_sql" "$db_type" || { mpause; return 1; }
     cp "$mysql_sql" "$backup_dir/mysql_converted.sql" 2>/dev/null
+    minfo "Converted SQL saved to: $backup_dir/mysql_converted.sql"
 
     # Step 4: Stop Pasarguard
     echo -e "\n${CYAN}━━━ STEP 4: STOP PASARGUARD ━━━${NC}"
@@ -555,7 +624,12 @@ do_full_migration() {
     echo -e "\n${CYAN}━━━ STEP 6: IMPORT ━━━${NC}"
     is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Rebecca"
     wait_migration_mysql
-    import_migration_to_rebecca "$mysql_sql"
+    
+    if ! import_migration_to_rebecca "$mysql_sql"; then
+        mwarn "Import failed. You can manually retry with:"
+        echo "  docker exec -i $cname mysql -uroot -p\"\$PASS\" $db < $backup_dir/mysql_converted.sql"
+        mpause
+    fi
 
     # Step 7: Restart
     echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
@@ -567,6 +641,7 @@ do_full_migration() {
     echo -e "${GREEN}   Migration completed!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
+    echo "Converted SQL: $backup_dir/mysql_converted.sql"
 
     migration_cleanup
     mpause
@@ -609,7 +684,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.1            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.2            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
