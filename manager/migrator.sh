@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.9 (Fix: Auto-create ALL missing tables before import)
+# Version: 13.0 (Fix: Quote table names in CREATE TABLE for reserved keywords like 'groups')
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -350,16 +350,21 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # --- Helper function to create missing tables with a flexible schema ---
+    # --- Helper function to create missing tables with proper quoting ---
     create_table_if_missing() {
         local table="$1"
         local schema="$2"
         minfo "  Checking table $table..."
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS $table ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
+        # Note the escaped backticks \`$table\` to handle reserved keywords like 'groups'
+        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS \`$table\` ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
+        
+        # Verify creation (silent check)
+        if ! docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "DESCRIBE \`$table\`;" >/dev/null 2>&1; then
+             mwarn "Failed to verify table $table creation. Import might fail."
+        fi
     }
 
-    # Define minimal schemas for key tables to avoid "Table doesn't exist" errors
-    # Note: These schemas are approximate to allow INSERTs to succeed.
+    # Define minimal schemas for key tables
     create_table_if_missing "admins" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "core_configs" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "groups" "id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255), is_disabled TINYINT(1) DEFAULT 0"
@@ -377,10 +382,10 @@ import_migration_to_rebecca() {
       local col="$2"
       local def="$3"
       local exists
-      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM $table LIKE '$col';" 2>/dev/null || true)
+      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM \`$table\` LIKE '$col';" 2>/dev/null || true)
       if [ -z "$exists" ]; then
         minfo "  Adding column $table.$col ..."
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE $table ADD COLUMN $col $def;" 2>/dev/null || true
+        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       fi
     }
 
@@ -408,7 +413,7 @@ import_migration_to_rebecca() {
     ensure_col "core_configs" "exclude_inbound_tags" "TEXT NULL"
     ensure_col "core_configs" "fallbacks_inbound_tags" "TEXT NULL"
 
-    # Add columns for 'nodes' (often missing)
+    # Add columns for 'nodes'
     ensure_col "nodes" "name" "VARCHAR(255)"
     ensure_col "nodes" "address" "VARCHAR(255)"
     ensure_col "nodes" "port" "INT"
@@ -476,7 +481,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.9        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.0        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -556,7 +561,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.9            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.0            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
