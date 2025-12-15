@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 14.3 (Fix: Create missing 'user_subscription_updates' table)
+# Version: 14.4 (Fix: Double-escape backslashes in INSERTs for valid JSON)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -237,7 +237,7 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
+    minfo "Converting PostgreSQL → MySQL (DATA-ONLY + ESCAPE FIX)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
     python3 - "$src" "$dst" << 'PYEOF'
@@ -274,23 +274,29 @@ for line in lines:
         line
     )
 
-    # 4) Handle INSERT lines: fix schema and quote table name
+    # 4) Handle INSERT lines
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         # Change INSERT INTO to REPLACE INTO to handle duplicate IDs
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
 
-        # Remove public schema: public., "public"., `public`.
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)public\.', r'\1', line, flags=re.I)
+        # Remove public schema using simple string replace to be safe
+        line = line.replace('"public".', '')
+        line = line.replace('`public`.', '')
+        line = line.replace('public.', '')
 
-        # Quote table name only; do NOT touch VALUES(...)
+        # Quote table name only
         line = re.sub(
             r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
             r'\1`\2`',
             line,
             flags=re.I
         )
+        
+        # KEY FIX: Double escape backslashes for MySQL JSON compatibility
+        # MySQL eats one backslash, so \ needs to become \\
+        # Regex inside JSON: [\\-\\.] -> [\\\\-\\\\.]
+        line = line.replace('\\', '\\\\')
+        
         out_lines.append(line)
         continue
 
@@ -350,7 +356,6 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # --- Helper function to create missing tables ---
     create_table_if_missing() {
         local table="$1"
         local schema="$2"
@@ -358,7 +363,6 @@ import_migration_to_rebecca() {
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS \`$table\` ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
     }
 
-    # Define minimal schemas
     create_table_if_missing "admins" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "core_configs" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "groups" "id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255), is_disabled TINYINT(1) DEFAULT 0"
@@ -371,17 +375,10 @@ import_migration_to_rebecca() {
     create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "hosts" "id INT PRIMARY KEY AUTO_INCREMENT, remark VARCHAR(255), address VARCHAR(255)"
     create_table_if_missing "inbounds_groups_association" "inbound_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY (inbound_id, group_id)"
-    
-    # Fix 'jwt' table
     create_table_if_missing "jwt" "id INT PRIMARY KEY AUTO_INCREMENT"
-    
-    # Fix 'settings' table
     create_table_if_missing "settings" "id INT PRIMARY KEY AUTO_INCREMENT, telegram JSON, discord JSON, webhook JSON, notification_settings JSON, notification_enable JSON, subscription JSON, general JSON"
-
-    # Fix 'user_subscription_updates' table
     create_table_if_missing "user_subscription_updates" "id INT PRIMARY KEY AUTO_INCREMENT, user_id INT, created_at DATETIME, user_agent TEXT"
 
-    # --- Helper function to add columns dynamically AND relax constraints ---
     ensure_col() {
       local table="$1"
       local col="$2"
@@ -392,13 +389,10 @@ import_migration_to_rebecca() {
         minfo "  Adding column $table.$col ..."
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
-        # Force column to accept NULL or Default if it exists but is strict
         if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
-        
-        # FIX: Change 'expire' from INT to DATETIME (or VARCHAR) if data format is datetime string
         if [[ "$table" == "users" && "$col" == "expire" ]]; then
              minfo "  Fixing users.expire type to allow DATETIME string..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col DATETIME NULL;" 2>/dev/null || true
@@ -406,7 +400,6 @@ import_migration_to_rebecca() {
       fi
     }
 
-    # Add ALL missing columns for 'admins'
     ensure_col "admins" "username" "VARCHAR(128)"
     ensure_col "admins" "hashed_password" "VARCHAR(255)"
     ensure_col "admins" "created_at" "DATETIME"
@@ -423,14 +416,12 @@ import_migration_to_rebecca() {
     ensure_col "admins" "discord_id" "BIGINT NULL"
     ensure_col "admins" "notification_enable" "TEXT NULL"
 
-    # Add columns for 'core_configs'
     ensure_col "core_configs" "created_at" "DATETIME NULL"
     ensure_col "core_configs" "name" "VARCHAR(255)"
     ensure_col "core_configs" "config" "LONGTEXT"
     ensure_col "core_configs" "exclude_inbound_tags" "TEXT NULL"
     ensure_col "core_configs" "fallbacks_inbound_tags" "TEXT NULL"
 
-    # Add columns for 'nodes'
     ensure_col "nodes" "name" "VARCHAR(255)"
     ensure_col "nodes" "address" "VARCHAR(255)"
     ensure_col "nodes" "port" "INT"
@@ -455,13 +446,11 @@ import_migration_to_rebecca() {
     ensure_col "nodes" "internal_timeout" "INT"
     ensure_col "nodes" "api_port" "INT"
 
-    # Add columns for 'node_user_usages'
     ensure_col "node_user_usages" "created_at" "DATETIME"
     ensure_col "node_user_usages" "user_id" "INT"
     ensure_col "node_user_usages" "node_id" "INT"
     ensure_col "node_user_usages" "used_traffic" "BIGINT"
     
-    # Add columns for 'hosts' - Ensure NULL is allowed
     ensure_col "hosts" "remark" "VARCHAR(255)"
     ensure_col "hosts" "address" "VARCHAR(255)"
     ensure_col "hosts" "port" "INT NULL"
@@ -485,7 +474,6 @@ import_migration_to_rebecca() {
     ensure_col "hosts" "status" "VARCHAR(60)"
     ensure_col "hosts" "ech_config_list" "VARCHAR(512) NULL"
 
-    # Fix 'jwt' table columns - Add all missing masks
     ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
     ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "admin_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
@@ -494,7 +482,6 @@ import_migration_to_rebecca() {
     ensure_col "jwt" "trojan_mask" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "shadowsocks_mask" "VARCHAR(255) NULL DEFAULT NULL"
 
-    # Add columns for 'users'
     ensure_col "users" "proxy_settings" "JSON NULL"
     ensure_col "users" "username" "VARCHAR(128)"
     ensure_col "users" "status" "VARCHAR(64)"
@@ -513,7 +500,6 @@ import_migration_to_rebecca() {
     ensure_col "users" "auto_delete_in_days" "INT"
     ensure_col "users" "last_status_change" "DATETIME"
 
-    # Add columns for 'settings'
     ensure_col "settings" "telegram" "JSON"
     ensure_col "settings" "discord" "JSON"
     ensure_col "settings" "webhook" "JSON"
@@ -559,7 +545,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.3        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.2        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -639,7 +625,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v14.3            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v14.2            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
