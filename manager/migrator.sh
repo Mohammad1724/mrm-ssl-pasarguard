@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.9 (Fix: Force MODIFY COLUMN for all JWT masks and keys to allow NULL)
+# Version: 13.9.1 (Fix: Add missing 'proxy_settings' column in 'users')
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -387,7 +387,6 @@ import_migration_to_rebecca() {
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
         # Force column to accept NULL or Default if it exists but is strict
-        # Check against wildcard patterns for masks/keys and specific column names
         if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
@@ -450,7 +449,7 @@ import_migration_to_rebecca() {
     ensure_col "node_user_usages" "node_id" "INT"
     ensure_col "node_user_usages" "used_traffic" "BIGINT"
     
-    # Add columns for 'hosts'
+    # Add columns for 'hosts' - Ensure NULL is allowed
     ensure_col "hosts" "remark" "VARCHAR(255)"
     ensure_col "hosts" "address" "VARCHAR(255)"
     ensure_col "hosts" "port" "INT NULL"
@@ -474,7 +473,7 @@ import_migration_to_rebecca() {
     ensure_col "hosts" "status" "VARCHAR(60)"
     ensure_col "hosts" "ech_config_list" "VARCHAR(512) NULL"
 
-    # Fix 'jwt' table columns - Force all masks and keys to allow NULL
+    # Fix 'jwt' table columns - Add all missing masks
     ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
     ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "admin_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
@@ -482,6 +481,25 @@ import_migration_to_rebecca() {
     ensure_col "jwt" "vmess_mask" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "trojan_mask" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "shadowsocks_mask" "VARCHAR(255) NULL DEFAULT NULL"
+
+    # Add columns for 'users'
+    ensure_col "users" "proxy_settings" "JSON NULL"
+    ensure_col "users" "username" "VARCHAR(128)"
+    ensure_col "users" "status" "VARCHAR(64)"
+    ensure_col "users" "used_traffic" "BIGINT"
+    ensure_col "users" "data_limit" "BIGINT"
+    ensure_col "users" "expire" "INT"
+    ensure_col "users" "created_at" "DATETIME"
+    ensure_col "users" "admin_id" "INT"
+    ensure_col "users" "data_limit_reset_strategy" "VARCHAR(64)"
+    ensure_col "users" "sub_revoked_at" "DATETIME NULL"
+    ensure_col "users" "note" "TEXT"
+    ensure_col "users" "online_at" "DATETIME"
+    ensure_col "users" "edit_at" "DATETIME"
+    ensure_col "users" "on_hold_timeout" "DATETIME NULL"
+    ensure_col "users" "on_hold_expire_duration" "INT"
+    ensure_col "users" "auto_delete_in_days" "INT"
+    ensure_col "users" "last_status_change" "DATETIME"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -520,7 +538,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.9        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.9.1      ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -600,7 +618,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.9            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.9.1          ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
