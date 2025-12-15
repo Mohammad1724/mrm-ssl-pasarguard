@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.5 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
-#                auto-add missing columns in admins)
+# Version: 12.6 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
+#                auto-add admins columns, datetime tz fix)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -268,7 +268,15 @@ for line in lines:
     if re.match(r'^SELECT\s+setval\b', stripped, re.I):
         continue
 
-    # 3) Handle INSERT lines: fix schema and quote table name
+    # 3) Fix PostgreSQL timestamptz literals:
+    #    'YYYY-MM-DD hh:mm:ss[.ffffff]+00[:00]'  →  'YYYY-MM-DD hh:mm:ss'
+    line = re.sub(
+        r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'",
+        r"'\1'",
+        line
+    )
+
+    # 4) Handle INSERT lines: fix schema and quote table name
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         # Remove public schema: public., "public"., `public`.
         line = re.sub(r'(\s*INSERT\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
@@ -285,7 +293,7 @@ for line in lines:
         out_lines.append(line)
         continue
 
-    # 4) Any other lines (continuations of VALUES, comments, etc) pass through unchanged
+    # 5) Any other lines (continuations of VALUES, comments, etc) pass through unchanged
     out_lines.append(line)
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n"
@@ -359,17 +367,17 @@ import_migration_to_rebecca() {
       fi
     }
 
-    ensure_col "is_sudo"            "TINYINT(1) DEFAULT 0"
-    ensure_col "password_reset_at"  "DATETIME NULL"
-    ensure_col "telegram_id"        "BIGINT NULL"
-    ensure_col "discord_webhook"    "TEXT NULL"
-    ensure_col "used_traffic"       "BIGINT NULL"
-    ensure_col "is_disabled"        "TINYINT(1) DEFAULT 0"
-    ensure_col "sub_template"       "TEXT NULL"
-    ensure_col "sub_domain"         "TEXT NULL"
-    ensure_col "profile_title"      "TEXT NULL"
-    ensure_col "support_url"        "TEXT NULL"
-    ensure_col "discord_id"         "BIGINT NULL"
+    ensure_col "is_sudo"             "TINYINT(1) DEFAULT 0"
+    ensure_col "password_reset_at"   "DATETIME NULL"
+    ensure_col "telegram_id"         "BIGINT NULL"
+    ensure_col "discord_webhook"     "TEXT NULL"
+    ensure_col "used_traffic"        "BIGINT NULL"
+    ensure_col "is_disabled"         "TINYINT(1) DEFAULT 0"
+    ensure_col "sub_template"        "TEXT NULL"
+    ensure_col "sub_domain"          "TEXT NULL"
+    ensure_col "profile_title"       "TEXT NULL"
+    ensure_col "support_url"         "TEXT NULL"
+    ensure_col "discord_id"          "BIGINT NULL"
     ensure_col "notification_enable" "TEXT NULL"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
@@ -394,7 +402,7 @@ import_migration_to_rebecca() {
 migrate_migration_configs() {
     minfo "Migrating configs..."
     if [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ]; then
-      return 0
+        return 0
     fi
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_SUBSCRIPTION_URL_PREFIX" "WEBHOOK_ADDRESS" "WEBHOOK_SECRET")
     local n=0
@@ -409,7 +417,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.5        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.6        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -489,7 +497,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.5            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.6            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
