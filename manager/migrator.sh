@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 9.6 (For MRM Manager Integration)
+# Version: 9.7 (Final Fix: PostgreSQL Multiline Cleanup)
 #==============================================================================
 
 #==============================================================================
@@ -17,6 +17,13 @@ MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
 CONTAINER_TIMEOUT=120
 MYSQL_WAIT=60
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
 #==============================================================================
 # HELPERS
@@ -35,14 +42,14 @@ migration_cleanup() {
 }
 
 mlog() { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG"; }
-minfo() { echo -e "${BLUE:-}→${NC:-} $*"; mlog "INFO: $*"; }
-mok() { echo -e "${GREEN:-}✓${NC:-} $*"; mlog "OK: $*"; }
-mwarn() { echo -e "${YELLOW:-}⚠${NC:-} $*"; mlog "WARN: $*"; }
-merr() { echo -e "${RED:-}✗${NC:-} $*"; mlog "ERROR: $*"; }
+minfo() { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
+mok() { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
+mwarn() { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
+merr() { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 
 mpause() {
     echo ""
-    echo -e "${YELLOW:-}Press any key to continue...${NC:-}"
+    echo -e "${YELLOW}Press any key to continue...${NC}"
     read -n 1 -s -r
     echo ""
 }
@@ -57,7 +64,7 @@ detect_migration_db_type() {
     
     local env_file="$panel_dir/.env"
     if [ -f "$env_file" ]; then
-        local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"'"'" | tr -d ' ')
+        local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
         case "$db_url" in
             *timescale*|*postgresql+asyncpg*) echo "timescaledb"; return 0 ;;
             *postgresql*) echo "postgresql"; return 0 ;;
@@ -76,7 +83,7 @@ get_migration_db_credentials() {
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_HOST=""; MIG_DB_PORT=""; MIG_DB_NAME=""
     [ ! -f "$env_file" ] && return 1
     
-    local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d ' ')
+    local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
     
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
@@ -223,6 +230,7 @@ export_migration_postgresql() {
     done
 
     minfo "  Running pg_dump..."
+    # Try with user (no password if trust/local)
     if docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
@@ -231,6 +239,7 @@ export_migration_postgresql() {
         fi
     fi
 
+    # Try with password
     if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
@@ -256,7 +265,7 @@ export_migration_mysql() {
 }
 
 #==============================================================================
-# CONVERSION
+# CONVERSION (FIXED)
 #==============================================================================
 
 convert_migration_to_mysql() {
@@ -302,35 +311,79 @@ convert_migration_postgresql() {
 
     python3 << PYEOF
 import re
-with open("$src", 'r', errors='replace') as f: c = f.read()
+import sys
 
-for p in [r'^SET\s+\w+.*?;$', r'^SELECT\s+pg_catalog\..*?;$', r'^\\\\.*$', r'^\\restrict.*$',
-          r'^CREATE\s+EXTENSION.*?;$', r'^COMMENT\s+ON.*?;$', r'^ALTER\s+.*?OWNER.*?;$',
-          r'^GRANT\s+.*?;$', r'^REVOKE\s+.*?;$', r'^CREATE\s+SCHEMA.*?;$',
-          r'^CREATE\s+SEQUENCE.*?;$', r'^ALTER\s+SEQUENCE.*?;$', r'^SELECT\s+.*?setval.*?;$',
-          r'^SELECT\s+create_hypertable.*?;$']:
-    c = re.sub(p, '', c, flags=re.M|re.I)
+try:
+    with open("$src", 'r', encoding='utf-8', errors='replace') as f:
+        sql = f.read()
 
-c = re.sub(r'CREATE TYPE\s+[\w.]+\s+AS\s+ENUM\s*\([^)]+\);', '', c, flags=re.I|re.S)
+    # 1. Remove PostgreSQL specific blocks (Using DOTALL re.S)
+    patterns = [
+        r'CREATE SEQUENCE[^;]+;',
+        r'ALTER SEQUENCE[^;]+;',
+        r'ALTER TABLE\s+[\w`"]+\s+ALTER COLUMN\s+[\w`"]+\s+SET DEFAULT\s+nextval[^;]+;',
+        r'CREATE TYPE[^;]+;',
+        r'SELECT pg_catalog[^;]+;',
+        r'SET\s+\w+[^;]+;',
+        r'\\connect.*',
+        r'COMMENT ON[^;]+;',
+        r'CREATE EXTENSION[^;]+;',
+        r'GRANT\s+[^;]+;',
+        r'REVOKE\s+[^;]+;'
+    ]
+    
+    for p in patterns:
+        sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-for p, r in [(r'\bSERIAL\b', 'INT AUTO_INCREMENT'), (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
-             (r'\bBOOLEAN\b', 'TINYINT(1)'), (r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME'),
-             (r'\bTIMESTAMPTZ\b', 'DATETIME'), (r'\bBYTEA\b', 'LONGBLOB'), (r'\bUUID\b', 'VARCHAR(36)'),
-             (r'\bJSONB?\b', 'JSON'), (r'\bINET\b', 'VARCHAR(45)'), (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
-             (r'\bCHARACTER\s+VARYING\b', 'VARCHAR'), (r'\bpublic\.', '')]:
-    c = re.sub(p, r, c, flags=re.I)
+    # 2. Clean up schemas
+    sql = re.sub(r'public\.', '', sql)
+    sql = re.sub(r'USING btree', '', sql, flags=re.I)
 
-c = re.sub(r"'t'::boolean", "'1'", c, flags=re.I)
-c = re.sub(r"'f'::boolean", "'0'", c, flags=re.I)
-c = re.sub(r'\btrue\b', "'1'", c, flags=re.I)
-c = re.sub(r'\bfalse\b', "'0'", c, flags=re.I)
-c = re.sub(r'::\w+(\[\])?', '', c)
-c = re.sub(r"nextval\('[^']*'[^)]*\)", 'NULL', c, flags=re.I)
-c = re.sub(r'"([a-zA-Z_]\w*)"', r'\`\1\`', c)
-c = re.sub(r'\n\s*\n\s*\n+', '\n\n', c)
+    # 3. Data Type Mapping
+    types = [
+        # Identity columns
+        (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
+        (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
+        # Standard types
+        (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
+        (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
+        (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
+        (r'\bBOOLEAN\b', 'TINYINT(1)'),
+        (r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME'),
+        (r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME'),
+        (r'\bTIMESTAMPTZ\b', 'DATETIME'),
+        (r'\bJSONB\b', 'JSON'),
+        (r'\bUUID\b', 'VARCHAR(36)'),
+        (r'\bBYTEA\b', 'LONGBLOB'),
+        (r'\bINET\b', 'VARCHAR(45)'),
+        (r'\bCHARACTER\s+VARYING\b', 'VARCHAR'),
+        (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE')
+    ]
+    
+    for p, r in types:
+        sql = re.sub(p, r, sql, flags=re.I)
 
-with open("$dst", 'w') as f:
-    f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n" + c + "\n\nSET FOREIGN_KEY_CHECKS=1;\n")
+    # 4. Value corrections
+    sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
+    sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
+    sql = re.sub(r'\btrue\b', '1', sql, flags=re.I)
+    sql = re.sub(r'\bfalse\b', '0', sql, flags=re.I)
+    sql = re.sub(r'::\w+(\[\])?', '', sql) 
+    sql = re.sub(r"nextval\('[^']+'::regclass\)", 'NULL', sql, flags=re.I)
+
+    # 5. Quotes
+    sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'\`\1\`', sql)
+    sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
+
+    header = "SET NAMES utf8mb4; SET FOREIGN_KEY_CHECKS=0; SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
+    footer = "\n\nSET FOREIGN_KEY_CHECKS=1;"
+
+    with open("$dst", 'w', encoding='utf-8') as f:
+        f.write(header + sql + footer)
+        
+except Exception as e:
+    print(f"Error: {e}")
+    sys.exit(1)
 PYEOF
     [ -s "$dst" ] && { mok "Converted"; return 0; }
     merr "Conversion failed"; return 1
@@ -369,6 +422,9 @@ import_migration_to_rebecca() {
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
+    # Drop existing DB to prevent conflicts
+    docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS $db; CREATE DATABASE $db;" 2>/dev/null
+    
     if docker exec -i "$cname" mysql -uroot -p"$pass" "$db" < "$sql" 2>/dev/null; then
         mok "Import successful"
         return 0
@@ -405,12 +461,11 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init
     clear
-    echo -e "${CYAN:-}╔═══════════════════════════════════════════════╗${NC:-}"
-    echo -e "${CYAN:-}║   PASARGUARD → REBECCA MIGRATION v9.6         ║${NC:-}"
-    echo -e "${CYAN:-}╚═══════════════════════════════════════════════╝${NC:-}"
+    echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.7         ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Check dependencies
     for cmd in docker python3 sqlite3; do
         command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }
     done
@@ -420,7 +475,7 @@ do_full_migration() {
     mok "Pasarguard found"
 
     local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
-    echo -e "Database: ${CYAN:-}$db_type${NC:-}"
+    echo -e "Database: ${CYAN}$db_type${NC}"
 
     check_migration_rebecca || { merr "Rebecca not installed"; mpause; return 1; }
     mok "Rebecca found"
@@ -432,7 +487,7 @@ do_full_migration() {
     [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
 
     # Step 1: Backup
-    echo -e "\n${CYAN:-}━━━ STEP 1: BACKUP ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
     is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
     create_migration_backup || { merr "Backup failed"; mpause; migration_cleanup; return 1; }
     
@@ -440,7 +495,7 @@ do_full_migration() {
     [ ! -d "$backup_dir" ] && { merr "Backup dir not found"; mpause; return 1; }
 
     # Step 2: Verify
-    echo -e "\n${CYAN:-}━━━ STEP 2: VERIFY ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 2: VERIFY ━━━${NC}"
     local src=""
     case "$db_type" in
         sqlite) src="$backup_dir/database.sqlite3" ;;
@@ -450,34 +505,34 @@ do_full_migration() {
     mok "Source: $(du -h "$src" | cut -f1)"
 
     # Step 3: Convert
-    echo -e "\n${CYAN:-}━━━ STEP 3: CONVERT ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 3: CONVERT ━━━${NC}"
     local mysql_sql="$MIGRATION_TEMP/mysql_import.sql"
     convert_migration_to_mysql "$src" "$mysql_sql" "$db_type" || { mpause; return 1; }
     cp "$mysql_sql" "$backup_dir/mysql_converted.sql" 2>/dev/null
 
     # Step 4: Stop Pasarguard
-    echo -e "\n${CYAN:-}━━━ STEP 4: STOP PASARGUARD ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 4: STOP PASARGUARD ━━━${NC}"
     stop_migration_panel "$PASARGUARD_DIR" "Pasarguard"
 
     # Step 5: Migrate configs
-    echo -e "\n${CYAN:-}━━━ STEP 5: CONFIGS ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 5: CONFIGS ━━━${NC}"
     migrate_migration_configs
 
     # Step 6: Import
-    echo -e "\n${CYAN:-}━━━ STEP 6: IMPORT ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 6: IMPORT ━━━${NC}"
     is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Rebecca"
     wait_migration_mysql
     import_migration_to_rebecca "$mysql_sql"
 
     # Step 7: Restart
-    echo -e "\n${CYAN:-}━━━ STEP 7: RESTART ━━━${NC:-}"
+    echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
     (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null
     sleep 3
     mok "Rebecca restarted"
 
-    echo -e "\n${GREEN:-}════════════════════════════════════════${NC:-}"
-    echo -e "${GREEN:-}   Migration completed!${NC:-}"
-    echo -e "${GREEN:-}════════════════════════════════════════${NC:-}"
+    echo -e "\n${GREEN}════════════════════════════════════════${NC}"
+    echo -e "${GREEN}   Migration completed!${NC}"
+    echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
     
     migration_cleanup
@@ -486,7 +541,7 @@ do_full_migration() {
 
 do_migration_rollback() {
     clear
-    echo -e "${CYAN:-}=== ROLLBACK ===${NC:-}"
+    echo -e "${CYAN}=== ROLLBACK ===${NC}"
     [ ! -f "$BACKUP_ROOT/.last_backup" ] && { merr "No backup"; mpause; return 1; }
     local backup=$(cat "$BACKUP_ROOT/.last_backup")
     [ ! -d "$backup" ] && { merr "Backup missing"; mpause; return 1; }
@@ -512,21 +567,17 @@ do_migration_rollback() {
     }
 
     start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
-    echo -e "${GREEN:-}Rollback done${NC:-}"
+    echo -e "${GREEN}Rollback done${NC}"
     migration_cleanup
     mpause
 }
 
-#==============================================================================
-# MENU - THIS IS THE FUNCTION CALLED BY main.sh
-#==============================================================================
-
 migrator_menu() {
     while true; do
         clear
-        echo -e "${BLUE:-}╔════════════════════════════════════╗${NC:-}"
-        echo -e "${BLUE:-}║   MIGRATION TOOLS v9.6             ║${NC:-}"
-        echo -e "${BLUE:-}╚════════════════════════════════════╝${NC:-}"
+        echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v9.7             ║${NC}"
+        echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
@@ -546,7 +597,6 @@ migrator_menu() {
     done
 }
 
-# Allow direct execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     migrator_menu
 fi
