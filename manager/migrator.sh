@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.9.1 (Fix: Add missing 'proxy_settings' column in 'users')
+# Version: 14.0 (Fix: 'expire' column type mismatch DATETIME vs INT)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -391,6 +391,12 @@ import_migration_to_rebecca() {
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
+        
+        # FIX: Change 'expire' from INT to DATETIME (or VARCHAR) if data format is datetime string
+        if [[ "$table" == "users" && "$col" == "expire" ]]; then
+             minfo "  Fixing users.expire type to allow DATETIME string..."
+             docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col DATETIME NULL;" 2>/dev/null || true
+        fi
       fi
     }
 
@@ -488,7 +494,7 @@ import_migration_to_rebecca() {
     ensure_col "users" "status" "VARCHAR(64)"
     ensure_col "users" "used_traffic" "BIGINT"
     ensure_col "users" "data_limit" "BIGINT"
-    ensure_col "users" "expire" "INT"
+    ensure_col "users" "expire" "DATETIME NULL"  # Changed from INT to DATETIME
     ensure_col "users" "created_at" "DATETIME"
     ensure_col "users" "admin_id" "INT"
     ensure_col "users" "data_limit_reset_strategy" "VARCHAR(64)"
@@ -538,7 +544,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.9.1      ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.0        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -618,7 +624,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.9.1          ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v14.0            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
