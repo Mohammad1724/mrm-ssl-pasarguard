@@ -320,19 +320,25 @@ try:
 
     sql = re.sub(r'--[^\n]*\n', '\n', sql)
 
-    # STEP 2: Handle PostgreSQL Arrays -> JSON
+    # STEP 2: Remove ALL type casts FIRST (CRITICAL - before any other processing)
+    # This handles ::VARCHAR(255), ::TEXT, ::INTEGER, etc.
+    # Must be done early to avoid leaving orphan (255) etc.
+    sql = re.sub(r'::[a-zA-Z_][a-zA-Z0-9_]*(\s*\(\s*\d+\s*\))?(\[\])?', '', sql)
+    print("    Type casts removed")
+
+    # STEP 3: Handle PostgreSQL Arrays -> JSON
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\(\d+\)\s*\[\]', r'\1JSON', sql, flags=re.I)
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\[\]', r'\1JSON', sql, flags=re.I)
     sql = re.sub(r"'\{\}'[^,\n\)]*", "NULL", sql)
     sql = re.sub(r"ARRAY\[[^\]]*\][^,\n\)]*", "NULL", sql, flags=re.I)
     print("    Arrays converted to JSON")
 
-    # STEP 3: Clean up
+    # STEP 4: Clean up
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
-    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'\s*(?:::regclass)?\s*\)", '', sql, flags=re.I)
+    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'\s*\)", '', sql, flags=re.I)
 
-    # STEP 4: Standard Data Type Mapping
+    # STEP 5: Standard Data Type Mapping
     type_mappings = [
         (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
@@ -365,7 +371,7 @@ try:
     for pattern, replacement in type_mappings:
         sql = re.sub(pattern, replacement, sql, flags=re.I)
 
-    # STEP 5: Handle Custom ENUM Types -> VARCHAR(128)
+    # STEP 6: Handle Custom ENUM Types -> VARCHAR(128)
     custom_enum_types = [
         'proxyhostsecurity', 'proxyhostfingerprint', 'proxyhostalpn',
         'userstatus', 'userdatausageresetstrategy', 'nodeusagestatus',
@@ -382,18 +388,17 @@ try:
     
     print(f"    Replaced {replaced_count} custom enum types")
 
-    # STEP 6: Value corrections
+    # STEP 7: Value corrections
     sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
     sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
     sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
     sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
-    sql = re.sub(r'::[a-zA-Z_][a-zA-Z0-9_]*(\[\])?', '', sql)
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # STEP 7: Quote identifiers
+    # STEP 8: Quote identifiers
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
 
-    # STEP 8: Quote table names
+    # STEP 9: Quote table names
     sql = re.sub(r'CREATE TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'CREATE TABLE `\1`', sql, flags=re.I)
     sql = re.sub(r'INSERT INTO\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'INSERT INTO `\1`', sql, flags=re.I)
     sql = re.sub(r'ALTER TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'ALTER TABLE `\1`', sql, flags=re.I)
@@ -401,11 +406,20 @@ try:
     sql = re.sub(r'REFERENCES\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'REFERENCES `\1`', sql, flags=re.I)
     sql = re.sub(r'\bON\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', r'ON `\1` (', sql, flags=re.I)
 
-    # STEP 9: Remove unsupported constraints
+    # STEP 10: Remove unsupported constraints
     sql = re.sub(r',\s*CONSTRAINT\s+`?[^`\s]+`?\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
     sql = re.sub(r',\s*CHECK\s*\([^)]+\)', '', sql, flags=re.I)
 
-    # STEP 10: Clean up
+    # STEP 11: Clean up orphaned patterns from type cast removal
+    # Fix: DEFAULT ''(255) -> DEFAULT ''
+    sql = re.sub(r"(DEFAULT\s+'[^']*')\s*\(\d+\)", r'\1', sql, flags=re.I)
+    # Fix: DEFAULT (255) -> remove
+    sql = re.sub(r"DEFAULT\s+\(\d+\)", '', sql, flags=re.I)
+    # Fix any remaining orphan (number) after quotes
+    sql = re.sub(r"('\s*)\(\d+\)", r'\1', sql)
+    print("    Orphan patterns cleaned")
+
+    # STEP 12: Final cleanup
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
     sql = re.sub(r';\s*;', ';', sql)
     sql = re.sub(r'\(\s*\)', '', sql)
@@ -442,7 +456,6 @@ PYEOF
         return 1
     fi
 }
-
 check_migration_rebecca() { [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]; }
 check_migration_rebecca_mysql() { [ -f "$REBECCA_DIR/.env" ] && grep -qiE "mysql|mariadb" "$REBECCA_DIR/.env"; }
 
