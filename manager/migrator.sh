@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.2 (Fix: Allow NULL for 'alpn' and other columns in 'hosts')
+# Version: 13.3 (Fix: Add missing 'inbounds_groups_association' table)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -370,6 +370,7 @@ import_migration_to_rebecca() {
     create_table_if_missing "users" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "hosts" "id INT PRIMARY KEY AUTO_INCREMENT, remark VARCHAR(255), address VARCHAR(255)"
+    create_table_if_missing "inbounds_groups_association" "inbound_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY (inbound_id, group_id)"
 
     # --- Helper function to add columns dynamically AND relax constraints ---
     ensure_col() {
@@ -507,7 +508,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.2        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.3        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -587,7 +588,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.2            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.3            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
