@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.8 (Fix: Unescaped single quotes in INSERT data)
+# Version: 11.9 (Fix: Robust Data Handling - Don't touch INSERT values)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -158,11 +158,11 @@ export_migration_postgresql() {
     local i=0; while [ $i -lt 30 ]; do docker exec "$cname" pg_isready &>/dev/null && break; sleep 2; i=$((i+2)); done
 
     minfo "  Running pg_dump..."
-    # Force single inserts to avoid issues with large blocks and complex escaping
-    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments > "$output_file" 2>/dev/null
+    # Force single inserts, standard quotes
+    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting > "$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
     
-    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments > "$output_file" 2>/dev/null
+    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting > "$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
     
     merr "  pg_dump failed"; return 1
@@ -241,8 +241,9 @@ def convert(input_file, output_file):
     i = 0
     while i < len(lines):
         line = lines[i]
+        original_line = line
         
-        # Skip logic
+        # 1. SKIP LOGIC
         if skip_until_semicolon:
             if ';' in line: skip_until_semicolon = False
             i += 1; continue
@@ -265,7 +266,15 @@ def convert(input_file, output_file):
         if re.match(r'^\s*CREATE\s+TABLE', line, re.I): in_create_table = True
         if in_create_table and ');' in line: in_create_table = False
         
-        # === CONVERSIONS ===
+        # 2. INSERT STATEMENTS: Only quote table name, DON'T TOUCH DATA!
+        if re.match(r'^\s*INSERT\s+INTO', line, re.I):
+            # Just quote the table name and stop
+            line = re.sub(r'(INSERT\s+INTO\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
+            result.append(line)
+            i += 1
+            continue
+            
+        # 3. STRUCTURAL TRANSFORMATIONS (CREATE TABLE, ALTER, etc.)
         
         # Remove COLLATE
         line = re.sub(r'\s+COLLATE\s+[^,\s)]+', '', line, flags=re.I)
@@ -315,9 +324,8 @@ def convert(input_file, output_file):
             line = re.sub(r"\s+" + junk + r"\s*,", ',', line, flags=re.I)
             line = re.sub(r"\s+" + junk + r"\s*\)", ')', line, flags=re.I)
         
-        # Structural Quoting
+        # Structural Quoting (NOT INSERT)
         line = re.sub(r'CREATE\s+TABLE\s+(?!`)(\w+)', r'CREATE TABLE `\1`', line, flags=re.I)
-        line = re.sub(r'INSERT\s+INTO\s+(?!`)(\w+)', r'INSERT INTO `\1`', line, flags=re.I)
         line = re.sub(r'ALTER\s+TABLE\s+(?!`)(\w+)', r'ALTER TABLE `\1`', line, flags=re.I)
         line = re.sub(r'REFERENCES\s+(?!`)(\w+)', r'REFERENCES `\1`', line, flags=re.I)
         
@@ -339,7 +347,6 @@ def convert(input_file, output_file):
                         print(f"    Unknown: {typ} -> VARCHAR(255)")
                         line = f"{indent}{col} VARCHAR(255){rest}"
         
-        # Constraints
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
         line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
         
@@ -436,7 +443,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.8        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.9        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -506,7 +513,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.8            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.9            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
