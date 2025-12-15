@@ -1,37 +1,13 @@
 #!/bin/bash
 
-# --- Auto Detect Panel & Paths (FIXED) ---
-if [ -d "/opt/rebecca" ]; then
-    export PANEL_NAME="rebecca"
-    export PANEL_DIR="/opt/rebecca"
-    export DATA_DIR="/var/lib/rebecca"
-    export PANEL_CLI="rebecca-cli"
-elif [ -d "/opt/marzban" ]; then
-    export PANEL_NAME="marzban"
-    export PANEL_DIR="/opt/marzban"
-    export DATA_DIR="/var/lib/marzban"
-    export PANEL_CLI="marzban-cli"
-else
-    # Default fallback
-    export PANEL_NAME="pasarguard"
-    export PANEL_DIR="/opt/pasarguard"
-    export DATA_DIR="/var/lib/pasarguard"
-    export PANEL_CLI="pasarguard-cli"
-fi
-
+# --- Configuration & Paths ---
+export PANEL_DIR="/opt/pasarguard"  # Default, auto-detected later
 export PANEL_ENV="$PANEL_DIR/.env"
-export PANEL_DEF_CERTS="$DATA_DIR/certs"
+export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
 
-# Node Paths
 export NODE_DIR="/opt/pg-node"
-# Check if standard marzban-node exists
-if [ -d "/opt/marzban-node" ]; then
-    export NODE_DIR="/opt/marzban-node"
-    export NODE_DEF_CERTS="/var/lib/marzban-node/certs"
-else
-    export NODE_DEF_CERTS="/var/lib/pg-node/certs"
-fi
 export NODE_ENV="$NODE_DIR/.env"
+export NODE_DEF_CERTS="/var/lib/pg-node/certs"
 
 export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
 
@@ -54,23 +30,6 @@ check_root() {
     fi
 }
 
-install_package() {
-    local PKG_DEB=$1
-    local PKG_RPM=$2
-    [ -z "$PKG_RPM" ] && PKG_RPM=$PKG_DEB
-
-    if command -v apt-get &> /dev/null; then
-        apt-get update -qq >/dev/null 2>&1
-        apt-get install -y "$PKG_DEB" -qq >/dev/null 2>&1
-    elif command -v yum &> /dev/null; then
-        yum install -y "$PKG_RPM" >/dev/null 2>&1
-    elif command -v dnf &> /dev/null; then
-        dnf install -y "$PKG_RPM" >/dev/null 2>&1
-    else
-        echo -e "${RED}Package manager not found. Please install $PKG_DEB manually.${NC}"
-    fi
-}
-
 install_deps() {
     local NEED_INSTALL=false
 
@@ -84,15 +43,8 @@ install_deps() {
 
     if [ "$NEED_INSTALL" = true ]; then
         echo -e "${BLUE}[INFO] Installing dependencies...${NC}"
-        
-        # Package manager detection
-        if command -v apt-get &> /dev/null; then
-            apt-get update -qq > /dev/null
-            apt-get install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 -qq > /dev/null
-        elif command -v yum &> /dev/null; then
-            yum install -y epel-release >/dev/null 2>&1
-            yum install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 >/dev/null 2>&1
-        fi
+        apt-get update -qq > /dev/null
+        apt-get install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 -qq > /dev/null
 
         if ! command -v docker &> /dev/null; then
             echo -e "${BLUE}[INFO] Installing Docker...${NC}"
@@ -109,24 +61,40 @@ pause() {
 # --- Service Control Functions ---
 
 detect_active_panel() {
-    # Logic moved to top of file for global export, this echoes for UI compatibility
-    echo "$PANEL_NAME"
+    if [ -d "/opt/rebecca" ]; then
+        echo "rebecca"
+        export PANEL_DIR="/opt/rebecca"
+        export PANEL_ENV="/opt/rebecca/.env"
+        export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
+    elif [ -d "/opt/pasarguard" ]; then
+        echo "pasarguard"
+        export PANEL_DIR="/opt/pasarguard"
+        export PANEL_ENV="/opt/pasarguard/.env"
+        export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+    else
+        echo "marzban"
+        export PANEL_DIR="/opt/marzban"
+        export PANEL_ENV="/opt/marzban/.env"
+        export PANEL_DEF_CERTS="/var/lib/marzban/certs"
+    fi
 }
 
 get_panel_cli() {
-    echo "$PANEL_CLI"
+    local panel=$(detect_active_panel)
+    if [ "$panel" == "rebecca" ]; then echo "rebecca-cli"; else echo "pasarguard-cli"; fi
 }
 
 restart_service() {
     local SERVICE=$1
-    
+    detect_active_panel > /dev/null
+
     if [ "$SERVICE" == "panel" ]; then
         echo -e "${BLUE}Restarting Panel ($PANEL_DIR)...${NC}"
         if [ -d "$PANEL_DIR" ]; then
             cd "$PANEL_DIR" && docker compose restart
             echo -e "${GREEN}Done.${NC}"
         else
-            echo -e "${RED}Panel directory not found.${NC}"
+            echo -e "${RED}Panel not found.${NC}"
         fi
     elif [ "$SERVICE" == "node" ]; then
         echo -e "${BLUE}Restarting Node...${NC}"
@@ -142,17 +110,20 @@ restart_service() {
 # --- Admin Management ---
 
 admin_create() {
-    local cli=$(get_panel_cli)
+    local panel=$(detect_active_panel)
+    local cli="marzban-cli"
+    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
+    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
 
-    # Robust container detection
-    local cid=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "$PANEL_NAME|marzban|pasarguard|rebecca" | grep -v "mysql" | grep -v "node" | head -1 | awk '{print $1}')
+    # Try finding CLI in container
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
 
     if [ -z "$cid" ]; then
-        echo -e "${RED}Panel container is not running!${NC}"
+        echo -e "${RED}Panel is not running!${NC}"
         return
     fi
 
-    echo -e "${CYAN}Creating Admin for $PANEL_NAME${NC}"
+    echo -e "${CYAN}Creating Admin for $panel${NC}"
     echo "1) Super Admin (Sudo)"
     echo "2) Regular Admin"
     read -p "Select: " type
@@ -165,8 +136,12 @@ admin_create() {
 }
 
 admin_reset() {
-    local cli=$(get_panel_cli)
-    local cid=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "$PANEL_NAME|marzban|pasarguard|rebecca" | grep -v "mysql" | grep -v "node" | head -1 | awk '{print $1}')
+    local panel=$(detect_active_panel)
+    local cli="marzban-cli"
+    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
+    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
+
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
 
     if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
 
@@ -177,8 +152,12 @@ admin_reset() {
 }
 
 admin_delete() {
-    local cli=$(get_panel_cli)
-    local cid=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "$PANEL_NAME|marzban|pasarguard|rebecca" | grep -v "mysql" | grep -v "node" | head -1 | awk '{print $1}')
+    local panel=$(detect_active_panel)
+    local cli="marzban-cli"
+    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
+    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
+
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
 
     if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
 
