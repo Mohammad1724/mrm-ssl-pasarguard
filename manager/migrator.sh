@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.8 (Fix: Duplicate Entry by using REPLACE INTO)
+# Version: 12.9 (Fix: Auto-create ALL missing tables before import)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -237,7 +237,7 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (DATA-ONLY + REPLACE)..."
+    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
     python3 - "$src" "$dst" << 'PYEOF'
@@ -267,18 +267,16 @@ for line in lines:
     if re.match(r'^SELECT\s+setval\b', stripped, re.I):
         continue
 
-    # 3) Fix PostgreSQL timestamptz literals:
-    #    'YYYY-MM-DD hh:mm:ss[.ffffff]+00[:00]'  →  'YYYY-MM-DD hh:mm:ss[.ffffff]'
+    # 3) Fix PostgreSQL timestamptz literals: 'YYYY-MM-DD hh:mm:ss[.fff]+00' -> remove +00
     line = re.sub(
         r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'",
         r"'\1'",
         line
     )
 
-    # 4) Handle INSERT lines
+    # 4) Handle INSERT lines: fix schema and quote table name
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
-        
-        # Change INSERT INTO to REPLACE INTO to handle Duplicate Entries (ID=1)
+        # Change INSERT INTO to REPLACE INTO to handle duplicate IDs
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
 
         # Remove public schema: public., "public"., `public`.
@@ -296,7 +294,7 @@ for line in lines:
         out_lines.append(line)
         continue
 
-    # 5) Any other lines (continuations of VALUES, comments, etc) pass through unchanged
+    # 5) Any other lines pass through
     out_lines.append(line)
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n"
@@ -352,48 +350,94 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # Auto-add missing columns in admins
-    minfo "  Ensuring admins table & columns..."
+    # --- Helper function to create missing tables with a flexible schema ---
+    create_table_if_missing() {
+        local table="$1"
+        local schema="$2"
+        minfo "  Checking table $table..."
+        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS $table ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
+    }
 
-    # اگر جدول admins وجود ندارد، ایجاد مینیمال
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" \
-      -e "CREATE TABLE IF NOT EXISTS admins (id INT PRIMARY KEY AUTO_INCREMENT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
+    # Define minimal schemas for key tables to avoid "Table doesn't exist" errors
+    # Note: These schemas are approximate to allow INSERTs to succeed.
+    create_table_if_missing "admins" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "core_configs" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "groups" "id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255), is_disabled TINYINT(1) DEFAULT 0"
+    create_table_if_missing "inbounds" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "nodes" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "node_user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "proxies" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "system_stats" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "users" "id INT PRIMARY KEY AUTO_INCREMENT"
+    create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
 
+    # --- Helper function to add columns dynamically ---
     ensure_col() {
-      local col="$1" def="$2"
+      local table="$1"
+      local col="$2"
+      local def="$3"
       local exists
-      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM admins LIKE '$col';" 2>/dev/null || true)
+      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM $table LIKE '$col';" 2>/dev/null || true)
       if [ -z "$exists" ]; then
-        minfo "  Adding column admins.$col ..."
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" \
-          -e "ALTER TABLE admins ADD COLUMN $col $def;" 2>/dev/null || true
+        minfo "  Adding column $table.$col ..."
+        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE $table ADD COLUMN $col $def;" 2>/dev/null || true
       fi
     }
 
-    ensure_col "is_sudo"             "TINYINT(1) DEFAULT 0"
-    ensure_col "password_reset_at"   "DATETIME NULL"
-    ensure_col "telegram_id"         "BIGINT NULL"
-    ensure_col "discord_webhook"     "TEXT NULL"
-    ensure_col "used_traffic"        "BIGINT NULL"
-    ensure_col "is_disabled"         "TINYINT(1) DEFAULT 0"
-    ensure_col "sub_template"        "TEXT NULL"
-    ensure_col "sub_domain"          "TEXT NULL"
-    ensure_col "profile_title"       "TEXT NULL"
-    ensure_col "support_url"         "TEXT NULL"
-    ensure_col "discord_id"          "BIGINT NULL"
-    ensure_col "notification_enable" "TEXT NULL"
+    # Add ALL missing columns for 'admins'
+    ensure_col "admins" "username" "VARCHAR(128)"
+    ensure_col "admins" "hashed_password" "VARCHAR(255)"
+    ensure_col "admins" "created_at" "DATETIME"
+    ensure_col "admins" "is_sudo" "TINYINT(1) DEFAULT 0"
+    ensure_col "admins" "password_reset_at" "DATETIME NULL"
+    ensure_col "admins" "telegram_id" "BIGINT NULL"
+    ensure_col "admins" "discord_webhook" "TEXT NULL"
+    ensure_col "admins" "used_traffic" "BIGINT NULL"
+    ensure_col "admins" "is_disabled" "TINYINT(1) DEFAULT 0"
+    ensure_col "admins" "sub_template" "TEXT NULL"
+    ensure_col "admins" "sub_domain" "TEXT NULL"
+    ensure_col "admins" "profile_title" "TEXT NULL"
+    ensure_col "admins" "support_url" "TEXT NULL"
+    ensure_col "admins" "discord_id" "BIGINT NULL"
+    ensure_col "admins" "notification_enable" "TEXT NULL"
 
-    # Auto-create core_configs table if missing
-    minfo "  Ensuring core_configs table exists..."
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" \
-      -e "CREATE TABLE IF NOT EXISTS core_configs (
-             id INT PRIMARY KEY AUTO_INCREMENT,
-             created_at DATETIME NULL,
-             name VARCHAR(255) NOT NULL,
-             config LONGTEXT NOT NULL,
-             exclude_inbound_tags TEXT NULL,
-             fallbacks_inbound_tags TEXT NULL
-          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
+    # Add columns for 'core_configs'
+    ensure_col "core_configs" "created_at" "DATETIME NULL"
+    ensure_col "core_configs" "name" "VARCHAR(255)"
+    ensure_col "core_configs" "config" "LONGTEXT"
+    ensure_col "core_configs" "exclude_inbound_tags" "TEXT NULL"
+    ensure_col "core_configs" "fallbacks_inbound_tags" "TEXT NULL"
+
+    # Add columns for 'nodes' (often missing)
+    ensure_col "nodes" "name" "VARCHAR(255)"
+    ensure_col "nodes" "address" "VARCHAR(255)"
+    ensure_col "nodes" "port" "INT"
+    ensure_col "nodes" "status" "VARCHAR(64)"
+    ensure_col "nodes" "last_status_change" "DATETIME"
+    ensure_col "nodes" "message" "TEXT"
+    ensure_col "nodes" "created_at" "DATETIME"
+    ensure_col "nodes" "uplink" "BIGINT"
+    ensure_col "nodes" "downlink" "BIGINT"
+    ensure_col "nodes" "xray_version" "VARCHAR(64)"
+    ensure_col "nodes" "usage_coefficient" "FLOAT DEFAULT 1.0"
+    ensure_col "nodes" "node_version" "VARCHAR(64)"
+    ensure_col "nodes" "connection_type" "VARCHAR(64) DEFAULT 'grpc'"
+    ensure_col "nodes" "server_ca" "TEXT"
+    ensure_col "nodes" "keep_alive" "TINYINT(1) DEFAULT 1"
+    ensure_col "nodes" "core_config_id" "INT"
+    ensure_col "nodes" "api_key" "VARCHAR(255)"
+    ensure_col "nodes" "data_limit" "BIGINT"
+    ensure_col "nodes" "data_limit_reset_strategy" "VARCHAR(64) DEFAULT 'no_reset'"
+    ensure_col "nodes" "reset_time" "VARCHAR(64)"
+    ensure_col "nodes" "default_timeout" "INT"
+    ensure_col "nodes" "internal_timeout" "INT"
+    ensure_col "nodes" "api_port" "INT"
+
+    # Add columns for 'node_user_usages'
+    ensure_col "node_user_usages" "created_at" "DATETIME"
+    ensure_col "node_user_usages" "user_id" "INT"
+    ensure_col "node_user_usages" "node_id" "INT"
+    ensure_col "node_user_usages" "used_traffic" "BIGINT"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -432,7 +476,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.8        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.9        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -512,7 +556,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.8            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.9            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
