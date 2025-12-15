@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 9.7 (Final Fix: PostgreSQL Multiline Cleanup)
+# Version: 9.8 (Fix: Python Regex/Shell Expansion Conflict)
 #==============================================================================
 
 #==============================================================================
@@ -265,7 +265,7 @@ export_migration_mysql() {
 }
 
 #==============================================================================
-# CONVERSION (FIXED)
+# CONVERSION (ROBUST & SAFE)
 #==============================================================================
 
 convert_migration_to_mysql() {
@@ -286,19 +286,25 @@ convert_migration_sqlite() {
     local dump="$MIGRATION_TEMP/sqlite_dump.sql"
     sqlite3 "$src" .dump > "$dump" 2>/dev/null || { merr "Dump failed"; return 1; }
 
-    python3 << PYEOF
-import re
-with open("$dump", 'r', errors='replace') as f: c = f.read()
-c = re.sub(r'BEGIN TRANSACTION;', 'START TRANSACTION;', c)
-c = re.sub(r'PRAGMA.*?;\n?', '', c)
-c = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
-c = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
-c = re.sub(r'\bINTEGER\b', 'INT', c, flags=re.I)
-c = re.sub(r'\bREAL\b', 'DOUBLE', c, flags=re.I)
-c = re.sub(r'\bBLOB\b', 'LONGBLOB', c, flags=re.I)
-c = re.sub(r'"([a-zA-Z_]\w*)"', r'\`\1\`', c)
-with open("$dst", 'w') as f:
-    f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n" + c + "\n\nSET FOREIGN_KEY_CHECKS=1;\n")
+    python3 - "$dump" "$dst" << 'PYEOF'
+import sys, re
+src_file = sys.argv[1]
+dst_file = sys.argv[2]
+try:
+    with open(src_file, 'r', errors='replace') as f: c = f.read()
+    c = re.sub(r'BEGIN TRANSACTION;', 'START TRANSACTION;', c)
+    c = re.sub(r'PRAGMA.*?;\n?', '', c)
+    c = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
+    c = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
+    c = re.sub(r'\bINTEGER\b', 'INT', c, flags=re.I)
+    c = re.sub(r'\bREAL\b', 'DOUBLE', c, flags=re.I)
+    c = re.sub(r'\bBLOB\b', 'LONGBLOB', c, flags=re.I)
+    c = re.sub(r'"([a-zA-Z_]\w*)"', r'\`\1\`', c)
+    with open(dst_file, 'w') as f:
+        f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n" + c + "\n\nSET FOREIGN_KEY_CHECKS=1;\n")
+except Exception as e:
+    print(e)
+    sys.exit(1)
 PYEOF
     [ -s "$dst" ] && { mok "Converted"; return 0; }
     merr "Conversion failed"; return 1
@@ -306,18 +312,23 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL..."
+    minfo "Converting PostgreSQL → MySQL (Python)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
-    python3 << PYEOF
+    # Using quoted HEREDOC 'PYEOF' to avoid bash expansion issues
+    python3 - "$src" "$dst" << 'PYEOF'
 import re
 import sys
 
+src_file = sys.argv[1]
+dst_file = sys.argv[2]
+
 try:
-    with open("$src", 'r', encoding='utf-8', errors='replace') as f:
+    print(f"  Reading {src_file}...")
+    with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # 1. Remove PostgreSQL specific blocks (Using DOTALL re.S)
+    # 1. Remove PostgreSQL specific blocks
     patterns = [
         r'CREATE SEQUENCE[^;]+;',
         r'ALTER SEQUENCE[^;]+;',
@@ -341,10 +352,8 @@ try:
 
     # 3. Data Type Mapping
     types = [
-        # Identity columns
         (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
         (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\(.*?\))?', 'AUTO_INCREMENT'),
-        # Standard types
         (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
         (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
         (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
@@ -372,21 +381,29 @@ try:
     sql = re.sub(r"nextval\('[^']+'::regclass\)", 'NULL', sql, flags=re.I)
 
     # 5. Quotes
-    sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'\`\1\`', sql)
+    sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
 
     header = "SET NAMES utf8mb4; SET FOREIGN_KEY_CHECKS=0; SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
     footer = "\n\nSET FOREIGN_KEY_CHECKS=1;"
 
-    with open("$dst", 'w', encoding='utf-8') as f:
+    with open(dst_file, 'w', encoding='utf-8') as f:
         f.write(header + sql + footer)
+    
+    print("  Python conversion successful")
         
 except Exception as e:
-    print(f"Error: {e}")
+    print(f"  Python Error: {e}")
     sys.exit(1)
 PYEOF
-    [ -s "$dst" ] && { mok "Converted"; return 0; }
-    merr "Conversion failed"; return 1
+    
+    if [ $? -eq 0 ] && [ -s "$dst" ]; then
+        mok "Conversion successful"
+        return 0
+    else
+        merr "Conversion failed (Python script error)"
+        return 1
+    fi
 }
 
 #==============================================================================
@@ -462,7 +479,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.7         ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.8         ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -576,7 +593,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v9.7             ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v9.8             ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
