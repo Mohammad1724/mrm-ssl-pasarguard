@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 14.0 (Fix: 'expire' column type mismatch DATETIME vs INT)
+# Version: 14.1 (Fix: Create missing 'settings' table)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -374,6 +374,9 @@ import_migration_to_rebecca() {
     
     # Fix 'jwt' table
     create_table_if_missing "jwt" "id INT PRIMARY KEY AUTO_INCREMENT"
+    
+    # Fix 'settings' table
+    create_table_if_missing "settings" "id INT PRIMARY KEY AUTO_INCREMENT, telegram JSON, discord JSON, webhook JSON, notification_settings JSON, notification_enable JSON, subscription JSON, general JSON"
 
     # --- Helper function to add columns dynamically AND relax constraints ---
     ensure_col() {
@@ -507,6 +510,15 @@ import_migration_to_rebecca() {
     ensure_col "users" "auto_delete_in_days" "INT"
     ensure_col "users" "last_status_change" "DATETIME"
 
+    # Add columns for 'settings'
+    ensure_col "settings" "telegram" "JSON"
+    ensure_col "settings" "discord" "JSON"
+    ensure_col "settings" "webhook" "JSON"
+    ensure_col "settings" "notification_settings" "JSON"
+    ensure_col "settings" "notification_enable" "JSON"
+    ensure_col "settings" "subscription" "JSON"
+    ensure_col "settings" "general" "JSON"
+
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
 
@@ -544,7 +556,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.0        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.1        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -624,7 +636,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v14.0            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v14.1            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
