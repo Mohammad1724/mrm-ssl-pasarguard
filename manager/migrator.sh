@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard → Rebecca
-# Version: 9.8 (Fix: Python Regex/Shell Expansion Conflict)
-#==============================================================================
-
-#==============================================================================
-# CONFIGURATION
+# Version: 9.9 (Fix: Verbose Import Error & Robust Conversion)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -312,10 +308,9 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (Python)..."
+    minfo "Converting PostgreSQL → MySQL (Advanced)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
-    # Using quoted HEREDOC 'PYEOF' to avoid bash expansion issues
     python3 - "$src" "$dst" << 'PYEOF'
 import re
 import sys
@@ -346,9 +341,12 @@ try:
     for p in patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-    # 2. Clean up schemas
+    # 2. Clean up schemas and defaults
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
+    
+    # Aggressively clean defaults with nextval
+    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'::regclass\)", 'DEFAULT NULL', sql, flags=re.I)
 
     # 3. Data Type Mapping
     types = [
@@ -439,14 +437,27 @@ import_migration_to_rebecca() {
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
-    # Drop existing DB to prevent conflicts
+    # 1. Copy file to container (Robust method)
+    minfo "  Copying SQL file to container..."
+    docker cp "$sql" "$cname:/tmp/migration_dump.sql"
+
+    # 2. Reset DB and Import
+    local err_file="$MIGRATION_TEMP/mysql_import.err"
+    minfo "  Running MySQL import..."
+    
     docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS $db; CREATE DATABASE $db;" 2>/dev/null
     
-    if docker exec -i "$cname" mysql -uroot -p"$pass" "$db" < "$sql" 2>/dev/null; then
+    if docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "SOURCE /tmp/migration_dump.sql" > "$err_file" 2>&1; then
         mok "Import successful"
         return 0
+    else
+        merr "Import failed! Error details:"
+        cat "$err_file" | tail -10
+        mlog "MySQL Error: $(cat $err_file)"
+        echo ""
+        echo "Check full log at: $MIGRATION_LOG"
+        return 1
     fi
-    merr "Import failed"; return 1
 }
 
 migrate_migration_configs() {
@@ -479,7 +490,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.8         ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.9         ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -593,7 +604,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v9.8             ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v9.9             ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
