@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.6 (Fix: Python nonlocal scope issue)
+# Version: 10.7 (Fix: PostgreSQL type casts completely)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -320,17 +320,31 @@ try:
 
     sql = re.sub(r'--[^\n]*\n', '\n', sql)
 
-    # STEP 2: Remove ALL type casts FIRST (CRITICAL - before any other processing)
-    # This handles ::VARCHAR(255), ::TEXT, ::INTEGER, etc.
-    # Must be done early to avoid leaving orphan (255) etc.
-    sql = re.sub(r'::[a-zA-Z_][a-zA-Z0-9_]*(\s*\(\s*\d+\s*\))?(\[\])?', '', sql)
+    # STEP 2: CRITICAL - Remove ALL PostgreSQL type casts
+    # Format: 'value'::typename or 'value'::typename(size) or value::typename
+    
+    # Handle: 'value'::typename(size) -> 'value'
+    sql = re.sub(r"('[^']*')::[a-zA-Z_][a-zA-Z0-9_]*\s*\(\s*\d+\s*\)", r'\1', sql)
+    
+    # Handle: 'value'::typename -> 'value'  
+    sql = re.sub(r"('[^']*')::[a-zA-Z_][a-zA-Z0-9_]*", r'\1', sql)
+    
+    # Handle: value::typename(size) -> value (for non-quoted values)
+    sql = re.sub(r"(\d+)::[a-zA-Z_][a-zA-Z0-9_]*\s*\(\s*\d+\s*\)", r'\1', sql)
+    
+    # Handle: value::typename -> value
+    sql = re.sub(r"(\w+)::[a-zA-Z_][a-zA-Z0-9_]*", r'\1', sql)
+    
+    # Handle: ::typename[] or ::typename at end
+    sql = re.sub(r"::[a-zA-Z_][a-zA-Z0-9_]*(\[\])?", '', sql)
+    
     print("    Type casts removed")
 
     # STEP 3: Handle PostgreSQL Arrays -> JSON
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\(\d+\)\s*\[\]', r'\1JSON', sql, flags=re.I)
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\[\]', r'\1JSON', sql, flags=re.I)
-    sql = re.sub(r"'\{\}'[^,\n\)]*", "NULL", sql)
-    sql = re.sub(r"ARRAY\[[^\]]*\][^,\n\)]*", "NULL", sql, flags=re.I)
+    sql = re.sub(r"'\{\}'", "NULL", sql)
+    sql = re.sub(r"ARRAY\[[^\]]*\]", "NULL", sql, flags=re.I)
     print("    Arrays converted to JSON")
 
     # STEP 4: Clean up
@@ -357,7 +371,6 @@ try:
         (r'\bMACADDR\b', 'VARCHAR(17)'),
         (r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)'),
         (r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)'),
-        (r'\bVARCHAR\s*\((\d+)\)', r'VARCHAR(\1)'),
         (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
         (r'\bREAL\b', 'FLOAT'),
         (r'\bNUMERIC\s*\((\d+)\s*,\s*(\d+)\)', r'DECIMAL(\1,\2)'),
@@ -377,20 +390,27 @@ try:
         'userstatus', 'userdatausageresetstrategy', 'nodeusagestatus',
         'nodestatus', 'remindertype', 'admin_role', 'adminrole',
         'userrole', 'protocoltype', 'flowtype', 'proxytype', 'proxytypes',
+        'varying',
     ]
     
     replaced_count = 0
     for enum_type in custom_enum_types:
-        pattern = r'(\s+)' + enum_type + r'(\s+(?:DEFAULT|NOT\s+NULL|PRIMARY|UNIQUE|REFERENCES)|,|\)|\s*$)'
-        new_sql, count = re.subn(pattern, r'\1VARCHAR(128)\2', sql, flags=re.I|re.M)
+        # Remove standalone type names after values (e.g., 'value'.typename or 'value' typename)
+        pattern1 = r"(DEFAULT\s+'[^']*')\s*\." + enum_type
+        sql = re.sub(pattern1, r'\1', sql, flags=re.I)
+        
+        pattern2 = r"(DEFAULT\s+'[^']*')\s+" + enum_type + r'\b'
+        sql = re.sub(pattern2, r'\1', sql, flags=re.I)
+        
+        # Replace as column type
+        pattern3 = r'(\s+)' + enum_type + r'(\s+(?:DEFAULT|NOT\s+NULL|PRIMARY|UNIQUE|REFERENCES)|,|\)|\s*$)'
+        new_sql, count = re.subn(pattern3, r'\1VARCHAR(128)\2', sql, flags=re.I|re.M)
         replaced_count += count
         sql = new_sql
     
-    print(f"    Replaced {replaced_count} custom enum types")
+    print(f"    Replaced/cleaned {replaced_count} custom types")
 
     # STEP 7: Value corrections
-    sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
-    sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
     sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
     sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
@@ -410,19 +430,10 @@ try:
     sql = re.sub(r',\s*CONSTRAINT\s+`?[^`\s]+`?\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
     sql = re.sub(r',\s*CHECK\s*\([^)]+\)', '', sql, flags=re.I)
 
-    # STEP 11: Clean up orphaned patterns from type cast removal
-    # Fix: DEFAULT ''(255) -> DEFAULT ''
-    sql = re.sub(r"(DEFAULT\s+'[^']*')\s*\(\d+\)", r'\1', sql, flags=re.I)
-    # Fix: DEFAULT (255) -> remove
-    sql = re.sub(r"DEFAULT\s+\(\d+\)", '', sql, flags=re.I)
-    # Fix any remaining orphan (number) after quotes
-    sql = re.sub(r"('\s*)\(\d+\)", r'\1', sql)
-    print("    Orphan patterns cleaned")
-
-    # STEP 12: Final cleanup
+    # STEP 11: Final cleanup
+    sql = re.sub(r"'\s*\.[a-zA-Z_][a-zA-Z0-9_]*", "'", sql)
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
     sql = re.sub(r';\s*;', ';', sql)
-    sql = re.sub(r'\(\s*\)', '', sql)
 
     header = """SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
@@ -456,6 +467,7 @@ PYEOF
         return 1
     fi
 }
+
 check_migration_rebecca() { [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]; }
 check_migration_rebecca_mysql() { [ -f "$REBECCA_DIR/.env" ] && grep -qiE "mysql|mariadb" "$REBECCA_DIR/.env"; }
 
@@ -507,6 +519,7 @@ import_migration_to_rebecca() {
     else
         merr "Import failed! Error details:"
         grep -v "Using a password" "$err_file" | tail -15
+        mlog "MySQL Error: $(cat "$err_file")"
         
         local line_num=$(grep -oP 'at line \K[0-9]+' "$err_file" 2>/dev/null | head -1)
         if [ -n "$line_num" ]; then
@@ -543,7 +556,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.6        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.7        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -656,7 +669,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.6            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.7            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
