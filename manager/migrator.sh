@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.3 (Fix: MySQL Reserved Keywords - groups, order, user, etc.)
+# Version: 10.4 (Fix: PostgreSQL Custom ENUM Types)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -324,15 +324,25 @@ try:
     with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # 1. Remove PostgreSQL client commands
+    # 1. Extract custom ENUM types from CREATE TYPE statements
+    # Pattern: CREATE TYPE typename AS ENUM ('val1', 'val2', ...);
+    custom_types = {}
+    type_pattern = r"CREATE TYPE\s+(\w+)\s+AS\s+ENUM\s*\(([^)]+)\)"
+    for match in re.finditer(type_pattern, sql, re.I):
+        type_name = match.group(1).lower()
+        values = match.group(2)
+        custom_types[type_name] = values
+        print(f"    Found custom type: {type_name}")
+    
+    # 2. Remove PostgreSQL client commands
     sql = re.sub(r'^\\[a-zA-Z].*$', '', sql, flags=re.M)
     
-    # 2. Remove PostgreSQL specific statements
+    # 3. Remove PostgreSQL specific statements
     patterns = [
+        r'CREATE TYPE[^;]+;',
         r'CREATE SEQUENCE[^;]+;',
         r'ALTER SEQUENCE[^;]+;',
         r'ALTER TABLE\s+[^\s]+\s+ALTER COLUMN\s+[^\s]+\s+SET DEFAULT\s+nextval[^;]+;',
-        r'CREATE TYPE[^;]+;',
         r'SELECT pg_catalog\.[^;]+;',
         r'SELECT setval\([^;]+;',
         r"SET\s+\w+\s*=\s*'[^']*'\s*;",
@@ -349,15 +359,15 @@ try:
     for p in patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-    # 3. Remove SQL comments
+    # 4. Remove SQL comments
     sql = re.sub(r'--[^\n]*\n', '\n', sql)
 
-    # 4. Clean up schemas and defaults
+    # 5. Clean up schemas and defaults
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
     sql = re.sub(r"DEFAULT\s+nextval\('[^']+'::regclass\)", '', sql, flags=re.I)
 
-    # 5. Data Type Mapping
+    # 6. Standard Data Type Mapping
     types = [
         (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
@@ -386,7 +396,47 @@ try:
     for p, r in types:
         sql = re.sub(p, r, sql, flags=re.I)
 
-    # 6. Value corrections
+    # 7. CRITICAL: Replace PostgreSQL custom ENUM types with VARCHAR
+    # Known Marzban/Pasarguard custom types
+    known_custom_types = [
+        'proxyhostsecurity',
+        'proxyhostfingerprint', 
+        'proxyhostalpn',
+        'userstatus',
+        'userdatausageresetstrategy',
+        'nodeusagestatus',
+        'nodestatus',
+        'remindertype',
+        'admin_role',
+        'adminrole',
+        'userrole',
+        'protocoltype',
+        'flowtype',
+    ]
+    
+    # Add any types we found in the SQL
+    all_custom_types = set(known_custom_types)
+    for t in custom_types.keys():
+        all_custom_types.add(t.lower())
+    
+    # Replace each custom type with VARCHAR(128)
+    for custom_type in all_custom_types:
+        # Match the type name as a column type (after column name, before DEFAULT/NOT NULL/,)
+        # Pattern: column_name custom_type -> column_name VARCHAR(128)
+        pattern = r'(\s+)' + custom_type + r'(\s+(?:DEFAULT|NOT NULL|,|\)))'
+        sql = re.sub(pattern, r'\1VARCHAR(128)\2', sql, flags=re.I)
+        
+        # Also handle: column_name custom_type,
+        pattern2 = r'(\s+)' + custom_type + r'(\s*,)'
+        sql = re.sub(pattern2, r'\1VARCHAR(128)\2', sql, flags=re.I)
+        
+        # And: column_name custom_type)
+        pattern3 = r'(\s+)' + custom_type + r'(\s*\))'
+        sql = re.sub(pattern3, r'\1VARCHAR(128)\2', sql, flags=re.I)
+    
+    print(f"    Replaced {len(all_custom_types)} custom types with VARCHAR(128)")
+
+    # 8. Value corrections
     sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
     sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
     sql = re.sub(r"'t'", "'1'", sql)
@@ -396,34 +446,21 @@ try:
     sql = re.sub(r'::\w+(\[\])?', '', sql)
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # 7. Convert PostgreSQL quotes to MySQL backticks
+    # 9. Convert PostgreSQL quotes to MySQL backticks
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
     
-    # 8. CRITICAL: Quote ALL table names in SQL statements (fixes reserved keywords like 'groups')
-    # This ensures table names like 'groups', 'order', 'user' are properly quoted
-    
-    # CREATE TABLE tablename -> CREATE TABLE `tablename`
+    # 10. Quote ALL table names in SQL statements
     sql = re.sub(r'CREATE TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'CREATE TABLE `\1`', sql, flags=re.I)
-    
-    # INSERT INTO tablename -> INSERT INTO `tablename`
     sql = re.sub(r'INSERT INTO\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'INSERT INTO `\1`', sql, flags=re.I)
-    
-    # ALTER TABLE tablename -> ALTER TABLE `tablename`
     sql = re.sub(r'ALTER TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'ALTER TABLE `\1`', sql, flags=re.I)
-    
-    # DROP TABLE tablename -> DROP TABLE `tablename`
     sql = re.sub(r'DROP TABLE\s+(?:IF EXISTS\s+)?(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'DROP TABLE IF EXISTS `\1`', sql, flags=re.I)
-    
-    # REFERENCES tablename -> REFERENCES `tablename`
     sql = re.sub(r'REFERENCES\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'REFERENCES `\1`', sql, flags=re.I)
-    
-    # CREATE INDEX ... ON tablename -> ON `tablename`
     sql = re.sub(r'\bON\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', r'ON `\1` (', sql, flags=re.I)
 
-    # 9. Fix CREATE TABLE issues
+    # 11. Fix CREATE TABLE issues
     sql = re.sub(r',\s*CONSTRAINT\s+`[^`]+`\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
     
-    # 10. Clean multiple empty lines
+    # 12. Clean multiple empty lines
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
     sql = re.sub(r';\s*;', ';', sql)
 
@@ -564,7 +601,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.3        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.4        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -678,7 +715,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.3            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.4            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
