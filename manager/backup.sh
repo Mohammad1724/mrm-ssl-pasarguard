@@ -12,36 +12,24 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Check dependencies
+if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
+
 # --- FORCED PAUSE ---
-# این تابع جلوی بسته شدن سریع را می‌گیرد
 force_pause() {
     echo ""
     echo -e "${YELLOW}--- Press ENTER to continue ---${NC}"
     read -p ""
 }
 
-# --- DETECT PANEL ---
-detect_panel() {
-    if [ -d "/opt/rebecca" ]; then
-        PANEL_NAME="Rebecca"
-        PANEL_DIR="/opt/rebecca"
-        DATA_DIR="/var/lib/rebecca"
-    elif [ -d "/opt/pasarguard" ]; then
-        PANEL_NAME="Pasarguard"
-        PANEL_DIR="/opt/pasarguard"
-        DATA_DIR="/var/lib/pasarguard"
-    else
-        PANEL_NAME="Marzban"
-        PANEL_DIR="/opt/marzban"
-        DATA_DIR="/var/lib/marzban"
-    fi
-}
+# --- DETECT PANEL (Using utils) ---
+# Already done in utils.sh, variables are available.
 
 # --- TELEGRAM SETUP ---
 setup_telegram() {
     clear
     echo -e "${CYAN}=== TELEGRAM CONFIG ===${NC}"
-    
+
     # Read current config
     if [ -f "$TG_CONFIG" ]; then
         CUR_TOKEN=$(grep "^TG_TOKEN=" "$TG_CONFIG" | cut -d'"' -f2)
@@ -59,13 +47,13 @@ setup_telegram() {
         echo "TG_TOKEN=\"$TOKEN\"" > "$TG_CONFIG"
         echo "TG_CHAT=\"$CHATID\"" >> "$TG_CONFIG"
         echo -e "${GREEN}Saved.${NC}"
-        
+
         echo "Testing connection..."
         # Try sending a simple message
         curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
             -d chat_id="$CHATID" \
             -d text="✅ Connection Test OK" > /tmp/tg_test.log
-            
+
         if grep -q '"ok":true' /tmp/tg_test.log; then
              echo -e "${GREEN}✔ Connection Successful!${NC}"
         else
@@ -79,7 +67,7 @@ setup_telegram() {
 # --- SEND LOGIC ---
 send_to_telegram() {
     local FILE="$1"
-    
+
     echo -e "${BLUE}----------------------------------------${NC}"
     echo -e "${BLUE}       STARTING TELEGRAM UPLOAD         ${NC}"
     echo -e "${BLUE}----------------------------------------${NC}"
@@ -100,11 +88,11 @@ send_to_telegram() {
 
     echo -e "Target: Chat ID $TG_CHAT"
     echo -e "File:   $FILE"
-    
+
     # Check file size
     local FSIZE=$(du -k "$FILE" | cut -f1)
     echo -e "Size:   ${FSIZE} KB"
-    
+
     if [ "$FSIZE" -gt 49000 ]; then
         echo -e "${RED}Warning: File is larger than 50MB. Telegram Bot API might reject it.${NC}"
     fi
@@ -114,15 +102,15 @@ send_to_telegram() {
     # --- THE CRITICAL CURL COMMAND ---
     # We capture stdout and stderr to a log file to show you EXACTLY what happened
     local CAPTION="#Backup $PANEL_NAME $(date +%F_%R)"
-    
+
     curl -s --connect-timeout 30 \
          -F chat_id="$TG_CHAT" \
          -F caption="$CAPTION" \
          -F document=@"$FILE" \
          "https://api.telegram.org/bot$TG_TOKEN/sendDocument" > /tmp/tg_debug.log 2>&1
-         
+
     local EXIT_CODE=$?
-    
+
     echo ""
     echo -e "${BLUE}----------------------------------------${NC}"
     echo -e "${BLUE}           UPLOAD RESULT                ${NC}"
@@ -148,15 +136,17 @@ send_to_telegram() {
 # --- BACKUP LOGIC ---
 create_backup() {
     local MODE="$1"
-    detect_panel
     
+    # Refresh panel detection
+    if [ -z "$PANEL_NAME" ]; then source /opt/mrm-manager/utils.sh; fi
+
     if [ "$MODE" != "auto" ]; then
         clear
         echo -e "${CYAN}Creating Backup for $PANEL_NAME...${NC}"
     fi
-    
+
     if [ ! -d "$PANEL_DIR" ]; then
-        echo -e "${RED}Panel directory not found!${NC}"
+        echo -e "${RED}Panel directory ($PANEL_DIR) not found!${NC}"
         [ "$MODE" != "auto" ] && force_pause
         return
     fi
@@ -169,11 +159,13 @@ create_backup() {
 
     # 1. DB
     echo -ne "Exporting DB... "
-    # Try multiple ways to find the container
-    local CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "pasarguard|marzban|rebecca|panel" | head -1 | awk '{print $1}')
-    
+    # FIX: Find correct container ID excluding mysql/node
+    local CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "$PANEL_NAME|marzban|pasarguard|rebecca" | grep -v "mysql" | grep -v "node" | head -1 | awk '{print $1}')
+    local CLI_CMD=$(get_panel_cli)
+
     if [ -n "$CID" ]; then
-        if docker exec "$CID" marzban-cli database dump --target /tmp/db_dump >/dev/null 2>&1; then
+        # FIX: Use dynamic CLI command
+        if docker exec "$CID" $CLI_CMD database dump --target /tmp/db_dump >/dev/null 2>&1; then
             docker cp "$CID:/tmp/db_dump" "$TMP/database.sqlite3"
             echo -e "${GREEN}OK (CLI)${NC}"
         elif [ -f "$DATA_DIR/db.sqlite3" ]; then
@@ -231,7 +223,7 @@ setup_cron() {
     echo "2) Daily"
     echo "3) Disable"
     read -p "Select: " O
-    
+
     local CMD="/bin/bash /opt/mrm-manager/backup.sh auto"
     (crontab -l 2>/dev/null | grep -v "backup.sh") | crontab -
 
