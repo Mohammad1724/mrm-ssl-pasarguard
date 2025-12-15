@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.6 (Fix: Handle 'jwt' table missing columns/defaults including vmess_mask)
+# Version: 13.7 (Fix: Handle 'jwt' table missing columns including vless_mask)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -516,7 +516,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.6        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.7        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -596,7 +596,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.6            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.7            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
