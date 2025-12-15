@@ -9,12 +9,18 @@ _get_cert_action() {
     local DOMAINS=("${@}")
 
     echo -e "${BLUE}Opening Port 80 temporarily...${NC}"
-    ufw allow 80/tcp > /dev/null 2>&1
+    # FIX: Check if UFW exists before using
+    if command -v ufw &> /dev/null; then
+        ufw allow 80/tcp > /dev/null 2>&1
+    fi
 
     echo -e "${BLUE}Stopping web services...${NC}"
     systemctl stop nginx 2>/dev/null
     systemctl stop apache2 2>/dev/null
-    fuser -k 80/tcp 2>/dev/null
+    # Kill any process on port 80 if fuser exists
+    if command -v fuser &> /dev/null; then
+        fuser -k 80/tcp 2>/dev/null
+    fi
 
     # Build domain flags
     local DOM_FLAGS=""
@@ -29,7 +35,9 @@ _get_cert_action() {
     systemctl start nginx 2>/dev/null
 
     if ! systemctl is-active --quiet nginx; then
-        ufw delete allow 80/tcp > /dev/null 2>&1
+        if command -v ufw &> /dev/null; then
+             ufw delete allow 80/tcp > /dev/null 2>&1
+        fi
     fi
 
     return $CERTBOT_RESULT
@@ -57,6 +65,9 @@ _process_panel() {
 
         local C_FILE="$TARGET_DIR/fullchain.pem"
         local K_FILE="$TARGET_DIR/privkey.pem"
+        
+        # FIX: Secure Permissions
+        chmod 644 "$C_FILE" "$K_FILE"
 
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
 
@@ -98,6 +109,8 @@ _process_node() {
 
         local C_FILE="$TARGET_DIR/server.crt"
         local K_FILE="$TARGET_DIR/server.key"
+        
+        chmod 644 "$C_FILE" "$K_FILE"
 
         if [ -f "$NODE_ENV" ]; then
             echo -e "${BLUE}Cleaning up Node config...${NC}"
@@ -125,11 +138,13 @@ _process_config() {
 
     local TARGET_DIR="$PANEL_DEF_CERTS/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
-    
+
     if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/" && \
        cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"; then
 
-        chmod -R 755 "$PANEL_DEF_CERTS"
+        # FIX: Do not use 755 for everything, security risk.
+        chmod 755 "$TARGET_DIR"
+        chmod 644 "$TARGET_DIR"/*.pem
 
         echo -e "${GREEN}✔ Files Saved.${NC}"
         echo -e ""
