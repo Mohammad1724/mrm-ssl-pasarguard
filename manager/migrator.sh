@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.5 (Fix: Handle 'jwt' table ALL missing columns/defaults)
+# Version: 13.6 (Fix: Handle 'jwt' table missing columns/defaults including vmess_mask)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -387,7 +387,7 @@ import_migration_to_rebecca() {
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
         # If column exists, modify it to allow NULL if it's NOT NULL (fixes 'cannot be null' error)
-        if [[ "$col" == "alpn" || "$col" == "subscription_secret_key" || "$col" == "admin_secret_key" ]]; then
+        if [[ "$col" == "alpn" || "$col" == "subscription_secret_key" || "$col" == "admin_secret_key" || "$col" == "vmess_mask" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
@@ -477,6 +477,7 @@ import_migration_to_rebecca() {
     ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
     ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "admin_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
+    ensure_col "jwt" "vmess_mask" "VARCHAR(255) NULL DEFAULT NULL"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -515,7 +516,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.5        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.6        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -595,7 +596,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.5            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.6            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
