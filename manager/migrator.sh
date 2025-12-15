@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.0 (Data-only export, public schema fix, JSON-safe)
+# Version: 12.1 (Data-only export, public schema fix, JSON-safe, skip \commands)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -174,7 +174,6 @@ export_migration_postgresql() {
     done
 
     minfo "  Running pg_dump (DATA ONLY)..."
-    # فقط داده‌ها، بدون DDL
     local PG_FLAGS="--no-owner --no-acl --data-only --column-inserts --no-comments --disable-dollar-quoting"
 
     if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS >"$output_file" 2>/dev/null &&
@@ -256,11 +255,11 @@ out_lines = []
 for line in lines:
     stripped = line.strip()
 
-    # حذف خطوط خالی ابتدایی
-    if not stripped and not out_lines:
+    # 1) Skip psql/meta commands starting with '\'
+    if stripped.startswith('\\'):
         continue
 
-    # نادیده‌گرفتن دستورات سشن PostgreSQL
+    # 2) Skip session/config lines from PostgreSQL
     if re.match(r'^SET\b', stripped, re.I):
         continue
     if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I):
@@ -268,14 +267,14 @@ for line in lines:
     if re.match(r'^SELECT\s+setval\b', stripped, re.I):
         continue
 
-    # فقط خطوط INSERT را کمی اصلاح می‌کنیم
+    # 3) Handle INSERT lines: fix schema and quote table name
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
-        # حذف اسکیمای public. در همه حالت‌ها: public.admins, "public".admins, `public`.admins
+        # Remove public schema: public., "public"., `public`.
         line = re.sub(r'(\s*INSERT\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*INSERT\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*INSERT\s+INTO\s+)public\.', r'\1', line, flags=re.I)
 
-        # کوتیشن‌گذاری اسم جدول، بدون دست‌کاری VALUES
+        # Quote table name only; do NOT touch VALUES(...)
         line = re.sub(
             r'(\s*INSERT\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
             r'\1`\2`',
@@ -285,7 +284,7 @@ for line in lines:
         out_lines.append(line)
         continue
 
-    # بقیه خطوط (ادامه VALUES و ...) را دست‌نخورده عبور بده
+    # 4) Any other lines (continuations of VALUES, comments, etc) pass through unchanged
     out_lines.append(line)
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n"
@@ -375,7 +374,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.0        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.1        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -452,7 +451,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.0            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.1            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
