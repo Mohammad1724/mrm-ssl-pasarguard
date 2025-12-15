@@ -1,13 +1,31 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 1.0 (Stable Release - Fully Automated)
+# MRM Migration Tool - Pasarguard/Marzban -> Rebecca
+# Version: 2.0 (Stable Release - Fixed & Full)
 #==============================================================================
 
-PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
-PASARGUARD_DATA="${PASARGUARD_DATA:-/var/lib/pasarguard}"
-REBECCA_DIR="${REBECCA_DIR:-/opt/rebecca}"
-REBECCA_DATA="${REBECCA_DATA:-/var/lib/rebecca}"
+# --- FIX: Dynamic Path Detection ---
+# حفظ متغیرهای اصلی شما، اما با قابلیت تشخیص هوشمند
+if [ -z "$PASARGUARD_DIR" ]; then
+    if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then
+        PASARGUARD_DIR="/opt/marzban"
+        PASARGUARD_DATA="/var/lib/marzban"
+    else
+        PASARGUARD_DIR="/opt/pasarguard"
+        PASARGUARD_DATA="/var/lib/pasarguard"
+    fi
+fi
+
+if [ -z "$REBECCA_DIR" ]; then
+    if [ -d "/opt/rebecca" ]; then
+        REBECCA_DIR="/opt/rebecca"
+        REBECCA_DATA="/var/lib/rebecca"
+    else
+        REBECCA_DIR="/opt/rebecca" # Default fallback
+        REBECCA_DATA="/var/lib/rebecca"
+    fi
+fi
+
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
 MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
@@ -60,27 +78,31 @@ get_migration_db_credentials() {
 from urllib.parse import urlparse, unquote
 url = "$db_url"
 if '://' in url:
-    scheme, rest = url.split('://', 1)
-    if '+' in scheme: scheme = scheme.split('+', 1)[0]
-    p = urlparse(scheme + '://' + rest)
-    print(f'MIG_DB_USER="{p.username or ""}"')
-    print(f'MIG_DB_PASS="{unquote(p.password or "")}"')
-    print(f'MIG_DB_HOST="{p.hostname or "localhost"}"')
-    print(f'MIG_DB_PORT="{p.port or ""}"')
-    print(f'MIG_DB_NAME="{(p.path or "").lstrip("/") or "pasarguard"}"')
+    try:
+        scheme, rest = url.split('://', 1)
+        if '+' in scheme: scheme = scheme.split('+', 1)[0]
+        p = urlparse(scheme + '://' + rest)
+        print(f'MIG_DB_USER="{p.username or ""}"')
+        print(f'MIG_DB_PASS="{unquote(p.password or "")}"')
+        print(f'MIG_DB_HOST="{p.hostname or "localhost"}"')
+        print(f'MIG_DB_PORT="{p.port or ""}"')
+        print(f'MIG_DB_NAME="{(p.path or "").lstrip("/") or "marzban"}"')
+    except:
+        pass
 else:
-    print('MIG_DB_USER=""'); print('MIG_DB_PASS=""'); print('MIG_DB_HOST="localhost"'); print('MIG_DB_PORT=""'); print('MIG_DB_NAME="pasarguard"')
+    print('MIG_DB_USER=""'); print('MIG_DB_PASS=""'); print('MIG_DB_HOST="localhost"'); print('MIG_DB_PORT=""'); print('MIG_DB_NAME="marzban"')
 PYEOF
 )"
 }
 
 find_migration_pg_container() {
     local cname=""
+    # FIX: Added 'marzban' to search path
     for svc in timescaledb db postgres postgresql database; do
         cname=$(cd "$PASARGUARD_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
         [ -n "$cname" ] && { echo "$cname"; return 0; }
     done
-    docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(timescale|postgres|db)" | head -1
+    docker ps --format '{{.Names}}' | grep -iE "(pasarguard|marzban).*(timescale|postgres|db)" | head -1
 }
 
 find_migration_mysql_container() {
@@ -89,7 +111,7 @@ find_migration_mysql_container() {
         cname=$(cd "$REBECCA_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
         [ -n "$cname" ] && { echo "$cname"; return 0; }
     done
-    docker ps --format '{{.Names}}' | grep -iE "rebecca.*(mysql|mariadb|db)" | head -1
+    docker ps --format '{{.Names}}' | grep -iE "(rebecca|marzban).*(mysql|mariadb|db)" | head -1
 }
 
 is_migration_running() { [ -d "$1" ] && (cd "$1" && docker compose ps 2>/dev/null | grep -qE "Up|running"); }
@@ -195,7 +217,7 @@ export_migration_mysql() {
     local output_file="$1"
     get_migration_db_credentials "$PASARGUARD_DIR"
     local cname
-    cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(mysql|mariadb|db)" | head -1)
+    cname=$(docker ps --format '{{.Names}}' | grep -iE "(pasarguard|marzban).*(mysql|mariadb|db)" | head -1)
     [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
     docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" >"$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported"; return 0; }
@@ -254,63 +276,32 @@ out_lines = []
 
 for line in lines:
     stripped = line.strip()
+    if stripped.startswith('\\'): continue
+    if re.match(r'^SET\b', stripped, re.I): continue
+    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I): continue
+    if re.match(r'^SELECT\s+setval\b', stripped, re.I): continue
 
-    # 1) Skip psql/meta commands starting with '\'
-    if stripped.startswith('\\'):
-        continue
-
-    # 2) Skip session/config lines from PostgreSQL
-    if re.match(r'^SET\b', stripped, re.I):
-        continue
-    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I):
-        continue
-    if re.match(r'^SELECT\s+setval\b', stripped, re.I):
-        continue
-
-    # 3) Fix PostgreSQL timestamptz literals: 'YYYY-MM-DD hh:mm:ss[.fff]+00' -> remove +00
-    line = re.sub(
-        r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'",
-        r"'\1'",
-        line
-    )
+    # FIX: Remove +00 from timestamps (Postgres compat)
+    line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+00'", r"'\1'", line)
     
-    # Fix paths in config (pasarguard -> marzban) for node connections
-    line = line.replace('/var/lib/pasarguard', '/var/lib/marzban')
+    # FIX: Fix paths (Universal)
+    line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
+    line = line.replace('/var/lib/marzban', '/var/lib/rebecca')
 
-    # 4) Handle INSERT lines: fix schema and quote table name
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
-        # Change INSERT INTO to REPLACE INTO to handle duplicate IDs
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
-
-        # Remove public schema: public., "public"., `public`.
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)public\.', r'\1', line, flags=re.I)
-
-        # Quote table name only; do NOT touch VALUES(...)
-        line = re.sub(
-            r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
-            r'\1`\2`',
-            line,
-            flags=re.I
-        )
-        
-        # KEY FIX: Double escape backslashes for MySQL JSON string compatibility
+        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?', r'\1`\2`', line, flags=re.I)
         line = line.replace('\\', '\\\\')
         
-        # KEY FIX 2: Convert date strings in 'users' table to UNIX_TIMESTAMP() for 'expire' column
-        # Look for the date string that corresponds to 'expire' (usually before the JSON settings)
+        # Convert date strings in 'users' table to UNIX_TIMESTAMP() for 'expire' column
         if "INTO `users`" in line:
-             line = re.sub(
-                 r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'(\s*,\s*(?:'\{|NULL))", 
-                 r"UNIX_TIMESTAMP('\1')\2", 
-                 line
-             )
-
+             line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'(\s*,\s*(?:'\{|NULL))", r"UNIX_TIMESTAMP('\1')\2", line)
         out_lines.append(line)
         continue
 
-    # 5) Any other lines pass through
     out_lines.append(line)
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES';\n\n"
@@ -320,7 +311,6 @@ with open(dst_file, 'w', encoding='utf-8') as f:
     f.write(header)
     f.writelines(out_lines)
     f.write(footer)
-
 PYEOF
 
     [ -s "$dst" ] && { mok "Converted (data-only)"; return 0; }
@@ -348,7 +338,7 @@ wait_migration_mysql() {
 
 import_migration_to_rebecca() {
     local sql="$1"
-    minfo "Importing to Rebecca..."
+    minfo "Importing to Target..."
     [ ! -f "$sql" ] && { merr "SQL not found"; return 1; }
 
     local db
@@ -359,7 +349,7 @@ import_migration_to_rebecca() {
     local cname
     cname=$(find_migration_mysql_container)
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
-    
+
     minfo "  Container: $cname, DB: $db"
     minfo "  SQL: $(du -h "$sql" | cut -f1), $(wc -l < "$sql") lines"
 
@@ -369,7 +359,7 @@ import_migration_to_rebecca() {
     create_table_if_missing() {
         local table="$1"
         local schema="$2"
-        minfo "  Checking table $table..."
+        # Silent check
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS \`$table\` ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
     }
 
@@ -400,15 +390,12 @@ import_migration_to_rebecca() {
         minfo "  Adding column $table.$col ..."
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
-        # Force column to accept NULL or Default if it exists but is strict
         if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
-        
-        # FIX: Change 'expire' from INT to DATETIME (or VARCHAR) if data format is datetime string
         if [[ "$table" == "users" && "$col" == "expire" ]]; then
-             minfo "  Fixing users.expire type to allow DATETIME string..."
+             minfo "  Fixing users.expire type..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col BIGINT NULL;" 2>/dev/null || true
         fi
       fi
@@ -464,7 +451,7 @@ import_migration_to_rebecca() {
     ensure_col "node_user_usages" "user_id" "INT"
     ensure_col "node_user_usages" "node_id" "INT"
     ensure_col "node_user_usages" "used_traffic" "BIGINT"
-    
+
     ensure_col "hosts" "remark" "VARCHAR(255)"
     ensure_col "hosts" "address" "VARCHAR(255)"
     ensure_col "hosts" "port" "INT NULL"
@@ -551,18 +538,24 @@ migrate_migration_configs() {
     for v in "${vars[@]}"; do
         local val
         val=$(grep "^${v}=" "$PASARGUARD_DIR/.env" 2>/dev/null | sed 's/[^=]*=//')
-        [ -n "$val" ] && { sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null; echo "${v}=${val}" >>"$REBECCA_DIR/.env"; n=$((n+1)); }
+        if [ -n "$val" ]; then
+            # FIX: Clean path references in values
+            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
+            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+            
+            sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null
+            echo "${v}=${val}" >>"$REBECCA_DIR/.env"
+            n=$((n+1))
+        fi
     done
     mok "Migrated $n variables"
-    
-    # Copy Certs
+
     if [ -d "$PASARGUARD_DATA/certs" ]; then
         minfo "Copying certificates..."
         mkdir -p "$REBECCA_DATA/certs"
         cp -r "$PASARGUARD_DATA/certs/"* "$REBECCA_DATA/certs/" 2>/dev/null || true
     fi
-    
-    # Copy xray config if exists
+
     if [ -f "$PASARGUARD_DATA/xray_config.json" ]; then
         cp "$PASARGUARD_DATA/xray_config.json" "$REBECCA_DATA/" 2>/dev/null || true
     fi
@@ -570,25 +563,19 @@ migrate_migration_configs() {
 
 post_import_fixes() {
     minfo "Running post-import fixes (Automated)..."
-    local cname
-    cname=$(find_migration_mysql_container)
-    local pass
-    pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-    local db
-    db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
+    local cname=$(find_migration_mysql_container)
+    local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
+    local db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
     [ -z "$db" ] && db="marzban"
 
-    # 1. Fix Certificate Paths in DB
-    minfo "  Fixing certificate paths in database..."
+    # FIX: Paths
     docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');" 2>/dev/null
     docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/marzban', '/var/lib/rebecca');" 2>/dev/null
     docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');" 2>/dev/null
     docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE core_configs SET config = REPLACE(config, '/var/lib/marzban', '/var/lib/rebecca');" 2>/dev/null
-    
-    # 2. Reset JWT
-    minfo "  Resetting JWT tokens to ensure admin login works..."
+
+    # Reset JWT
     docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "TRUNCATE TABLE jwt;" 2>/dev/null
-    
     mok "Post-import fixes applied."
 }
 
@@ -597,12 +584,14 @@ create_rescue_admin() {
     echo -e "${YELLOW}Do you want to create a new SuperAdmin? (Recommended if old login fails)${NC}"
     read -p "Create admin? [y/N]: " ans
     if [[ "$ans" =~ ^[Yy]$ ]]; then
-        local rebecca_cname
-        rebecca_cname=$(docker ps --format '{{.Names}}' | grep -iE "rebecca.*(rebecca|panel)" | head -1)
+        local rebecca_cname=$(docker ps --format '{{.Names}}' | grep -iE "rebecca.*(rebecca|panel)" | head -1)
+        local cli="rebecca-cli"
+        [ -z "$rebecca_cname" ] && { rebecca_cname=$(docker ps --format '{{.Names}}' | grep -iE "marzban.*(marzban|panel)" | head -1); cli="marzban-cli"; }
+        
         if [ -n "$rebecca_cname" ]; then
-            docker exec -it "$rebecca_cname" rebecca cli admin create --sudo
+            docker exec -it "$rebecca_cname" $cli admin create --sudo
         else
-            mwarn "Rebecca container not found running."
+            mwarn "Container not found running."
         fi
     fi
 }
@@ -610,30 +599,30 @@ create_rescue_admin() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v1.0         ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v2.0         ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
     mok "Dependencies OK"
-    [ ! -d "$PASARGUARD_DIR" ] && { merr "Pasarguard not found"; mpause; return 1; }
-    mok "Pasarguard found"
-    local db_type
-    db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
+    
+    # FIX: Use dynamic variables
+    [ ! -d "$PASARGUARD_DIR" ] && { merr "Source (Pasarguard/Marzban) not found"; mpause; return 1; }
+    mok "Source found: $PASARGUARD_DIR"
+    
+    local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
     echo -e "Database: ${CYAN}$db_type${NC}"
-    check_migration_rebecca || { merr "Rebecca not installed"; mpause; return 1; }; mok "Rebecca found"
-    check_migration_rebecca_mysql || { merr "Rebecca needs MySQL"; mpause; return 1; }; mok "MySQL verified"
+    
+    check_migration_rebecca || { merr "Target (Rebecca) not installed"; mpause; return 1; }; mok "Target found"
+    check_migration_rebecca_mysql || { merr "Target needs MySQL"; mpause; return 1; }; mok "MySQL verified"
 
-    echo ""
-    echo -e "${YELLOW}IMPORTANT:${NC} Ensure Rebecca is installed. This script will migrate data and auto-fix schemas."
-    echo ""
+    echo ""; echo -e "${YELLOW}IMPORTANT:${NC} Ensure Target is installed. This script will migrate data and auto-fix schemas."; echo ""
     read -p "Type 'migrate' to start: " confirm
     [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
 
     echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
-    is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
+    is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Source"
     create_migration_backup || { merr "Backup failed"; mpause; return 1; }
-    local backup_dir
-    backup_dir=$(cat "$BACKUP_ROOT/.last_backup")
+    local backup_dir=$(cat "$BACKUP_ROOT/.last_backup")
 
     echo -e "\n${CYAN}━━━ STEP 2: VERIFY ━━━${NC}"
     local src=""
@@ -648,46 +637,62 @@ do_full_migration() {
     convert_migration_to_mysql "$src" "$mysql_sql" "$db_type" || { mpause; return 1; }
     cp "$mysql_sql" "$backup_dir/mysql_converted.sql" 2>/dev/null
 
-    echo -e "\n${CYAN}━━━ STEP 4: STOP PASARGUARD ━━━${NC}"
-    stop_migration_panel "$PASARGUARD_DIR" "Pasarguard"
+    echo -e "\n${CYAN}━━━ STEP 4: STOP SOURCE ━━━${NC}"
+    stop_migration_panel "$PASARGUARD_DIR" "Source"
 
     echo -e "\n${CYAN}━━━ STEP 5: CONFIGS ━━━${NC}"
     migrate_migration_configs
 
     echo -e "\n${CYAN}━━━ STEP 6: IMPORT ━━━${NC}"
-    is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Rebecca"
+    is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Target"
     wait_migration_mysql
     import_migration_to_rebecca "$mysql_sql" || mpause
-    
+
     post_import_fixes
 
     echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
     (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null; sleep 5
-    mok "Rebecca restarted"
+    mok "Target restarted"
+    
+    # Optional: Alembic
+    local cname=$(docker ps --format '{{.Names}}' | grep -iE "(rebecca|marzban).*(rebecca|panel)" | head -1)
+    if [ -n "$cname" ]; then
+         minfo "Running schema upgrade..."
+         docker exec "$cname" alembic upgrade head 2>/dev/null
+    fi
 
     echo -e "\n${GREEN}════════════════════════════════════════${NC}"
     echo -e "${GREEN}   Migration completed!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
-    
+
     create_rescue_admin
-    
     migration_cleanup; mpause
 }
 
 do_migration_rollback() {
     clear; echo -e "${CYAN}=== ROLLBACK ===${NC}"
     [ ! -f "$BACKUP_ROOT/.last_backup" ] && { merr "No backup"; mpause; return 1; }
-    local backup
-    backup=$(cat "$BACKUP_ROOT/.last_backup")
+    local backup=$(cat "$BACKUP_ROOT/.last_backup")
     [ ! -d "$backup" ] && { merr "Backup missing"; mpause; return 1; }
     echo "Backup: $backup"; read -p "Type 'rollback': " ans
     [ "$ans" != "rollback" ] && return 0
 
-    migration_init; stop_migration_panel "$REBECCA_DIR" "Rebecca"
-    [ -f "$backup/pasarguard_config.tar.gz" ] && { rm -rf "$PASARGUARD_DIR"; mkdir -p "$(dirname "$PASARGUARD_DIR")"; tar -xzf "$backup/pasarguard_config.tar.gz" -C "$(dirname "$PASARGUARD_DIR")"; mok "Config restored"; }
-    [ -f "$backup/pasarguard_data.tar.gz" ] && { rm -rf "$PASARGUARD_DATA"; mkdir -p "$(dirname "$PASARGUARD_DATA")"; tar -xzf "$backup/pasarguard_data.tar.gz" -C "$(dirname "$PASARGUARD_DATA")"; mok "Data restored"; }
-    start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
+    migration_init; stop_migration_panel "$REBECCA_DIR" "Target"
+    
+    # FIX: Dynamic restore path
+    [ -f "$backup/pasarguard_config.tar.gz" ] && { 
+        rm -rf "$PASARGUARD_DIR"; mkdir -p "$(dirname "$PASARGUARD_DIR")"; 
+        tar -xzf "$backup/pasarguard_config.tar.gz" -C "$(dirname "$PASARGUARD_DIR")"; 
+        mok "Config restored"; 
+    }
+    [ -f "$backup/pasarguard_data.tar.gz" ] && { 
+        rm -rf "$PASARGUARD_DATA"; mkdir -p "$(dirname "$PASARGUARD_DATA")"; 
+        tar -xzf "$backup/pasarguard_data.tar.gz" -C "$(dirname "$PASARGUARD_DATA")"; 
+        mok "Data restored"; 
+    }
+    
+    start_migration_panel "$PASARGUARD_DIR" "Source"
     echo -e "${GREEN}Rollback done${NC}"; migration_cleanup; mpause
 }
 
@@ -695,10 +700,10 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v1.0             ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v2.0             ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
-        echo " 1) Migrate Pasarguard → Rebecca (Full Auto)"
-        echo " 2) Rollback to Pasarguard"
+        echo " 1) Migrate Pasarguard/Marzban → Rebecca (Full Auto)"
+        echo " 2) Rollback to Source"
         echo " 3) View Backups"
         echo " 4) View Log"
         echo " 0) Back"
