@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 14.4 (Fix: Create missing 'users_groups_association' table)
+# Version: 14.5 (Fix: Proper JSON Backslash Escaping for MySQL)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -274,7 +274,7 @@ for line in lines:
         line
     )
 
-    # 4) Handle INSERT lines: fix schema and quote table name
+    # 4) Handle INSERT lines: fix schema, quote table, and ESCAPE backslashes
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         # Change INSERT INTO to REPLACE INTO to handle duplicate IDs
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
@@ -291,6 +291,12 @@ for line in lines:
             line,
             flags=re.I
         )
+        
+        # KEY FIX: Double escape backslashes for MySQL JSON string compatibility
+        # MySQL reads '\' as escape, so we need '\\' for literal backslash.
+        # This is safe because pg_dump --disable-dollar-quoting uses standard '' for quotes.
+        line = line.replace('\\', '\\\\')
+        
         out_lines.append(line)
         continue
 
@@ -560,7 +566,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.4        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v14.5        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -640,7 +646,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v14.4            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v14.5            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
