@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.7 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
-#                auto-add admins/core_configs, datetime tz fix)
+# Version: 12.8 (Fix: Duplicate Entry by using REPLACE INTO)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -165,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -238,7 +237,7 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
+    minfo "Converting PostgreSQL → MySQL (DATA-ONLY + REPLACE)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
     python3 - "$src" "$dst" << 'PYEOF'
@@ -269,23 +268,27 @@ for line in lines:
         continue
 
     # 3) Fix PostgreSQL timestamptz literals:
-    #    'YYYY-MM-DD hh:mm:ss[.ffffff]+00[:00]'  →  'YYYY-MM-DD hh:mm:ss'
+    #    'YYYY-MM-DD hh:mm:ss[.ffffff]+00[:00]'  →  'YYYY-MM-DD hh:mm:ss[.ffffff]'
     line = re.sub(
         r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'",
         r"'\1'",
         line
     )
 
-    # 4) Handle INSERT lines: fix schema and quote table name
+    # 4) Handle INSERT lines
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
+        
+        # Change INSERT INTO to REPLACE INTO to handle Duplicate Entries (ID=1)
+        line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
+
         # Remove public schema: public., "public"., `public`.
-        line = re.sub(r'(\s*INSERT\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*INSERT\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*INSERT\s+INTO\s+)public\.', r'\1', line, flags=re.I)
+        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
+        line = re.sub(r'(\s*REPLACE\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
+        line = re.sub(r'(\s*REPLACE\s+INTO\s+)public\.', r'\1', line, flags=re.I)
 
         # Quote table name only; do NOT touch VALUES(...)
         line = re.sub(
-            r'(\s*INSERT\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
+            r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
             r'\1`\2`',
             line,
             flags=re.I
@@ -350,7 +353,7 @@ import_migration_to_rebecca() {
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
     # Auto-add missing columns in admins
-    minfo "  Ensuring admins table & columns (is_sudo, password_reset_at, telegram_id, discord_webhook, used_traffic, is_disabled, sub_template, sub_domain, profile_title, support_url, discord_id, notification_enable)..."
+    minfo "  Ensuring admins table & columns..."
 
     # اگر جدول admins وجود ندارد، ایجاد مینیمال
     docker exec "$cname" mysql -uroot -p"$pass" "$db" \
@@ -429,7 +432,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.7        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.8        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -509,7 +512,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.7            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.8            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
