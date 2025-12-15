@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.7 (Fix: Protect JSON data from quote replacement)
+# Version: 11.8 (Fix: Unescaped single quotes in INSERT data)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -158,10 +158,13 @@ export_migration_postgresql() {
     local i=0; while [ $i -lt 30 ]; do docker exec "$cname" pg_isready &>/dev/null && break; sleep 2; i=$((i+2)); done
 
     minfo "  Running pg_dump..."
-    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --inserts --no-comments > "$output_file" 2>/dev/null
+    # Force single inserts to avoid issues with large blocks and complex escaping
+    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments > "$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
-    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --inserts --no-comments > "$output_file" 2>/dev/null
+    
+    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments > "$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
+    
     merr "  pg_dump failed"; return 1
 }
 
@@ -239,12 +242,14 @@ def convert(input_file, output_file):
     while i < len(lines):
         line = lines[i]
         
+        # Skip logic
         if skip_until_semicolon:
             if ';' in line: skip_until_semicolon = False
             i += 1; continue
         
         if line.strip().startswith('\\') or line.strip().startswith('--'): i += 1; continue
         if re.match(r'^\s*SET\s+', line, re.I): i += 1; continue
+        
         if re.match(r'^\s*CREATE\s+TYPE\b', line, re.I):
             while i < len(lines) and ');' not in lines[i]: i += 1
             i += 1; continue
@@ -256,24 +261,24 @@ def convert(input_file, output_file):
         if re.match(r'^\s*ALTER\s+TABLE.*SET\s+DEFAULT\s+nextval', line, re.I):
             skip_until_semicolon = ';' not in line; i += 1; continue
         
+        # Track CREATE TABLE
         if re.match(r'^\s*CREATE\s+TABLE', line, re.I): in_create_table = True
         if in_create_table and ');' in line: in_create_table = False
         
         # === CONVERSIONS ===
         
-        # 1. Remove COLLATE clauses
+        # Remove COLLATE
         line = re.sub(r'\s+COLLATE\s+[^,\s)]+', '', line, flags=re.I)
         
-        # 2. Remove type casts
+        # Remove type casts
         line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\s*\([^)]*\))?", r'\1', line)
         line = re.sub(r"('[^']*')\.[a-zA-Z_]\w*", r'\1', line)
         line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
         line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
         
-        # 3. Basic cleanup
         line = re.sub(r'\bpublic\.', '', line)
         
-        # 4. PostgreSQL Type to MySQL Type Mapping
+        # Type Mapping
         line = re.sub(r'\bcharacter\s+varying\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
         line = re.sub(r'\bcharacter\s+varying\b', 'VARCHAR(255)', line, flags=re.I)
         line = re.sub(r'\bdouble\s+precision\b', 'DOUBLE', line, flags=re.I)
@@ -292,12 +297,10 @@ def convert(input_file, output_file):
         line = re.sub(r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         
-        # 5. Arrays to JSON
         line = re.sub(r'\b\w+\s*\[\]', 'JSON', line)
         line = re.sub(r"'\{\}'", 'NULL', line)
         line = re.sub(r'ARRAY\[[^\]]*\]', 'NULL', line, flags=re.I)
         
-        # 6. Default/Nextval cleanup
         line = re.sub(r"DEFAULT\s+nextval\([^)]+\)", '', line, flags=re.I)
         line = re.sub(r"nextval\([^)]+\)", 'NULL', line, flags=re.I)
         
@@ -305,33 +308,28 @@ def convert(input_file, output_file):
         line = re.sub(r'\bFALSE\b', '0', line, flags=re.I)
         line = re.sub(r'\s+USING\s+btree', '', line, flags=re.I)
         
-        # 7. Junk words cleanup
+        # Cleanup junk
         for junk in PG_JUNK_WORDS:
             line = re.sub(r"('\s*)" + junk + r"(\s*[,\n\)])", r'\1\2', line, flags=re.I)
             line = re.sub(r"(DEFAULT\s+'[^']*')\s+" + junk + r"\b", r'\1', line, flags=re.I)
             line = re.sub(r"\s+" + junk + r"\s*,", ',', line, flags=re.I)
             line = re.sub(r"\s+" + junk + r"\s*\)", ')', line, flags=re.I)
         
-        # 8. STRUCTURAL QUOTING - ONLY quote Identifiers, NOT data!
-        # This fixes the JSON corruption issue.
+        # Structural Quoting
+        line = re.sub(r'CREATE\s+TABLE\s+(?!`)(\w+)', r'CREATE TABLE `\1`', line, flags=re.I)
+        line = re.sub(r'INSERT\s+INTO\s+(?!`)(\w+)', r'INSERT INTO `\1`', line, flags=re.I)
+        line = re.sub(r'ALTER\s+TABLE\s+(?!`)(\w+)', r'ALTER TABLE `\1`', line, flags=re.I)
+        line = re.sub(r'REFERENCES\s+(?!`)(\w+)', r'REFERENCES `\1`', line, flags=re.I)
         
-        # Quote table names in standard SQL statements
-        line = re.sub(r'(CREATE\s+TABLE\s+)(?:IF\s+EXISTS\s+)?(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
-        line = re.sub(r'(INSERT\s+INTO\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
-        line = re.sub(r'(ALTER\s+TABLE\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
-        line = re.sub(r'(REFERENCES\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
-        
-        # Quote column definitions inside CREATE TABLE
-        # Match: whitespace "col" type or whitespace col type
         if in_create_table:
              line = re.sub(r'^(\s+)"?([a-zA-Z0-9_]+)"?(\s+[a-zA-Z]+)', r'\1`\2`\3', line)
 
-        # 9. Fix DEFAULT values for JSON/TEXT/BLOB (MySQL restriction)
+        # Fix DEFAULT values for JSON/TEXT/BLOB
         if re.search(r'\b(JSON|TEXT|BLOB)\b', line, re.I):
             line = re.sub(r"\s+DEFAULT\s+('[^']*'|NULL)", '', line, flags=re.I)
             line = re.sub(r"\s+DEFAULT\s+\S+", '', line, flags=re.I)
         
-        # 10. Unknown types cleanup
+        # Unknown types
         if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
             m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
             if m:
@@ -341,7 +339,7 @@ def convert(input_file, output_file):
                         print(f"    Unknown: {typ} -> VARCHAR(255)")
                         line = f"{indent}{col} VARCHAR(255){rest}"
         
-        # 11. Remove constraints
+        # Constraints
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
         line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
         
@@ -352,7 +350,6 @@ def convert(input_file, output_file):
     out = re.sub(r'\n\s*\n\s*\n+', '\n\n', out)
     out = re.sub(r';\s*;', ';', out)
     out = re.sub(r',(\s*\))', r'\1', out)
-    out = re.sub(r'\s+,', ',', out)
     out = re.sub(r',\s*,', ',', out)
     
     header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
@@ -439,7 +436,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.7        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.8        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -509,7 +506,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.7            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.8            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
