@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.7 (Fix: Handle 'jwt' table missing columns including vless_mask)
+# Version: 13.9 (Fix: Force MODIFY COLUMN for all JWT masks and keys to allow NULL)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -386,8 +386,9 @@ import_migration_to_rebecca() {
         minfo "  Adding column $table.$col ..."
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
-        # If column exists, modify it to allow NULL if it's NOT NULL (fixes 'cannot be null' error)
-        if [[ "$col" == "alpn" || "$col" == "subscription_secret_key" || "$col" == "admin_secret_key" || "$col" == "vmess_mask" ]]; then
+        # Force column to accept NULL or Default if it exists but is strict
+        # Check against wildcard patterns for masks/keys and specific column names
+        if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
@@ -449,7 +450,7 @@ import_migration_to_rebecca() {
     ensure_col "node_user_usages" "node_id" "INT"
     ensure_col "node_user_usages" "used_traffic" "BIGINT"
     
-    # Add columns for 'hosts' - Ensure NULL is allowed
+    # Add columns for 'hosts'
     ensure_col "hosts" "remark" "VARCHAR(255)"
     ensure_col "hosts" "address" "VARCHAR(255)"
     ensure_col "hosts" "port" "INT NULL"
@@ -473,11 +474,14 @@ import_migration_to_rebecca() {
     ensure_col "hosts" "status" "VARCHAR(60)"
     ensure_col "hosts" "ech_config_list" "VARCHAR(512) NULL"
 
-    # Fix 'jwt' table columns
+    # Fix 'jwt' table columns - Force all masks and keys to allow NULL
     ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
     ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "admin_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
+    ensure_col "jwt" "vless_mask" "VARCHAR(255) NULL DEFAULT NULL"
     ensure_col "jwt" "vmess_mask" "VARCHAR(255) NULL DEFAULT NULL"
+    ensure_col "jwt" "trojan_mask" "VARCHAR(255) NULL DEFAULT NULL"
+    ensure_col "jwt" "shadowsocks_mask" "VARCHAR(255) NULL DEFAULT NULL"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -516,7 +520,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.7        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.9        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -596,7 +600,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.7            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.9            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
