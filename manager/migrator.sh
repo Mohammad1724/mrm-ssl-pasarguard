@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.5 (Fix: Remove PostgreSQL COLLATE clauses)
+# Version: 11.6 (Fix: Invalid default values for TEXT/BLOB/JSON)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -240,20 +240,15 @@ def convert(input_file, output_file):
         line = lines[i]
         
         if skip_until_semicolon:
-            if ';' in line:
-                skip_until_semicolon = False
-            i += 1
-            continue
+            if ';' in line: skip_until_semicolon = False
+            i += 1; continue
         
         if line.strip().startswith('\\') or line.strip().startswith('--'): i += 1; continue
         if re.match(r'^\s*SET\s+', line, re.I): i += 1; continue
-        
-        # Skip CREATE TYPE (multi-line)
         if re.match(r'^\s*CREATE\s+TYPE\b', line, re.I):
             while i < len(lines) and ');' not in lines[i]: i += 1
             i += 1; continue
         
-        # Skip other PostgreSQL statements
         if re.match(r'^\s*(CREATE\s+SEQUENCE|ALTER\s+SEQUENCE|SELECT\s+setval|SELECT\s+pg_catalog|COMMENT\s+ON|GRANT\s+|REVOKE\s+|CREATE\s+EXTENSION)', line, re.I):
             skip_until_semicolon = ';' not in line; i += 1; continue
         if re.match(r'^\s*ALTER\s+.*OWNER\s+TO', line, re.I):
@@ -266,7 +261,7 @@ def convert(input_file, output_file):
         
         # === CONVERSIONS ===
         
-        # Remove COLLATE clauses (e.g., COLLATE pg_catalog."default")
+        # Remove COLLATE clauses
         line = re.sub(r'\s+COLLATE\s+[^,\s)]+', '', line, flags=re.I)
         
         # Remove type casts
@@ -307,7 +302,7 @@ def convert(input_file, output_file):
         line = re.sub(r'\bFALSE\b', '0', line, flags=re.I)
         line = re.sub(r'\s+USING\s+btree', '', line, flags=re.I)
         
-        # Junk words cleanup
+        # Cleanup junk
         for junk in PG_JUNK_WORDS:
             line = re.sub(r"('\s*)" + junk + r"(\s*[,\n\)])", r'\1\2', line, flags=re.I)
             line = re.sub(r"(DEFAULT\s+'[^']*')\s+" + junk + r"\b", r'\1', line, flags=re.I)
@@ -321,6 +316,11 @@ def convert(input_file, output_file):
         line = re.sub(r'REFERENCES\s+(?!`)(\w+)', r'REFERENCES `\1`', line, flags=re.I)
         line = re.sub(r'"(\w+)"', r'`\1`', line)
         
+        # Fix DEFAULT values for JSON/TEXT/BLOB (MySQL doesn't support them)
+        if re.search(r'\b(JSON|TEXT|BLOB)\b', line, re.I):
+            line = re.sub(r"\s+DEFAULT\s+('[^']*'|NULL)", '', line, flags=re.I)
+            line = re.sub(r"\s+DEFAULT\s+\S+", '', line, flags=re.I)
+        
         # Unknown types
         if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
             m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
@@ -328,7 +328,7 @@ def convert(input_file, output_file):
                 indent, col, typ, rest = m.groups()
                 if typ.upper().split('(')[0] not in MYSQL_TYPES and col.strip('`').upper() not in ['PRIMARY','UNIQUE','CONSTRAINT','CHECK','FOREIGN','KEY','INDEX']:
                     if typ.lower() not in PG_JUNK_WORDS:
-                        print(f"    Unknown type: {typ} -> VARCHAR(255)")
+                        print(f"    Unknown: {typ} -> VARCHAR(255)")
                         line = f"{indent}{col} VARCHAR(255){rest}"
         
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
@@ -428,7 +428,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.5        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.6        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -498,7 +498,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.5            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.6            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
