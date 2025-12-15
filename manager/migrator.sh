@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.9 (Fix: Robust Data Handling - Don't touch INSERT values)
+# Version: 12.0 (Data-only export, public schema fix, JSON-safe)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -173,19 +173,28 @@ export_migration_postgresql() {
         sleep 2; i=$((i+2))
     done
 
-    minfo "  Running pg_dump..."
-    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting >"$output_file" 2>/dev/null
-    [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
+    minfo "  Running pg_dump (DATA ONLY)..."
+    # فقط داده‌ها، بدون DDL
+    local PG_FLAGS="--no-owner --no-acl --data-only --column-inserts --no-comments --disable-dollar-quoting"
 
-    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting >"$output_file" 2>/dev/null
-    [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
+    if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS >"$output_file" 2>/dev/null &&
+       [ -s "$output_file" ]; then
+        mok "  Exported: $(du -h "$output_file" | cut -f1)"
+        return 0
+    fi
+
+    if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS >"$output_file" 2>/dev/null &&
+       [ -s "$output_file" ]; then
+        mok "  Exported: $(du -h "$output_file" | cut -f1)"
+        return 0
+    fi
 
     merr "  pg_dump failed"; return 1
 }
 
 export_migration_mysql() {
     local output_file="$1"
-    get_migration_db_credentials "$PASARGUARD_DIR"  # فیکس: قبلاً به اشتباه get_migration_db_credentials("$PASARGUARD_DIR") بود
+    get_migration_db_credentials "$PASARGUARD_DIR"
     local cname
     cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(mysql|mariadb|db)" | head -1)
     [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
@@ -229,177 +238,67 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL..."
+    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
     python3 - "$src" "$dst" << 'PYEOF'
 import re
 import sys
 
-def convert(input_file, output_file):
-    with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
-        lines = f.readlines()
-    
-    result = []
-    skip_until_semicolon = False
-    in_create_table = False
-    
-    MYSQL_TYPES = {'INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'MEDIUMINT',
-        'VARCHAR', 'CHAR', 'TEXT', 'MEDIUMTEXT', 'LONGTEXT', 'TINYTEXT',
-        'DATETIME', 'DATE', 'TIME', 'TIMESTAMP', 'YEAR',
-        'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC', 'REAL',
-        'BLOB', 'MEDIUMBLOB', 'LONGBLOB', 'TINYBLOB',
-        'JSON', 'ENUM', 'SET', 'BOOLEAN', 'BOOL', 'BIT',
-        'AUTO_INCREMENT', 'PRIMARY', 'KEY', 'NOT', 'NULL', 'DEFAULT', 'UNIQUE'}
-    
-    PG_JUNK_WORDS = {'varying', 'character', 'precision', 'without', 'zone', 'with', 'collate'}
-    
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        
-        # 1. SKIP LOGIC
-        if skip_until_semicolon:
-            if ';' in line: skip_until_semicolon = False
-            i += 1; continue
-        
-        if line.strip().startswith('\\') or line.strip().startswith('--'): i += 1; continue
-        if re.match(r'^\s*SET\s+', line, re.I): i += 1; continue
-        
-        if re.match(r'^\s*CREATE\s+TYPE\b', line, re.I):
-            while i < len(lines) and ');' not in lines[i]: i += 1
-            i += 1; continue
-        
-        if re.match(r'^\s*(CREATE\s+SEQUENCE|ALTER\s+SEQUENCE|SELECT\s+setval|SELECT\s+pg_catalog|COMMENT\s+ON|GRANT\s+|REVOKE\s+|CREATE\s+EXTENSION)', line, re.I):
-            skip_until_semicolon = ';' not in line; i += 1; continue
-        if re.match(r'^\s*ALTER\s+.*OWNER\s+TO', line, re.I):
-            skip_until_semicolon = ';' not in line; i += 1; continue
-        if re.match(r'^\s*ALTER\s+TABLE.*SET\s+DEFAULT\s+nextval', line, re.I):
-            skip_until_semicolon = ';' not in line; i += 1; continue
-        
-        # Track CREATE TABLE
-        if re.match(r'^\s*CREATE\s+TABLE', line, re.I): in_create_table = True
-        if in_create_table and ');' in line: in_create_table = False
+src_file = sys.argv[1]
+dst_file = sys.argv[2]
 
-        # --- حذف اسکیمای public قبل از هر چیز ---
-        line = re.sub(r'"public"\.', '', line, flags=re.I)
-        line = re.sub(r'`public`\.', '', line, flags=re.I)
-        line = re.sub(r'\bpublic\.', '', line, flags=re.I)
-        
-        # 2. INSERT STATEMENTS: فقط اسم جدول را کوت کن، به VALUES دست نزن
-        if re.match(r'^\s*INSERT\s+INTO', line, re.I):
-            line = re.sub(
-                r'(\s*INSERT\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
-                r'\1`\2`',
-                line,
-                flags=re.I
-            )
-            result.append(line)
-            i += 1
-            continue
-            
-        # 3. STRUCTURAL TRANSFORMATIONS (CREATE TABLE, ALTER, etc.)
-        
-        # Remove COLLATE
-        line = re.sub(r'\s+COLLATE\s+[^,\s)]+', '', line, flags=re.I)
-        
-        # Remove type casts
-        line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\s*\([^)]*\))?", r'\1', line)
-        line = re.sub(r"('[^']*')\.[a-zA-Z_]\w*", r'\1', line)
-        line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
-        line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
-        
-        # برای اطمینان بیشتر:
-        line = re.sub(r'\bpublic\.', '', line)
-        
-        # Type Mapping
-        line = re.sub(r'\bcharacter\s+varying\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
-        line = re.sub(r'\bcharacter\s+varying\b', 'VARCHAR(255)', line, flags=re.I)
-        line = re.sub(r'\bdouble\s+precision\b', 'DOUBLE', line, flags=re.I)
-        line = re.sub(r'\btimestamp\s+(without|with)\s+time\s+zone\b', 'DATETIME', line, flags=re.I)
-        
-        line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
-        line = re.sub(r'\bTIMESTAMPTZ\b', 'DATETIME', line, flags=re.I)
-        line = re.sub(r'\bJSONB\b', 'JSON', line, flags=re.I)
-        line = re.sub(r'\bUUID\b', 'VARCHAR(36)', line, flags=re.I)
-        line = re.sub(r'\bBYTEA\b', 'LONGBLOB', line, flags=re.I)
-        line = re.sub(r'\bINET\b', 'VARCHAR(45)', line, flags=re.I)
-        line = re.sub(r'\bCIDR\b', 'VARCHAR(45)', line, flags=re.I)
-        line = re.sub(r'\bSERIAL\b', 'INT AUTO_INCREMENT', line, flags=re.I)
-        line = re.sub(r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT', line, flags=re.I)
-        line = re.sub(r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT', line, flags=re.I)
-        line = re.sub(r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
-        line = re.sub(r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
-        
-        line = re.sub(r'\b\w+\s*\[\]', 'JSON', line)
-        line = re.sub(r"'\{\}'", 'NULL', line)
-        line = re.sub(r'ARRAY\[[^\]]*\]', 'NULL', line, flags=re.I)
-        
-        line = re.sub(r"DEFAULT\s+nextval\([^)]+\)", '', line, flags=re.I)
-        line = re.sub(r"nextval\([^)]+\)", 'NULL', line, flags=re.I)
-        
-        line = re.sub(r'\bTRUE\b', '1', line, flags=re.I)
-        line = re.sub(r'\bFALSE\b', '0', line, flags=re.I)
-        line = re.sub(r'\s+USING\s+btree', '', line, flags=re.I)
-        
-        # Cleanup junk
-        for junk in PG_JUNK_WORDS:
-            line = re.sub(r"('\s*)" + junk + r"(\s*[,\n\)])", r'\1\2', line, flags=re.I)
-            line = re.sub(r"(DEFAULT\s+'[^']*')\s+" + junk + r"\b", r'\1', line, flags=re.I)
-            line = re.sub(r"\s+" + junk + r"\s*,", ',', line, flags=re.I)
-            line = re.sub(r"\s+" + junk + r"\s*\)", ')', line, flags=re.I)
-        
-        # Structural Quoting (NOT INSERT)
-        line = re.sub(r'CREATE\s+TABLE\s+(?!`)(\w+)', r'CREATE TABLE `\1`', line, flags=re.I)
-        line = re.sub(r'ALTER\s+TABLE\s+(?!`)(\w+)', r'ALTER TABLE `\1`', line, flags=re.I)
-        line = re.sub(r'REFERENCES\s+(?!`)(\w+)', r'REFERENCES `\1`', line, flags=re.I)
-        
-        if in_create_table:
-             line = re.sub(r'^(\s+)"?([a-zA-Z0-9_]+)"?(\s+[a-zA-Z]+)', r'\1`\2`\3', line)
+with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
+    lines = f.readlines()
 
-        # Fix DEFAULT values for JSON/TEXT/BLOB
-        if re.search(r'\b(JSON|TEXT|BLOB)\b', line, re.I):
-            line = re.sub(r"\s+DEFAULT\s+('[^']*'|NULL)", '', line, flags=re.I)
-            line = re.sub(r"\s+DEFAULT\s+\S+", '', line, flags=re.I)
-        
-        # Unknown types
-        if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
-            m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
-            if m:
-                indent, col, typ, rest = m.groups()
-                if typ.upper().split('(')[0] not in MYSQL_TYPES and col.strip('`').upper() not in ['PRIMARY','UNIQUE','CONSTRAINT','CHECK','FOREIGN','KEY','INDEX']:
-                    if typ.lower() not in PG_JUNK_WORDS:
-                        print(f"    Unknown: {typ} -> VARCHAR(255)")
-                        line = f"{indent}{col} VARCHAR(255){rest}"
-        
-        line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
-        line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
-        
-        result.append(line)
-        i += 1
-    
-    out = ''.join(result)
-    out = re.sub(r'\n\s*\n\s*\n+', '\n\n', out)
-    out = re.sub(r';\s*;', ';', out)
-    out = re.sub(r',(\s*\))', r'\1', out)
-    out = re.sub(r',\s*,', ',', out)
-    
-    header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
-    footer = "\n\nSET FOREIGN_KEY_CHECKS=1;\n"
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(header + out + footer)
-    print("  Conversion completed")
+out_lines = []
 
-try:
-    convert(sys.argv[1], sys.argv[2])
-except Exception as e:
-    print(f"  Error: {e}")
-    import traceback; traceback.print_exc()
-    sys.exit(1)
+for line in lines:
+    stripped = line.strip()
+
+    # حذف خطوط خالی ابتدایی
+    if not stripped and not out_lines:
+        continue
+
+    # نادیده‌گرفتن دستورات سشن PostgreSQL
+    if re.match(r'^SET\b', stripped, re.I):
+        continue
+    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I):
+        continue
+    if re.match(r'^SELECT\s+setval\b', stripped, re.I):
+        continue
+
+    # فقط خطوط INSERT را کمی اصلاح می‌کنیم
+    if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
+        # حذف اسکیمای public. در همه حالت‌ها: public.admins, "public".admins, `public`.admins
+        line = re.sub(r'(\s*INSERT\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
+        line = re.sub(r'(\s*INSERT\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
+        line = re.sub(r'(\s*INSERT\s+INTO\s+)public\.', r'\1', line, flags=re.I)
+
+        # کوتیشن‌گذاری اسم جدول، بدون دست‌کاری VALUES
+        line = re.sub(
+            r'(\s*INSERT\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
+            r'\1`\2`',
+            line,
+            flags=re.I
+        )
+        out_lines.append(line)
+        continue
+
+    # بقیه خطوط (ادامه VALUES و ...) را دست‌نخورده عبور بده
+    out_lines.append(line)
+
+header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n"
+footer = "\n\nSET FOREIGN_KEY_CHECKS=1;\n"
+
+with open(dst_file, 'w', encoding='utf-8') as f:
+    f.write(header)
+    f.writelines(out_lines)
+    f.write(footer)
+
 PYEOF
 
-    [ $? -eq 0 ] && [ -s "$dst" ] && { mok "Conversion successful"; return 0; }
+    [ -s "$dst" ] && { mok "Converted (data-only)"; return 0; }
     merr "Conversion failed"; return 1
 }
 
@@ -476,7 +375,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.9        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.0        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -553,7 +452,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.9            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.0            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
