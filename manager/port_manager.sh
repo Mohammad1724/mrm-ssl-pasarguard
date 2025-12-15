@@ -2,9 +2,15 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
-XRAY_CONFIG="/var/lib/pasarguard/config.json"
+# Detect correct Xray config path based on DATA_DIR from utils
+if [ -f "$DATA_DIR/xray_config.json" ]; then
+    XRAY_CONFIG="$DATA_DIR/xray_config.json"
+else
+    XRAY_CONFIG="$DATA_DIR/config.json"
+fi
+
 NGINX_CONF="/etc/nginx/conf.d/panel_separate.conf"
-BACKUP_DIR="/var/lib/pasarguard/backups_port_manager"
+BACKUP_DIR="$DATA_DIR/backups_port_manager"
 
 check_reqs() {
     if ! command -v nginx &> /dev/null; then
@@ -12,7 +18,7 @@ check_reqs() {
         return 1
     fi
     if ! command -v lsof &> /dev/null; then
-        apt-get install -y lsof > /dev/null 2>&1
+        install_package lsof lsof
     fi
     mkdir -p "$BACKUP_DIR"
 }
@@ -47,27 +53,49 @@ setup_dual_port() {
     read -p "Port for Panel/Sub (e.g. 2096): " PORT
     read -p "Internal Panel Port (e.g. 7431): " PPORT
     [ -z "$ADOM" ] || [ -z "$SDOM" ] || [ -z "$PORT" ] || [ -z "$PPORT" ] && return
-    
+
     backup_configs
+
+    # FIX: Ensure we use the correct cert for SUB domain
+    local SUB_CERT_PATH="/etc/letsencrypt/live/$SDOM"
+    if [ ! -d "$SUB_CERT_PATH" ]; then
+        echo -e "${YELLOW}Cert for $SDOM not found, using $ADOM cert (Warning: Might cause mismatch)${NC}"
+        SUB_CERT_PATH="/etc/letsencrypt/live/$ADOM"
+    fi
 
     echo -e "${BLUE}Configuring Nginx on port $PORT...${NC}"
     cat > "$NGINX_CONF" <<EOF
+# Admin Domain
 server {
     listen $PORT ssl;
     listen [::]:$PORT ssl;
-    server_name $ADOM $SDOM;
+    server_name $ADOM;
     ssl_certificate /etc/letsencrypt/live/$ADOM/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/$ADOM/privkey.pem;
     location / {
-        proxy_pass https://127.0.0.1:$PPORT;
-        proxy_ssl_verify off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name $ADOM;
+        # FIX: Use HTTP to avoid 502 Bad Gateway if panel SSL is off
+        proxy_pass http://127.0.0.1:$PPORT;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+# Sub Domain
+server {
+    listen $PORT ssl;
+    listen [::]:$PORT ssl;
+    server_name $SDOM;
+    ssl_certificate ${SUB_CERT_PATH}/fullchain.pem;
+    ssl_certificate_key ${SUB_CERT_PATH}/privkey.pem;
+    location / {
+        proxy_pass http://127.0.0.1:$PPORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
@@ -89,7 +117,9 @@ try:
 except Exception as e: print(e)
 PYEOF
 
-    ufw allow $PORT/tcp > /dev/null 2>&1
+    # FIX: Check firewall
+    if command -v ufw &> /dev/null; then ufw allow $PORT/tcp > /dev/null 2>&1; fi
+    
     if nginx -t; then
         systemctl restart nginx
         restart_service "panel"
@@ -106,15 +136,15 @@ setup_single_port() {
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}      SINGLE PORT MODE (443 Only)            ${NC}"
     echo -e "${CYAN}=============================================${NC}"
-    
+
     read -p "Admin Domain: " ADOM
     read -p "Sub Domain: " SDOM
     read -p "Internal Panel Port (e.g. 7431): " PPORT
-    
-    # FIXED: Ask for fallback port to avoid conflict
+
+    # Ask for fallback port
     read -p "Internal Nginx Fallback Port [8080]: " FB_PORT
     [ -z "$FB_PORT" ] && FB_PORT="8080"
-    
+
     # Check if port is in use
     if lsof -i :$FB_PORT > /dev/null 2>&1; then
         echo -e "${RED}Warning: Port $FB_PORT seems to be in use!${NC}"
@@ -127,21 +157,18 @@ setup_single_port() {
     backup_configs
 
     echo -e "${BLUE}Configuring Nginx on localhost:$FB_PORT...${NC}"
+    # FIX: Changed proxy_protocol to standard listen, and proxy_pass to http
     cat > "$NGINX_CONF" <<EOF
 server {
-    listen $FB_PORT proxy_protocol;
-    listen [::]:$FB_PORT proxy_protocol;
+    listen $FB_PORT;
+    listen [::]:$FB_PORT;
     server_name $ADOM $SDOM;
     location / {
-        proxy_pass https://127.0.0.1:$PPORT;
-        proxy_ssl_verify off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name $ADOM;
+        proxy_pass http://127.0.0.1:$PPORT;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
@@ -149,6 +176,7 @@ server {
 EOF
 
     echo -e "${BLUE}Adding Xray fallbacks...${NC}"
+    # NOTE: This JSON modification might be overwritten by Marzban on restart.
     python3 << PYEOF
 import json
 try:
@@ -158,9 +186,11 @@ try:
         if ib.get('port') == 443:
             if 'fallbacks' not in ib['settings']: ib['settings']['fallbacks'] = []
             fb_list = ib['settings']['fallbacks']
+            # Remove old
             fb_list = [fb for fb in fb_list if fb.get('name') not in ["$ADOM", "$SDOM"]]
-            fb_list.insert(0, {"name": "$ADOM", "dest": $FB_PORT, "xver": 1})
-            fb_list.insert(0, {"name": "$SDOM", "dest": $FB_PORT, "xver": 1})
+            # Add new (xver: 1 is removed because nginx above is not proxy_protocol)
+            fb_list.insert(0, {"name": "$ADOM", "dest": $FB_PORT})
+            fb_list.insert(0, {"name": "$SDOM", "dest": $FB_PORT})
             ib['settings']['fallbacks'] = fb_list
     with open(path, 'w') as f: json.dump(data, f, indent=2)
     print("OK")
@@ -171,6 +201,7 @@ PYEOF
         systemctl restart nginx
         restart_service "panel"
         echo -e "${GREEN}✔ Single Port Mode Activated!${NC}"
+        echo -e "${YELLOW}Note: If Panel restarts revert this, configure XRAY_JSON in .env${NC}"
     else
         echo -e "${RED}✘ Nginx Error! Rolling back...${NC}"
         restore_configs
