@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 17.0 (FINAL AUTOMATED: Schema Auto-Fix + Data Migration + Node Fixes)
+# MRM Migration Tool - Pasarguard -> Rebecca
+# Version: 1.0 (Stable Release - Fully Automated)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -255,32 +255,62 @@ out_lines = []
 for line in lines:
     stripped = line.strip()
 
-    # 1) Skip psql/meta commands
-    if stripped.startswith('\\'): continue
-    if re.match(r'^SET\b', stripped, re.I): continue
-    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I): continue
-    if re.match(r'^SELECT\s+setval\b', stripped, re.I): continue
+    # 1) Skip psql/meta commands starting with '\'
+    if stripped.startswith('\\'):
+        continue
 
-    # 3) Fix PostgreSQL timestamptz literals
-    line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'", r"'\1'", line)
+    # 2) Skip session/config lines from PostgreSQL
+    if re.match(r'^SET\b', stripped, re.I):
+        continue
+    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I):
+        continue
+    if re.match(r'^SELECT\s+setval\b', stripped, re.I):
+        continue
 
-    # 4) Handle INSERT lines
+    # 3) Fix PostgreSQL timestamptz literals: 'YYYY-MM-DD hh:mm:ss[.fff]+00' -> remove +00
+    line = re.sub(
+        r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+\d{2}(?::\d{2})?'",
+        r"'\1'",
+        line
+    )
+    
+    # Fix paths in config (pasarguard -> marzban) for node connections
+    line = line.replace('/var/lib/pasarguard', '/var/lib/marzban')
+
+    # 4) Handle INSERT lines: fix schema and quote table name
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
-        # Change INSERT INTO to REPLACE INTO
+        # Change INSERT INTO to REPLACE INTO to handle duplicate IDs
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
 
-        # Remove public schema
+        # Remove public schema: public., "public"., `public`.
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
         line = re.sub(r'(\s*REPLACE\s+INTO\s+)public\.', r'\1', line, flags=re.I)
 
-        # Quote table name only
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?', r'\1`\2`', line, flags=re.I)
+        # Quote table name only; do NOT touch VALUES(...)
+        line = re.sub(
+            r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
+            r'\1`\2`',
+            line,
+            flags=re.I
+        )
         
+        # KEY FIX: Double escape backslashes for MySQL JSON string compatibility
+        line = line.replace('\\', '\\\\')
+        
+        # KEY FIX 2: Convert date strings in 'users' table to UNIX_TIMESTAMP() for 'expire' column
+        # Look for the date string that corresponds to 'expire' (usually before the JSON settings)
+        if "INTO `users`" in line:
+             line = re.sub(
+                 r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'(\s*,\s*(?:'\{|NULL))", 
+                 r"UNIX_TIMESTAMP('\1')\2", 
+                 line
+             )
+
         out_lines.append(line)
         continue
 
-    # 5) Any other lines
+    # 5) Any other lines pass through
     out_lines.append(line)
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES';\n\n"
@@ -336,7 +366,6 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # --- Helper: Create tables if missing (Minimal schema for import success) ---
     create_table_if_missing() {
         local table="$1"
         local schema="$2"
@@ -361,7 +390,6 @@ import_migration_to_rebecca() {
     create_table_if_missing "settings" "id INT PRIMARY KEY AUTO_INCREMENT, telegram JSON, discord JSON, webhook JSON, notification_settings JSON, notification_enable JSON, subscription JSON, general JSON"
     create_table_if_missing "user_subscription_updates" "id INT PRIMARY KEY AUTO_INCREMENT, user_id INT, created_at DATETIME, user_agent TEXT"
 
-    # --- Helper: Ensure columns exist ---
     ensure_col() {
       local table="$1"
       local col="$2"
@@ -372,7 +400,7 @@ import_migration_to_rebecca() {
         minfo "  Adding column $table.$col ..."
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
-        # Force column to accept NULL if it exists but is strict
+        # Force column to accept NULL or Default if it exists but is strict
         if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
              minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
@@ -381,12 +409,11 @@ import_migration_to_rebecca() {
         # FIX: Change 'expire' from INT to DATETIME (or VARCHAR) if data format is datetime string
         if [[ "$table" == "users" && "$col" == "expire" ]]; then
              minfo "  Fixing users.expire type to allow DATETIME string..."
-             docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col DATETIME NULL;" 2>/dev/null || true
+             docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col BIGINT NULL;" 2>/dev/null || true
         fi
       fi
     }
 
-    # Add ALL missing columns
     ensure_col "admins" "username" "VARCHAR(128)"
     ensure_col "admins" "hashed_password" "VARCHAR(255)"
     ensure_col "admins" "created_at" "DATETIME"
@@ -474,7 +501,7 @@ import_migration_to_rebecca() {
     ensure_col "users" "status" "VARCHAR(64)"
     ensure_col "users" "used_traffic" "BIGINT"
     ensure_col "users" "data_limit" "BIGINT"
-    ensure_col "users" "expire" "DATETIME NULL"
+    ensure_col "users" "expire" "BIGINT NULL"
     ensure_col "users" "created_at" "DATETIME"
     ensure_col "users" "admin_id" "INT"
     ensure_col "users" "data_limit_reset_strategy" "VARCHAR(64)"
@@ -583,7 +610,7 @@ create_rescue_admin() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v17.0        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v1.0         ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -668,7 +695,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v17.0            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v1.0             ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca (Full Auto)"
         echo " 2) Rollback to Pasarguard"
