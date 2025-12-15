@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.3 (Fix: All type cast patterns including dot notation)
+# Version: 11.4 (Fix: Remove orphan 'varying' and all edge cases)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -233,11 +233,13 @@ def convert(input_file, output_file):
         'JSON', 'ENUM', 'SET', 'BOOLEAN', 'BOOL', 'BIT',
         'AUTO_INCREMENT', 'PRIMARY', 'KEY', 'NOT', 'NULL', 'DEFAULT', 'UNIQUE'}
     
+    # PostgreSQL words to remove when found standalone
+    PG_JUNK_WORDS = {'varying', 'character', 'precision', 'without', 'zone', 'with'}
+    
     i = 0
     while i < len(lines):
         line = lines[i]
         
-        # Skip multi-line statements
         if skip_until_semicolon:
             if ';' in line:
                 skip_until_semicolon = False
@@ -280,41 +282,48 @@ def convert(input_file, output_file):
             in_create_table = False
         
         # ============================================================
+        # TYPE CONVERSIONS - Do these FIRST before cleanup
+        # ============================================================
+        
+        # character varying(n) -> VARCHAR(n)
+        line = re.sub(r'\bcharacter\s+varying\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
+        # character varying -> VARCHAR(255)
+        line = re.sub(r'\bcharacter\s+varying\b', 'VARCHAR(255)', line, flags=re.I)
+        # double precision -> DOUBLE
+        line = re.sub(r'\bdouble\s+precision\b', 'DOUBLE', line, flags=re.I)
+        # timestamp with time zone -> DATETIME
+        line = re.sub(r'\btimestamp\s+with\s+time\s+zone\b', 'DATETIME', line, flags=re.I)
+        # timestamp without time zone -> DATETIME
+        line = re.sub(r'\btimestamp\s+without\s+time\s+zone\b', 'DATETIME', line, flags=re.I)
+        
+        # ============================================================
         # TYPE CAST REMOVAL - ALL PATTERNS
         # ============================================================
         
-        # Pattern 1: 'value'::typename -> 'value'
-        line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\([^)]*\))?", r'\1', line)
-        
-        # Pattern 2: 'value'.typename -> 'value' (THIS WAS MISSING!)
+        # 'value'::typename(size) -> 'value'
+        line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\s*\([^)]*\))?", r'\1', line)
+        # 'value'.typename -> 'value'
         line = re.sub(r"('[^']*')\.[a-zA-Z_]\w*", r'\1', line)
-        
-        # Pattern 3: number::typename -> number
+        # number::typename -> number
         line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
-        
-        # Pattern 4: remaining ::typename
+        # remaining ::typename
         line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
         
         # ============================================================
-        # TYPE CONVERSIONS
+        # MORE TYPE CONVERSIONS
         # ============================================================
         
         line = re.sub(r'\bpublic\.', '', line)
         line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
-        line = re.sub(r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME', line, flags=re.I)
-        line = re.sub(r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME', line, flags=re.I)
         line = re.sub(r'\bTIMESTAMPTZ\b', 'DATETIME', line, flags=re.I)
         line = re.sub(r'\bJSONB\b', 'JSON', line, flags=re.I)
         line = re.sub(r'\bUUID\b', 'VARCHAR(36)', line, flags=re.I)
         line = re.sub(r'\bBYTEA\b', 'LONGBLOB', line, flags=re.I)
         line = re.sub(r'\bINET\b', 'VARCHAR(45)', line, flags=re.I)
         line = re.sub(r'\bCIDR\b', 'VARCHAR(45)', line, flags=re.I)
-        line = re.sub(r'\bDOUBLE\s+PRECISION\b', 'DOUBLE', line, flags=re.I)
         line = re.sub(r'\bSERIAL\b', 'INT AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT', line, flags=re.I)
-        line = re.sub(r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
-        line = re.sub(r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)', line, flags=re.I)
         line = re.sub(r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         
@@ -334,7 +343,22 @@ def convert(input_file, output_file):
         # Remove USING btree
         line = re.sub(r'\s+USING\s+btree', '', line, flags=re.I)
         
-        # Quote table names
+        # ============================================================
+        # CLEANUP ORPHAN POSTGRESQL WORDS
+        # ============================================================
+        
+        # Remove standalone 'varying', 'character', 'precision' etc that got left behind
+        # Pattern: 'value' followed by junk word followed by comma/newline/paren
+        for junk in PG_JUNK_WORDS:
+            line = re.sub(r"('\s*)" + junk + r"(\s*[,\n\)])", r'\1\2', line, flags=re.I)
+            line = re.sub(r"(DEFAULT\s+'[^']*')\s+" + junk + r"\b", r'\1', line, flags=re.I)
+            line = re.sub(r"\s+" + junk + r"\s*,", ',', line, flags=re.I)
+            line = re.sub(r"\s+" + junk + r"\s*\)", ')', line, flags=re.I)
+        
+        # ============================================================
+        # QUOTE TABLE NAMES
+        # ============================================================
+        
         line = re.sub(r'CREATE\s+TABLE\s+(?!`)(\w+)', r'CREATE TABLE `\1`', line, flags=re.I)
         line = re.sub(r'INSERT\s+INTO\s+(?!`)(\w+)', r'INSERT INTO `\1`', line, flags=re.I)
         line = re.sub(r'ALTER\s+TABLE\s+(?!`)(\w+)', r'ALTER TABLE `\1`', line, flags=re.I)
@@ -343,14 +367,23 @@ def convert(input_file, output_file):
         # PostgreSQL quotes to MySQL backticks
         line = re.sub(r'"(\w+)"', r'`\1`', line)
         
-        # Handle unknown types
+        # ============================================================
+        # HANDLE UNKNOWN TYPES
+        # ============================================================
+        
         if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
             m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
             if m:
                 indent, col, typ, rest = m.groups()
-                if typ.upper().split('(')[0] not in MYSQL_TYPES and col.strip('`').upper() not in ['PRIMARY','UNIQUE','CONSTRAINT','CHECK','FOREIGN','KEY','INDEX']:
-                    print(f"    Unknown type: {typ} -> VARCHAR(255)")
-                    line = f"{indent}{col} VARCHAR(255){rest}"
+                typ_upper = typ.upper()
+                col_clean = col.strip('`').upper()
+                
+                # Skip if it's a known type or a keyword
+                if typ_upper not in MYSQL_TYPES and col_clean not in ['PRIMARY','UNIQUE','CONSTRAINT','CHECK','FOREIGN','KEY','INDEX']:
+                    # Check if it's a junk word
+                    if typ.lower() not in PG_JUNK_WORDS:
+                        print(f"    Unknown type: {typ} -> VARCHAR(255)")
+                        line = f"{indent}{col} VARCHAR(255){rest}"
         
         # Remove CHECK
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
@@ -360,9 +393,13 @@ def convert(input_file, output_file):
         i += 1
     
     out = ''.join(result)
+    
+    # Final cleanups
     out = re.sub(r'\n\s*\n\s*\n+', '\n\n', out)
     out = re.sub(r';\s*;', ';', out)
     out = re.sub(r',(\s*\))', r'\1', out)
+    out = re.sub(r'\s+,', ',', out)  # Remove space before comma
+    out = re.sub(r',\s*,', ',', out)  # Remove double commas
     
     header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
     footer = "\n\nSET FOREIGN_KEY_CHECKS=1;\n"
@@ -448,7 +485,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.3        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.4        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -518,7 +555,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.3            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.4            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
