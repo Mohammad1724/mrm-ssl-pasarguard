@@ -2,13 +2,19 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
-XRAY_CONFIG="/var/lib/pasarguard/config.json"
+# Fix Xray Config Path
+if [ -f "$DATA_DIR/xray_config.json" ]; then
+    XRAY_CONFIG="$DATA_DIR/xray_config.json"
+else
+    XRAY_CONFIG="$DATA_DIR/config.json"
+fi
 
 gen_uuid() { cat /proc/sys/kernel/random/uuid; }
 gen_short_id() { openssl rand -hex 8; }
 
 get_xray_container() {
-    local CID=$(docker ps --format '{{.ID}} {{.Names}} {{.Image}}' | grep -i "pasarguard" | head -1 | awk '{print $1}')
+    # FIX: Find any container that looks like the panel
+    local CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE "$PANEL_NAME|marzban|pasarguard|rebecca" | grep -v "mysql" | grep -v "node" | head -1 | awk '{print $1}')
     echo "$CID"
 }
 
@@ -18,7 +24,13 @@ gen_keys() {
         echo "Private: ERROR Public: ERROR"
         return
     fi
+    # Try generic xray command, might vary
     local K=$(docker exec "$CID" xray x25519 2>/dev/null)
+    if [ -z "$K" ]; then
+         # Fallback for Marzban container path
+         K=$(docker exec "$CID" /var/lib/marzban/xray x25519 2>/dev/null)
+    fi
+    
     if [ -z "$K" ]; then
         echo "Private: ERROR Public: ERROR"
     else
@@ -33,10 +45,10 @@ backup_config() {
     fi
 }
 
-# FIXED: Added jq check
+# FIXED: Added jq check and package manager support
 check_requirements() {
     local MISSING=false
-    
+
     if ! command -v python3 &> /dev/null; then
         echo -e "${RED}Python3 is required!${NC}"
         MISSING=true
@@ -47,7 +59,7 @@ check_requirements() {
     fi
     if ! command -v jq &> /dev/null; then
         echo -e "${YELLOW}jq not found. Installing...${NC}"
-        apt-get install -y jq -qq > /dev/null 2>&1
+        install_package jq jq
         if ! command -v jq &> /dev/null; then
             echo -e "${RED}Failed to install jq!${NC}"
             MISSING=true
@@ -57,7 +69,7 @@ check_requirements() {
         echo -e "${RED}Config file not found: $XRAY_CONFIG${NC}"
         MISSING=true
     fi
-    
+
     if [ "$MISSING" = true ]; then
         pause
         return 1
@@ -221,12 +233,13 @@ add_standard_tls() {
     while true; do
         read -p "Domain: " DOMAIN
         [ -z "$DOMAIN" ] && break
-        local C_PATH="/var/lib/pasarguard/certs/$DOMAIN/fullchain.pem"
+        # FIX: Dynamic Cert Path
+        local C_PATH="$PANEL_DEF_CERTS/$DOMAIN/fullchain.pem"
         if [ -f "$C_PATH" ]; then
             DOMAINS+=("$DOMAIN")
             echo -e "${GREEN}✔ Added: $DOMAIN${NC}"
         else
-            echo -e "${RED}✘ Certificate not found for $DOMAIN${NC}"
+            echo -e "${RED}✘ Certificate not found in $C_PATH${NC}"
         fi
     done
 
@@ -269,11 +282,14 @@ add_standard_tls() {
 
     local DOMAINS_JSON=$(printf '%s\n' "${DOMAINS[@]}" | jq -R . | jq -s .)
 
+    # FIX: Python script updated to use dynamic PANEL_DEF_CERTS
     python3 << PYEOF
 import json
 import sys
+import os
 
 config_path = "$XRAY_CONFIG"
+certs_dir = "$PANEL_DEF_CERTS"
 tag = "$TAG"
 port = $PORT
 protocol = "$PROTO"
@@ -286,8 +302,8 @@ domains = $DOMAINS_JSON
 certificates = []
 for d in domains:
     certificates.append({
-        "certificateFile": f"/var/lib/pasarguard/certs/{d}/fullchain.pem",
-        "keyFile": f"/var/lib/pasarguard/certs/{d}/privkey.pem"
+        "certificateFile": f"{certs_dir}/{d}/fullchain.pem",
+        "keyFile": f"{certs_dir}/{d}/privkey.pem"
     })
 
 if protocol == "trojan":
@@ -449,12 +465,12 @@ list_inbounds() {
     echo -e "${YELLOW}      CURRENT INBOUNDS                       ${NC}"
     echo -e "${CYAN}=============================================${NC}"
 
-    [ ! -f "$XRAY_CONFIG" ] && { echo "No config found."; pause; return; }
+    [ ! -f "$XRAY_CONFIG" ] && { echo "No config found at $XRAY_CONFIG"; pause; return; }
 
-    python3 << 'PYEOF'
+    python3 << PYEOF
 import json
 try:
-    with open("/var/lib/pasarguard/config.json", 'r') as f:
+    with open("$XRAY_CONFIG", 'r') as f:
         d = json.load(f)
     inbounds = d.get('inbounds', [])
     if not inbounds:
@@ -485,13 +501,13 @@ delete_inbound() {
 import json
 try:
     idx = int("$DEL_ID") - 1
-    with open("/var/lib/pasarguard/config.json", 'r') as f:
+    with open("$XRAY_CONFIG", 'r') as f:
         d = json.load(f)
     inbounds = d.get('inbounds', [])
     if 0 <= idx < len(inbounds):
         removed = inbounds.pop(idx)
         d['inbounds'] = inbounds
-        with open("/var/lib/pasarguard/config.json", 'w') as f:
+        with open("$XRAY_CONFIG", 'w') as f:
             json.dump(d, f, indent=2)
         print(f"Deleted: {removed.get('tag')}")
     else:
