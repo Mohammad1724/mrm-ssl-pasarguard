@@ -16,7 +16,8 @@ install_theme_wizard() {
         pause; return
     fi
 
-    TEMPLATE_FILE="/var/lib/pasarguard/templates/subscription/index.html"
+    # FIX: Use dynamic DATA_DIR
+    TEMPLATE_FILE="$DATA_DIR/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
     mkdir -p "$TEMPLATE_DIR"
 
@@ -30,7 +31,7 @@ install_theme_wizard() {
     # 2. Source Selection (Hybrid)
     local TEMP_DL="/tmp/index_dl.html"
     rm -f "$TEMP_DL"
-    
+
     if [ -f "./index.html" ]; then
         echo -e "${GREEN}✔ Found local index.html. Using it.${NC}"
         cp "./index.html" "$TEMP_DL"
@@ -78,9 +79,6 @@ defaults = {
     'bot': 'MyBot',
     'sup': 'Support',
     'news': 'خوش آمدید',
-    'l_and': 'https://github.com/2dust/v2rayNG/releases',
-    'l_ios': 'https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690',
-    'l_win': 'https://github.com/2dust/v2rayN/releases'
 }
 
 # --- IMPROVED REGEX LOGIC ---
@@ -88,22 +86,18 @@ try:
     with open(old_path, 'r', encoding='utf-8', errors='ignore') as f:
         old_content = f.read()
     
-    # Brand: Look for <title> content
     m_brand = re.search(r'<title>(.*?)</title>', old_content)
     if m_brand and "__BRAND__" not in m_brand.group(1): 
         defaults['brand'] = m_brand.group(1)
     
-    # Bot: Look for t.me link inside renew-btn or bot-link
     m_bot = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*renew-btn', old_content)
     if not m_bot:
         m_bot = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*bot-link', old_content)
     if m_bot: defaults['bot'] = m_bot.group(1)
     
-    # Support: Look for t.me link with "btn-dark"
     m_sup = re.search(r'href="https://t\.me/([^"]+)"[^>]*class="[^"]*btn-dark', old_content)
     if m_sup: defaults['sup'] = m_sup.group(1)
     
-    # News: Look for id="nT"
     m_news = re.search(r'id="nT">\s*([^<]+)\s*<', old_content)
     if m_news: defaults['news'] = m_news.group(1).strip()
 
@@ -146,7 +140,9 @@ PYEOF
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-        echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
+        
+        # FIX: Use dynamic path
+        echo "CUSTOM_TEMPLATES_DIRECTORY=\"$DATA_DIR/templates/\"" >> "$PANEL_ENV"
         echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
 
         restart_service "panel"
@@ -160,12 +156,12 @@ PYEOF
 
 activate_theme() {
     clear
-    local T_FILE="/var/lib/pasarguard/templates/subscription/index.html"
+    local T_FILE="$DATA_DIR/templates/subscription/index.html"
     if [ ! -s "$T_FILE" ]; then echo -e "${RED}Theme file missing. Install first.${NC}"; pause; return; fi
     if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
     sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
     sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-    echo 'CUSTOM_TEMPLATES_DIRECTORY="/var/lib/pasarguard/templates/"' >> "$PANEL_ENV"
+    echo "CUSTOM_TEMPLATES_DIRECTORY=\"$DATA_DIR/templates/\"" >> "$PANEL_ENV"
     echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
     restart_service "panel"
     echo -e "${GREEN}✔ Theme Activated.${NC}"
@@ -187,7 +183,7 @@ uninstall_theme() {
     clear
     read -p "Delete theme files? (y/n): " CONFIRM
     if [[ "$CONFIRM" == "y" ]]; then
-        rm -rf "/var/lib/pasarguard/templates/subscription"
+        rm -rf "$DATA_DIR/templates/subscription"
         if [ -f "$PANEL_ENV" ]; then
             sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
             sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
