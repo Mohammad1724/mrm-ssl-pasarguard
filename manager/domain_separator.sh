@@ -19,8 +19,8 @@ install_requirements() {
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-        apt-get update -qq
-        apt-get install -y nginx certbot python3-certbot-nginx -qq
+        install_package nginx nginx
+        install_package certbot certbot
         echo -e "${GREEN}✔ Requirements installed.${NC}"
     else
         echo -e "${GREEN}✔ Requirements are already installed.${NC}"
@@ -58,6 +58,12 @@ setup_domain_separation() {
     read -p "4. Current Panel Port (default: 7431): " PANEL_PORT
     [ -z "$PANEL_PORT" ] && PANEL_PORT="7431"
 
+    # Fix: Prevent loop
+    if [ "$PORT" == "$PANEL_PORT" ]; then
+        echo -e "${RED}Error: Nginx port ($PORT) cannot be same as Panel port ($PANEL_PORT)!${NC}"
+        pause; return
+    fi
+
     echo ""
     echo -e "${BLUE}-------------------------------------${NC}"
     echo -e "Admin: ${CYAN}$ADMIN_DOM${NC}"
@@ -94,8 +100,9 @@ setup_domain_separation() {
     # Determine which cert to use for Sub
     local SUB_CERT_PATH="/etc/letsencrypt/live/$SUB_DOM"
     if [ $SUB_CERT_OK -ne 0 ] || [ ! -d "$SUB_CERT_PATH" ]; then
-        echo -e "${YELLOW}⚠ Sub Domain SSL failed. Using Admin cert for both.${NC}"
-        SUB_CERT_PATH="/etc/letsencrypt/live/$ADMIN_DOM"
+        # FIX: Abort if 2nd SSL fails to avoid broken security
+        echo -e "${RED}✘ Sub Domain SSL failed. Cannot proceed safely.${NC}"
+        pause; return
     fi
 
     echo -e "${GREEN}✔ SSL Certificates ready.${NC}"
@@ -114,15 +121,12 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$ADMIN_DOM/privkey.pem;
 
     location / {
-        proxy_pass https://127.0.0.1:$PANEL_PORT;
-        proxy_ssl_verify off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name $ADMIN_DOM;
+        # FIX: Use HTTP (Internal) to prevent 502 Bad Gateway
+        proxy_pass http://127.0.0.1:$PANEL_PORT;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
@@ -138,15 +142,11 @@ server {
     ssl_certificate_key ${SUB_CERT_PATH}/privkey.pem;
 
     location / {
-        proxy_pass https://127.0.0.1:$PANEL_PORT;
-        proxy_ssl_verify off;
-        proxy_ssl_server_name on;
-        proxy_ssl_name $SUB_DOM;
+        proxy_pass http://127.0.0.1:$PANEL_PORT;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
@@ -163,7 +163,7 @@ EOF
         return
     fi
 
-    ufw allow $PORT/tcp > /dev/null 2>&1
+    if command -v ufw &> /dev/null; then ufw allow $PORT/tcp > /dev/null 2>&1; fi
     systemctl restart nginx
 
     if systemctl is-active --quiet nginx; then
