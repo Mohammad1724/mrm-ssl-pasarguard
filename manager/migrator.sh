@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.0 (Fix: Quote table names in CREATE TABLE for reserved keywords like 'groups')
+# Version: 13.1 (Fix: Add missing columns for 'hosts' table)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -237,7 +237,7 @@ PYEOF
 
 convert_migration_postgresql() {
     local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
+    minfo "Converting PostgreSQL → MySQL (DATA-ONLY + REPLACE)..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
 
     python3 - "$src" "$dst" << 'PYEOF'
@@ -350,18 +350,12 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # --- Helper function to create missing tables with proper quoting ---
+    # --- Helper function to create missing tables ---
     create_table_if_missing() {
         local table="$1"
         local schema="$2"
         minfo "  Checking table $table..."
-        # Note the escaped backticks \`$table\` to handle reserved keywords like 'groups'
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS \`$table\` ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
-        
-        # Verify creation (silent check)
-        if ! docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "DESCRIBE \`$table\`;" >/dev/null 2>&1; then
-             mwarn "Failed to verify table $table creation. Import might fail."
-        fi
     }
 
     # Define minimal schemas for key tables
@@ -375,6 +369,9 @@ import_migration_to_rebecca() {
     create_table_if_missing "system_stats" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "users" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
+    
+    # Also create 'hosts' table which seems to be missing in Rebecca but present in Pasarguard
+    create_table_if_missing "hosts" "id INT PRIMARY KEY AUTO_INCREMENT, remark VARCHAR(255), address VARCHAR(255)"
 
     # --- Helper function to add columns dynamically ---
     ensure_col() {
@@ -443,6 +440,30 @@ import_migration_to_rebecca() {
     ensure_col "node_user_usages" "user_id" "INT"
     ensure_col "node_user_usages" "node_id" "INT"
     ensure_col "node_user_usages" "used_traffic" "BIGINT"
+    
+    # Add columns for 'hosts'
+    ensure_col "hosts" "remark" "VARCHAR(255)"
+    ensure_col "hosts" "address" "VARCHAR(255)"
+    ensure_col "hosts" "port" "INT NULL"
+    ensure_col "hosts" "inbound_tag" "VARCHAR(255)"
+    ensure_col "hosts" "sni" "VARCHAR(1000)"
+    ensure_col "hosts" "host" "VARCHAR(1000)"
+    ensure_col "hosts" "security" "VARCHAR(128) DEFAULT 'inbound_default'"
+    ensure_col "hosts" "fingerprint" "VARCHAR(128) DEFAULT 'none'"
+    ensure_col "hosts" "allowinsecure" "TINYINT(1)"
+    ensure_col "hosts" "is_disabled" "TINYINT(1)"
+    ensure_col "hosts" "path" "VARCHAR(255)"
+    ensure_col "hosts" "random_user_agent" "TINYINT(1) DEFAULT 0"
+    ensure_col "hosts" "alpn" "VARCHAR(14) DEFAULT 'none'"
+    ensure_col "hosts" "use_sni_as_host" "TINYINT(1) DEFAULT 0"
+    ensure_col "hosts" "priority" "INT NOT NULL DEFAULT 0"
+    ensure_col "hosts" "http_headers" "JSON"
+    ensure_col "hosts" "transport_settings" "JSON"
+    ensure_col "hosts" "mux_settings" "JSON"
+    ensure_col "hosts" "noise_settings" "JSON"
+    ensure_col "hosts" "fragment_settings" "JSON"
+    ensure_col "hosts" "status" "VARCHAR(60)"
+    ensure_col "hosts" "ech_config_list" "VARCHAR(512)"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -481,7 +502,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.0        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.1        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -561,7 +582,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.0            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.1            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
