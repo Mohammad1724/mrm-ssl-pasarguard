@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 11.6 (Fix: Invalid default values for TEXT/BLOB/JSON)
+# Version: 11.7 (Fix: Protect JSON data from quote replacement)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -261,18 +261,19 @@ def convert(input_file, output_file):
         
         # === CONVERSIONS ===
         
-        # Remove COLLATE clauses
+        # 1. Remove COLLATE clauses
         line = re.sub(r'\s+COLLATE\s+[^,\s)]+', '', line, flags=re.I)
         
-        # Remove type casts
+        # 2. Remove type casts
         line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\s*\([^)]*\))?", r'\1', line)
         line = re.sub(r"('[^']*')\.[a-zA-Z_]\w*", r'\1', line)
         line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
         line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
         
+        # 3. Basic cleanup
         line = re.sub(r'\bpublic\.', '', line)
         
-        # Type Mapping
+        # 4. PostgreSQL Type to MySQL Type Mapping
         line = re.sub(r'\bcharacter\s+varying\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
         line = re.sub(r'\bcharacter\s+varying\b', 'VARCHAR(255)', line, flags=re.I)
         line = re.sub(r'\bdouble\s+precision\b', 'DOUBLE', line, flags=re.I)
@@ -291,10 +292,12 @@ def convert(input_file, output_file):
         line = re.sub(r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         
+        # 5. Arrays to JSON
         line = re.sub(r'\b\w+\s*\[\]', 'JSON', line)
         line = re.sub(r"'\{\}'", 'NULL', line)
         line = re.sub(r'ARRAY\[[^\]]*\]', 'NULL', line, flags=re.I)
         
+        # 6. Default/Nextval cleanup
         line = re.sub(r"DEFAULT\s+nextval\([^)]+\)", '', line, flags=re.I)
         line = re.sub(r"nextval\([^)]+\)", 'NULL', line, flags=re.I)
         
@@ -302,26 +305,33 @@ def convert(input_file, output_file):
         line = re.sub(r'\bFALSE\b', '0', line, flags=re.I)
         line = re.sub(r'\s+USING\s+btree', '', line, flags=re.I)
         
-        # Cleanup junk
+        # 7. Junk words cleanup
         for junk in PG_JUNK_WORDS:
             line = re.sub(r"('\s*)" + junk + r"(\s*[,\n\)])", r'\1\2', line, flags=re.I)
             line = re.sub(r"(DEFAULT\s+'[^']*')\s+" + junk + r"\b", r'\1', line, flags=re.I)
             line = re.sub(r"\s+" + junk + r"\s*,", ',', line, flags=re.I)
             line = re.sub(r"\s+" + junk + r"\s*\)", ')', line, flags=re.I)
         
-        # Quoting
-        line = re.sub(r'CREATE\s+TABLE\s+(?!`)(\w+)', r'CREATE TABLE `\1`', line, flags=re.I)
-        line = re.sub(r'INSERT\s+INTO\s+(?!`)(\w+)', r'INSERT INTO `\1`', line, flags=re.I)
-        line = re.sub(r'ALTER\s+TABLE\s+(?!`)(\w+)', r'ALTER TABLE `\1`', line, flags=re.I)
-        line = re.sub(r'REFERENCES\s+(?!`)(\w+)', r'REFERENCES `\1`', line, flags=re.I)
-        line = re.sub(r'"(\w+)"', r'`\1`', line)
+        # 8. STRUCTURAL QUOTING - ONLY quote Identifiers, NOT data!
+        # This fixes the JSON corruption issue.
         
-        # Fix DEFAULT values for JSON/TEXT/BLOB (MySQL doesn't support them)
+        # Quote table names in standard SQL statements
+        line = re.sub(r'(CREATE\s+TABLE\s+)(?:IF\s+EXISTS\s+)?(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
+        line = re.sub(r'(INSERT\s+INTO\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
+        line = re.sub(r'(ALTER\s+TABLE\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
+        line = re.sub(r'(REFERENCES\s+)(?:"?)([a-zA-Z0-9_]+)(?:"?)', r'\1`\2`', line, flags=re.I)
+        
+        # Quote column definitions inside CREATE TABLE
+        # Match: whitespace "col" type or whitespace col type
+        if in_create_table:
+             line = re.sub(r'^(\s+)"?([a-zA-Z0-9_]+)"?(\s+[a-zA-Z]+)', r'\1`\2`\3', line)
+
+        # 9. Fix DEFAULT values for JSON/TEXT/BLOB (MySQL restriction)
         if re.search(r'\b(JSON|TEXT|BLOB)\b', line, re.I):
             line = re.sub(r"\s+DEFAULT\s+('[^']*'|NULL)", '', line, flags=re.I)
             line = re.sub(r"\s+DEFAULT\s+\S+", '', line, flags=re.I)
         
-        # Unknown types
+        # 10. Unknown types cleanup
         if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
             m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
             if m:
@@ -331,6 +341,7 @@ def convert(input_file, output_file):
                         print(f"    Unknown: {typ} -> VARCHAR(255)")
                         line = f"{indent}{col} VARCHAR(255){rest}"
         
+        # 11. Remove constraints
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
         line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
         
@@ -428,7 +439,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.6        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.7        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -498,7 +509,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.6            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.7            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
