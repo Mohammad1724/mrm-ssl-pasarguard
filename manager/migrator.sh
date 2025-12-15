@@ -36,7 +36,8 @@ detect_migration_db_type() {
     [ ! -d "$panel_dir" ] && { echo "not_found"; return 1; }
     local env_file="$panel_dir/.env"
     if [ -f "$env_file" ]; then
-        local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
+        local db_url
+        db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
         case "$db_url" in
             *timescale*|*postgresql+asyncpg*) echo "timescaledb"; return 0 ;;
             *postgresql*) echo "postgresql"; return 0 ;;
@@ -53,7 +54,8 @@ get_migration_db_credentials() {
     local panel_dir="$1" env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_HOST=""; MIG_DB_PORT=""; MIG_DB_NAME=""
     [ ! -f "$env_file" ] && return 1
-    local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
+    local db_url
+    db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -115,10 +117,11 @@ stop_migration_panel() {
 
 create_migration_backup() {
     minfo "Creating backup..."
-    local ts=$(date +%Y%m%d_%H%M%S)
+    local ts
+    ts=$(date +%Y%m%d_%H%M%S)
     CURRENT_MIGRATION_BACKUP="$BACKUP_ROOT/backup_$ts"
     mkdir -p "$CURRENT_MIGRATION_BACKUP"
-    echo "$CURRENT_MIGRATION_BACKUP" > "$BACKUP_ROOT/.last_backup"
+    echo "$CURRENT_MIGRATION_BACKUP" >"$BACKUP_ROOT/.last_backup"
 
     [ -d "$PASARGUARD_DIR" ] && {
         minfo "  Backing up config..."
@@ -131,15 +134,23 @@ create_migration_backup() {
         mok "  Data saved"
     }
 
-    local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
-    echo "$db_type" > "$CURRENT_MIGRATION_BACKUP/db_type.txt"
+    local db_type
+    db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
+    echo "$db_type" >"$CURRENT_MIGRATION_BACKUP/db_type.txt"
     minfo "  Exporting database ($db_type)..."
 
     local export_success=false
     case "$db_type" in
-        sqlite) [ -f "$PASARGUARD_DATA/db.sqlite3" ] && { cp "$PASARGUARD_DATA/db.sqlite3" "$CURRENT_MIGRATION_BACKUP/database.sqlite3"; mok "  SQLite exported"; export_success=true; } ;;
-        timescaledb|postgresql) export_migration_postgresql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
-        mysql|mariadb) export_migration_mysql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
+        sqlite)
+            [ -f "$PASARGUARD_DATA/db.sqlite3" ] && {
+                cp "$PASARGUARD_DATA/db.sqlite3" "$CURRENT_MIGRATION_BACKUP/database.sqlite3"
+                mok "  SQLite exported"; export_success=true;
+            }
+            ;;
+        timescaledb|postgresql)
+            export_migration_postgresql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
+        mysql|mariadb)
+            export_migration_mysql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
     esac
 
     mok "Backup: $CURRENT_MIGRATION_BACKUP"
@@ -151,30 +162,34 @@ export_migration_postgresql() {
     get_migration_db_credentials "$PASARGUARD_DIR"
     local user="${MIG_DB_USER:-pasarguard}" db="${MIG_DB_NAME:-pasarguard}"
     minfo "  User: $user, DB: $db"
-    local cname=$(find_migration_pg_container)
+    local cname
+    cname=$(find_migration_pg_container)
     [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
-    local i=0; while [ $i -lt 30 ]; do docker exec "$cname" pg_isready &>/dev/null && break; sleep 2; i=$((i+2)); done
+    local i=0
+    while [ $i -lt 30 ]; do
+        docker exec "$cname" pg_isready &>/dev/null && break
+        sleep 2; i=$((i+2))
+    done
 
     minfo "  Running pg_dump..."
-    # Force single inserts, standard quotes
-    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting > "$output_file" 2>/dev/null
+    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting >"$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
-    
-    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting > "$output_file" 2>/dev/null
+
+    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --column-inserts --no-comments --disable-dollar-quoting >"$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
-    
+
     merr "  pg_dump failed"; return 1
 }
 
 export_migration_mysql() {
     local output_file="$1"
-    get_migration_db_credentials("$PASARGUARD_DIR")
+    get_migration_db_credentials "$PASARGUARD_DIR"  # فیکس: قبلاً به اشتباه get_migration_db_credentials("$PASARGUARD_DIR") بود
     local cname
     cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(mysql|mariadb|db)" | head -1)
     [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
-    docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" > "$output_file" 2>/dev/null
+    docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" >"$output_file" 2>/dev/null
     [ -s "$output_file" ] && { mok "  Exported"; return 0; }
     merr "  mysqldump failed"; return 1
 }
@@ -193,7 +208,7 @@ convert_migration_sqlite() {
     local src="$1" dst="$2"
     minfo "Converting SQLite → MySQL..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
-    sqlite3 "$src" .dump > "$MIGRATION_TEMP/sqlite_dump.sql" 2>/dev/null || { merr "Dump failed"; return 1; }
+    sqlite3 "$src" .dump >"$MIGRATION_TEMP/sqlite_dump.sql" 2>/dev/null || { merr "Dump failed"; return 1; }
     python3 - "$MIGRATION_TEMP/sqlite_dump.sql" "$dst" << 'PYEOF'
 import sys, re
 with open(sys.argv[1], 'r', errors='replace') as f: c = f.read()
@@ -242,7 +257,6 @@ def convert(input_file, output_file):
     i = 0
     while i < len(lines):
         line = lines[i]
-        original_line = line
         
         # 1. SKIP LOGIC
         if skip_until_semicolon:
@@ -267,17 +281,13 @@ def convert(input_file, output_file):
         if re.match(r'^\s*CREATE\s+TABLE', line, re.I): in_create_table = True
         if in_create_table and ');' in line: in_create_table = False
 
-        # --- NEW: Remove schema prefix 'public.' (with quotes/backticks) globally ---
+        # --- حذف اسکیمای public قبل از هر چیز ---
         line = re.sub(r'"public"\.', '', line, flags=re.I)
         line = re.sub(r'`public`\.', '', line, flags=re.I)
         line = re.sub(r'\bpublic\.', '', line, flags=re.I)
         
-        # 2. INSERT STATEMENTS: Only quote table name, DON'T TOUCH DATA!
+        # 2. INSERT STATEMENTS: فقط اسم جدول را کوت کن، به VALUES دست نزن
         if re.match(r'^\s*INSERT\s+INTO', line, re.I):
-            # Example:
-            # INSERT INTO public.admins (...) -> INSERT INTO `admins` (...)
-            # INSERT INTO "public".admins (...) -> INSERT INTO `admins` (...)
-            # INSERT INTO admins (...) -> INSERT INTO `admins` (...)
             line = re.sub(
                 r'(\s*INSERT\s+INTO\s+)"?([A-Za-z0-9_]+)"?',
                 r'\1`\2`',
@@ -299,7 +309,7 @@ def convert(input_file, output_file):
         line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
         line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
         
-        # (قبلی هنوز هست، مشکلی ندارد)
+        # برای اطمینان بیشتر:
         line = re.sub(r'\bpublic\.', '', line)
         
         # Type Mapping
@@ -434,7 +444,7 @@ import_migration_to_rebecca() {
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing..."
 
-    if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" < "$sql" 2> "$err_file"; then
+    if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" <"$sql" 2>"$err_file"; then
         local tables
         tables=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | wc -l)
         mok "Import successful! ($tables tables)"
@@ -458,7 +468,7 @@ migrate_migration_configs() {
     for v in "${vars[@]}"; do
         local val
         val=$(grep "^${v}=" "$PASARGUARD_DIR/.env" 2>/dev/null | sed 's/[^=]*=//')
-        [ -n "$val" ] && { sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null; echo "${v}=${val}" >> "$REBECCA_DIR/.env"; n=$((n+1)); }
+        [ -n "$val" ] && { sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null; echo "${v}=${val}" >>"$REBECCA_DIR/.env"; n=$((n+1)); }
     done
     mok "Migrated $n variables"
 }
