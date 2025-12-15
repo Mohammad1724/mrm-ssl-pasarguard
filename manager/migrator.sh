@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 11.2 (Bulletproof CREATE TYPE removal)
+# MRM Migration Tool - Pasarguard -> Rebecca  
+# Version: 11.3 (Fix: All type cast patterns including dot notation)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -14,37 +14,22 @@ MIGRATION_TEMP=""
 CONTAINER_TIMEOUT=120
 MYSQL_WAIT=60
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 migration_init() {
     MIGRATION_TEMP=$(mktemp -d /tmp/mrm-migration-XXXXXX 2>/dev/null) || MIGRATION_TEMP="/tmp/mrm-migration-$$"
     mkdir -p "$MIGRATION_TEMP" "$BACKUP_ROOT"
     mkdir -p "$(dirname "$MIGRATION_LOG")" 2>/dev/null || MIGRATION_LOG="/tmp/mrm_migration.log"
-    echo "" >> "$MIGRATION_LOG"
     echo "=== Migration: $(date) ===" >> "$MIGRATION_LOG"
 }
 
-migration_cleanup() {
-    [[ "$MIGRATION_TEMP" == /tmp/* ]] && rm -rf "$MIGRATION_TEMP" 2>/dev/null
-}
-
+migration_cleanup() { [[ "$MIGRATION_TEMP" == /tmp/* ]] && rm -rf "$MIGRATION_TEMP" 2>/dev/null; }
 mlog() { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG"; }
 minfo() { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
 mok() { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
 mwarn() { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr() { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
-
-mpause() {
-    echo ""
-    echo -e "${YELLOW}Press any key to continue...${NC}"
-    read -n 1 -s -r
-    echo ""
-}
+mpause() { echo ""; echo -e "${YELLOW}Press any key...${NC}"; read -n 1 -s -r; echo ""; }
 
 detect_migration_db_type() {
     local panel_dir="$1" data_dir="$2"
@@ -65,8 +50,7 @@ detect_migration_db_type() {
 }
 
 get_migration_db_credentials() {
-    local panel_dir="$1"
-    local env_file="$panel_dir/.env"
+    local panel_dir="$1" env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_HOST=""; MIG_DB_PORT=""; MIG_DB_NAME=""
     [ ! -f "$env_file" ] && return 1
     local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
@@ -76,8 +60,7 @@ url = "$db_url"
 if '://' in url:
     scheme, rest = url.split('://', 1)
     if '+' in scheme: scheme = scheme.split('+', 1)[0]
-    url = scheme + '://' + rest
-    p = urlparse(url)
+    p = urlparse(scheme + '://' + rest)
     print(f'MIG_DB_USER="{p.username or ""}"')
     print(f'MIG_DB_PASS="{unquote(p.password or "")}"')
     print(f'MIG_DB_HOST="{p.hostname or "localhost"}"')
@@ -95,8 +78,7 @@ find_migration_pg_container() {
         cname=$(cd "$PASARGUARD_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
         [ -n "$cname" ] && { echo "$cname"; return 0; }
     done
-    cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(timescale|postgres|db)" | head -1)
-    [ -n "$cname" ] && echo "$cname"
+    docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(timescale|postgres|db)" | head -1
 }
 
 find_migration_mysql_container() {
@@ -105,13 +87,10 @@ find_migration_mysql_container() {
         cname=$(cd "$REBECCA_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
         [ -n "$cname" ] && { echo "$cname"; return 0; }
     done
-    cname=$(docker ps --format '{{.Names}}' | grep -iE "rebecca.*(mysql|mariadb|db)" | head -1)
-    [ -n "$cname" ] && echo "$cname"
+    docker ps --format '{{.Names}}' | grep -iE "rebecca.*(mysql|mariadb|db)" | head -1
 }
 
-is_migration_running() {
-    [ -d "$1" ] && (cd "$1" && docker compose ps 2>/dev/null | grep -qE "Up|running")
-}
+is_migration_running() { [ -d "$1" ] && (cd "$1" && docker compose ps 2>/dev/null | grep -qE "Up|running"); }
 
 start_migration_panel() {
     local dir="$1" name="$2"
@@ -123,15 +102,14 @@ start_migration_panel() {
         is_migration_running "$dir" && { mok "$name started"; sleep 3; return 0; }
         sleep 3; i=$((i+3))
     done
-    merr "$name failed to start"; return 1
+    merr "$name failed"; return 1
 }
 
 stop_migration_panel() {
     local dir="$1" name="$2"
     [ ! -d "$dir" ] && return 0
     minfo "Stopping $name..."
-    (cd "$dir" && docker compose down) &>/dev/null
-    sleep 2
+    (cd "$dir" && docker compose down) &>/dev/null; sleep 2
     mok "$name stopped"
 }
 
@@ -142,19 +120,16 @@ create_migration_backup() {
     mkdir -p "$CURRENT_MIGRATION_BACKUP"
     echo "$CURRENT_MIGRATION_BACKUP" > "$BACKUP_ROOT/.last_backup"
 
-    if [ -d "$PASARGUARD_DIR" ]; then
+    [ -d "$PASARGUARD_DIR" ] && {
         minfo "  Backing up config..."
-        tar --exclude='*/node_modules' -C "$(dirname "$PASARGUARD_DIR")" \
-            -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_config.tar.gz" "$(basename "$PASARGUARD_DIR")" 2>/dev/null
+        tar --exclude='*/node_modules' -C "$(dirname "$PASARGUARD_DIR")" -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_config.tar.gz" "$(basename "$PASARGUARD_DIR")" 2>/dev/null
         mok "  Config saved"
-    fi
-
-    if [ -d "$PASARGUARD_DATA" ]; then
+    }
+    [ -d "$PASARGUARD_DATA" ] && {
         minfo "  Backing up data..."
-        tar -C "$(dirname "$PASARGUARD_DATA")" \
-            -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_data.tar.gz" "$(basename "$PASARGUARD_DATA")" 2>/dev/null
+        tar -C "$(dirname "$PASARGUARD_DATA")" -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_data.tar.gz" "$(basename "$PASARGUARD_DATA")" 2>/dev/null
         mok "  Data saved"
-    fi
+    }
 
     local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
     echo "$db_type" > "$CURRENT_MIGRATION_BACKUP/db_type.txt"
@@ -162,15 +137,9 @@ create_migration_backup() {
 
     local export_success=false
     case "$db_type" in
-        sqlite)
-            if [ -f "$PASARGUARD_DATA/db.sqlite3" ]; then
-                cp "$PASARGUARD_DATA/db.sqlite3" "$CURRENT_MIGRATION_BACKUP/database.sqlite3"
-                mok "  SQLite exported"; export_success=true
-            fi ;;
-        timescaledb|postgresql)
-            export_migration_postgresql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
-        mysql|mariadb)
-            export_migration_mysql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
+        sqlite) [ -f "$PASARGUARD_DATA/db.sqlite3" ] && { cp "$PASARGUARD_DATA/db.sqlite3" "$CURRENT_MIGRATION_BACKUP/database.sqlite3"; mok "  SQLite exported"; export_success=true; } ;;
+        timescaledb|postgresql) export_migration_postgresql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
+        mysql|mariadb) export_migration_mysql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
     esac
 
     mok "Backup: $CURRENT_MIGRATION_BACKUP"
@@ -180,29 +149,19 @@ create_migration_backup() {
 export_migration_postgresql() {
     local output_file="$1"
     get_migration_db_credentials "$PASARGUARD_DIR"
-    local user="${MIG_DB_USER:-pasarguard}"
-    local db="${MIG_DB_NAME:-pasarguard}"
+    local user="${MIG_DB_USER:-pasarguard}" db="${MIG_DB_NAME:-pasarguard}"
     minfo "  User: $user, DB: $db"
-
     local cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found!"; return 1; }
+    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
-    local i=0
-    while [ $i -lt 30 ]; do
-        docker exec "$cname" pg_isready &>/dev/null && break
-        sleep 2; i=$((i+2))
-    done
+    local i=0; while [ $i -lt 30 ]; do docker exec "$cname" pg_isready &>/dev/null && break; sleep 2; i=$((i+2)); done
 
     minfo "  Running pg_dump..."
-    local PG_FLAGS="--no-owner --no-acl --inserts --no-comments"
-
-    if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
-        [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
-    fi
-    if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
-        [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
-    fi
+    docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --inserts --no-comments > "$output_file" 2>/dev/null
+    [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
+    docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl --inserts --no-comments > "$output_file" 2>/dev/null
+    [ -s "$output_file" ] && { mok "  Exported: $(du -h "$output_file" | cut -f1)"; return 0; }
     merr "  pg_dump failed"; return 1
 }
 
@@ -211,9 +170,8 @@ export_migration_mysql() {
     get_migration_db_credentials "$PASARGUARD_DIR"
     local cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(mysql|mariadb|db)" | head -1)
     [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
-    if docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" > "$output_file" 2>/dev/null; then
-        [ -s "$output_file" ] && { mok "  Exported"; return 0; }
-    fi
+    docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" > "$output_file" 2>/dev/null
+    [ -s "$output_file" ] && { mok "  Exported"; return 0; }
     merr "  mysqldump failed"; return 1
 }
 
@@ -231,10 +189,8 @@ convert_migration_sqlite() {
     local src="$1" dst="$2"
     minfo "Converting SQLite → MySQL..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
-    local dump="$MIGRATION_TEMP/sqlite_dump.sql"
-    sqlite3 "$src" .dump > "$dump" 2>/dev/null || { merr "Dump failed"; return 1; }
-
-    python3 - "$dump" "$dst" << 'PYEOF'
+    sqlite3 "$src" .dump > "$MIGRATION_TEMP/sqlite_dump.sql" 2>/dev/null || { merr "Dump failed"; return 1; }
+    python3 - "$MIGRATION_TEMP/sqlite_dump.sql" "$dst" << 'PYEOF'
 import sys, re
 with open(sys.argv[1], 'r', errors='replace') as f: c = f.read()
 c = re.sub(r'BEGIN TRANSACTION;', 'START TRANSACTION;', c)
@@ -261,107 +217,61 @@ convert_migration_postgresql() {
 import re
 import sys
 
-def convert_pg_to_mysql(input_file, output_file):
+def convert(input_file, output_file):
     with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
         lines = f.readlines()
     
-    result_lines = []
+    result = []
     skip_until_semicolon = False
     in_create_table = False
-    types_removed = 0
     
-    MYSQL_TYPES = {
-        'INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'MEDIUMINT',
+    MYSQL_TYPES = {'INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'MEDIUMINT',
         'VARCHAR', 'CHAR', 'TEXT', 'MEDIUMTEXT', 'LONGTEXT', 'TINYTEXT',
         'DATETIME', 'DATE', 'TIME', 'TIMESTAMP', 'YEAR',
         'FLOAT', 'DOUBLE', 'DECIMAL', 'NUMERIC', 'REAL',
         'BLOB', 'MEDIUMBLOB', 'LONGBLOB', 'TINYBLOB',
         'JSON', 'ENUM', 'SET', 'BOOLEAN', 'BOOL', 'BIT',
-        'AUTO_INCREMENT', 'PRIMARY', 'KEY', 'NOT', 'NULL', 'DEFAULT', 'UNIQUE'
-    }
+        'AUTO_INCREMENT', 'PRIMARY', 'KEY', 'NOT', 'NULL', 'DEFAULT', 'UNIQUE'}
     
     i = 0
     while i < len(lines):
         line = lines[i]
-        original_line = line
         
-        # ============================================================
-        # SKIP LOGIC - Handle multi-line statements
-        # ============================================================
-        
+        # Skip multi-line statements
         if skip_until_semicolon:
             if ';' in line:
                 skip_until_semicolon = False
             i += 1
             continue
         
-        # Skip psql commands
-        if line.strip().startswith('\\'):
+        # Skip patterns
+        if line.strip().startswith('\\') or line.strip().startswith('--'):
             i += 1
             continue
-        
-        # Skip comments
-        if line.strip().startswith('--'):
-            i += 1
-            continue
-        
-        # Skip SET commands
         if re.match(r'^\s*SET\s+', line, re.I):
             i += 1
             continue
         
-        # ============================================================
-        # CRITICAL: Skip CREATE TYPE statements (multi-line)
-        # ============================================================
+        # Skip CREATE TYPE (multi-line)
         if re.match(r'^\s*CREATE\s+TYPE\b', line, re.I):
-            types_removed += 1
-            # Skip until we find the closing );
-            while i < len(lines):
-                if ');' in lines[i]:
-                    i += 1
-                    break
+            while i < len(lines) and ');' not in lines[i]:
                 i += 1
-            continue
-        
-        # Skip CREATE SEQUENCE
-        if re.match(r'^\s*CREATE\s+SEQUENCE\b', line, re.I):
-            skip_until_semicolon = ';' not in line
             i += 1
             continue
         
-        # Skip ALTER SEQUENCE
-        if re.match(r'^\s*ALTER\s+SEQUENCE\b', line, re.I):
+        # Skip other PostgreSQL statements
+        if re.match(r'^\s*(CREATE\s+SEQUENCE|ALTER\s+SEQUENCE|SELECT\s+setval|SELECT\s+pg_catalog|COMMENT\s+ON|GRANT\s+|REVOKE\s+|CREATE\s+EXTENSION)', line, re.I):
             skip_until_semicolon = ';' not in line
             i += 1
             continue
-        
-        # Skip SELECT setval/pg_catalog
-        if re.match(r'^\s*SELECT\s+(setval|pg_catalog)', line, re.I):
-            skip_until_semicolon = ';' not in line
-            i += 1
-            continue
-        
-        # Skip ALTER ... OWNER TO
         if re.match(r'^\s*ALTER\s+.*OWNER\s+TO', line, re.I):
             skip_until_semicolon = ';' not in line
             i += 1
             continue
-        
-        # Skip ALTER TABLE ... SET DEFAULT nextval
         if re.match(r'^\s*ALTER\s+TABLE.*SET\s+DEFAULT\s+nextval', line, re.I):
             skip_until_semicolon = ';' not in line
             i += 1
             continue
-        
-        # Skip COMMENT ON, GRANT, REVOKE, CREATE EXTENSION
-        if re.match(r'^\s*(COMMENT\s+ON|GRANT\s+|REVOKE\s+|CREATE\s+EXTENSION)', line, re.I):
-            skip_until_semicolon = ';' not in line
-            i += 1
-            continue
-        
-        # ============================================================
-        # TRANSFORMATIONS
-        # ============================================================
         
         # Track CREATE TABLE
         if re.match(r'^\s*CREATE\s+TABLE', line, re.I):
@@ -369,15 +279,27 @@ def convert_pg_to_mysql(input_file, output_file):
         if in_create_table and ');' in line:
             in_create_table = False
         
-        # Remove type casts
-        line = re.sub(r"('[^']*')::\w+(\([^)]*\))?", r'\1', line)
-        line = re.sub(r"(\d+)::\w+", r'\1', line)
-        line = re.sub(r"::\w+(\[\])?", '', line)
+        # ============================================================
+        # TYPE CAST REMOVAL - ALL PATTERNS
+        # ============================================================
         
-        # Remove public. prefix
+        # Pattern 1: 'value'::typename -> 'value'
+        line = re.sub(r"('[^']*')::[a-zA-Z_]\w*(\([^)]*\))?", r'\1', line)
+        
+        # Pattern 2: 'value'.typename -> 'value' (THIS WAS MISSING!)
+        line = re.sub(r"('[^']*')\.[a-zA-Z_]\w*", r'\1', line)
+        
+        # Pattern 3: number::typename -> number
+        line = re.sub(r"(\d+)::[a-zA-Z_]\w*", r'\1', line)
+        
+        # Pattern 4: remaining ::typename
+        line = re.sub(r"::[a-zA-Z_]\w*(\[\])?", '', line)
+        
+        # ============================================================
+        # TYPE CONVERSIONS
+        # ============================================================
+        
         line = re.sub(r'\bpublic\.', '', line)
-        
-        # PostgreSQL to MySQL type conversions
         line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
         line = re.sub(r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME', line, flags=re.I)
         line = re.sub(r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME', line, flags=re.I)
@@ -393,8 +315,6 @@ def convert_pg_to_mysql(input_file, output_file):
         line = re.sub(r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)', line, flags=re.I)
         line = re.sub(r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)', line, flags=re.I)
-        
-        # GENERATED AS IDENTITY
         line = re.sub(r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         line = re.sub(r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT', line, flags=re.I)
         
@@ -407,7 +327,7 @@ def convert_pg_to_mysql(input_file, output_file):
         line = re.sub(r"DEFAULT\s+nextval\([^)]+\)", '', line, flags=re.I)
         line = re.sub(r"nextval\([^)]+\)", 'NULL', line, flags=re.I)
         
-        # Boolean values
+        # Booleans
         line = re.sub(r'\bTRUE\b', '1', line, flags=re.I)
         line = re.sub(r'\bFALSE\b', '0', line, flags=re.I)
         
@@ -423,63 +343,44 @@ def convert_pg_to_mysql(input_file, output_file):
         # PostgreSQL quotes to MySQL backticks
         line = re.sub(r'"(\w+)"', r'`\1`', line)
         
-        # Handle unknown types in column definitions
-        if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|,?\s*CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
-            match = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
-            if match:
-                indent, col, type_name, rest = match.groups()
-                type_upper = type_name.upper()
-                base = type_upper.split('(')[0]
-                col_clean = col.strip('`').upper()
-                
-                if base not in MYSQL_TYPES and col_clean not in ['PRIMARY', 'UNIQUE', 'CONSTRAINT', 'CHECK', 'FOREIGN', 'KEY', 'INDEX']:
-                    print(f"    Unknown type: {type_name} -> VARCHAR(255)")
+        # Handle unknown types
+        if in_create_table and line.strip() and not re.match(r'^\s*(CREATE|PRIMARY|\)|CONSTRAINT|UNIQUE|FOREIGN|CHECK)', line, re.I):
+            m = re.match(r'^(\s*)(`?\w+`?)\s+([a-zA-Z_]\w*)(.*)$', line)
+            if m:
+                indent, col, typ, rest = m.groups()
+                if typ.upper().split('(')[0] not in MYSQL_TYPES and col.strip('`').upper() not in ['PRIMARY','UNIQUE','CONSTRAINT','CHECK','FOREIGN','KEY','INDEX']:
+                    print(f"    Unknown type: {typ} -> VARCHAR(255)")
                     line = f"{indent}{col} VARCHAR(255){rest}"
         
-        # Remove CHECK constraints
+        # Remove CHECK
         line = re.sub(r',?\s*CONSTRAINT\s+`?\w+`?\s+CHECK\s*\([^)]+\)', '', line, flags=re.I)
         line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
         
-        result_lines.append(line)
+        result.append(line)
         i += 1
     
-    print(f"    Removed {types_removed} CREATE TYPE statements")
+    out = ''.join(result)
+    out = re.sub(r'\n\s*\n\s*\n+', '\n\n', out)
+    out = re.sub(r';\s*;', ';', out)
+    out = re.sub(r',(\s*\))', r'\1', out)
     
-    result = ''.join(result_lines)
-    
-    # Final cleanups
-    result = re.sub(r'\n\s*\n\s*\n+', '\n\n', result)
-    result = re.sub(r';\s*;', ';', result)
-    result = re.sub(r',(\s*\))', r'\1', result)
-    
-    header = """SET NAMES utf8mb4;
-SET FOREIGN_KEY_CHECKS=0;
-SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
-
-"""
+    header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
     footer = "\n\nSET FOREIGN_KEY_CHECKS=1;\n"
     
     with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(header + result + footer)
-    
+        f.write(header + out + footer)
     print("  Conversion completed")
 
 try:
-    convert_pg_to_mysql(sys.argv[1], sys.argv[2])
+    convert(sys.argv[1], sys.argv[2])
 except Exception as e:
     print(f"  Error: {e}")
-    import traceback
-    traceback.print_exc()
+    import traceback; traceback.print_exc()
     sys.exit(1)
 PYEOF
 
-    if [ $? -eq 0 ] && [ -s "$dst" ]; then
-        mok "Conversion successful"
-        return 0
-    else
-        merr "Conversion failed"
-        return 1
-    fi
+    [ $? -eq 0 ] && [ -s "$dst" ] && { mok "Conversion successful"; return 0; }
+    merr "Conversion failed"; return 1
 }
 
 check_migration_rebecca() { [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]; }
@@ -490,10 +391,10 @@ wait_migration_mysql() {
     local i=0
     while [ $i -lt $MYSQL_WAIT ]; do
         local cname=$(find_migration_mysql_container)
-        if [ -n "$cname" ]; then
+        [ -n "$cname" ] && {
             local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
             docker exec "$cname" mysql -uroot -p"$pass" -e "SELECT 1" &>/dev/null && { mok "MySQL ready"; return 0; }
-        fi
+        }
         sleep 3; i=$((i+3))
     done
     mwarn "MySQL timeout"; return 1
@@ -508,15 +409,14 @@ import_migration_to_rebecca() {
     [ -z "$db" ] && db="marzban"
     local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
     local cname=$(find_migration_mysql_container)
-
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
+    
     minfo "  Container: $cname, DB: $db"
     minfo "  SQL: $(du -h "$sql" | cut -f1), $(wc -l < "$sql") lines"
-
     minfo "  Resetting database..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS \`$db\`; CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    local err_file="$MIGRATION_TEMP/mysql_import.err"
+    local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing..."
 
     if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" < "$sql" 2> "$err_file"; then
@@ -526,7 +426,7 @@ import_migration_to_rebecca() {
         return 0
     else
         merr "Import failed!"
-        grep -v "Using a password" "$err_file" | head -20
+        grep -v "Using a password" "$err_file" | head -15
         local ln=$(grep -oP 'at line \K\d+' "$err_file" 2>/dev/null | head -1)
         [ -n "$ln" ] && { echo ""; mwarn "Line $ln:"; sed -n "$((ln>2?ln-2:1)),$((ln+3))p" "$sql"; }
         return 1
@@ -540,53 +440,37 @@ migrate_migration_configs() {
     local n=0
     for v in "${vars[@]}"; do
         local val=$(grep "^${v}=" "$PASARGUARD_DIR/.env" 2>/dev/null | sed 's/[^=]*=//')
-        if [ -n "$val" ]; then
-            sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null
-            echo "${v}=${val}" >> "$REBECCA_DIR/.env"
-            n=$((n+1))
-        fi
+        [ -n "$val" ] && { sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null; echo "${v}=${val}" >> "$REBECCA_DIR/.env"; n=$((n+1)); }
     done
     mok "Migrated $n variables"
 }
 
 do_full_migration() {
-    migration_init
-    clear
+    migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.2        ║${NC}"
-    echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
-    echo ""
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.3        ║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
-    for cmd in docker python3 sqlite3; do
-        command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }
-    done
+    for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
     mok "Dependencies OK"
-
     [ ! -d "$PASARGUARD_DIR" ] && { merr "Pasarguard not found"; mpause; return 1; }
     mok "Pasarguard found"
-
     local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
     echo -e "Database: ${CYAN}$db_type${NC}"
+    check_migration_rebecca || { merr "Rebecca not installed"; mpause; return 1; }; mok "Rebecca found"
+    check_migration_rebecca_mysql || { merr "Rebecca needs MySQL"; mpause; return 1; }; mok "MySQL verified"
 
-    check_migration_rebecca || { merr "Rebecca not installed"; mpause; return 1; }
-    mok "Rebecca found"
-    check_migration_rebecca_mysql || { merr "Rebecca needs MySQL"; mpause; return 1; }
-    mok "MySQL verified"
-
-    echo ""
-    read -p "Type 'migrate' to start: " confirm
+    echo ""; read -p "Type 'migrate' to start: " confirm
     [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
 
     echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
     is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
-    create_migration_backup || { merr "Backup failed"; mpause; migration_cleanup; return 1; }
-    local backup_dir=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
+    create_migration_backup || { merr "Backup failed"; mpause; return 1; }
+    local backup_dir=$(cat "$BACKUP_ROOT/.last_backup")
 
     echo -e "\n${CYAN}━━━ STEP 2: VERIFY ━━━${NC}"
-    local src=""
-    case "$db_type" in sqlite) src="$backup_dir/database.sqlite3" ;; *) src="$backup_dir/database.sql" ;; esac
-    [ ! -s "$src" ] && { merr "Source empty"; mpause; return 1; }
-    mok "Source: $(du -h "$src" | cut -f1)"
+    local src=""; case "$db_type" in sqlite) src="$backup_dir/database.sqlite3";; *) src="$backup_dir/database.sql";; esac
+    [ ! -s "$src" ] && { merr "Source empty"; mpause; return 1; }; mok "Source: $(du -h "$src" | cut -f1)"
 
     echo -e "\n${CYAN}━━━ STEP 3: CONVERT ━━━${NC}"
     local mysql_sql="$MIGRATION_TEMP/mysql_import.sql"
@@ -605,55 +489,45 @@ do_full_migration() {
     import_migration_to_rebecca "$mysql_sql" || mpause
 
     echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
-    (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null
-    sleep 3
+    (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null; sleep 3
     mok "Rebecca restarted"
 
     echo -e "\n${GREEN}════════════════════════════════════════${NC}"
     echo -e "${GREEN}   Migration completed!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
-    migration_cleanup
-    mpause
+    migration_cleanup; mpause
 }
 
 do_migration_rollback() {
-    clear
-    echo -e "${CYAN}=== ROLLBACK ===${NC}"
+    clear; echo -e "${CYAN}=== ROLLBACK ===${NC}"
     [ ! -f "$BACKUP_ROOT/.last_backup" ] && { merr "No backup"; mpause; return 1; }
     local backup=$(cat "$BACKUP_ROOT/.last_backup")
     [ ! -d "$backup" ] && { merr "Backup missing"; mpause; return 1; }
-    echo "Backup: $backup"
-    read -p "Type 'rollback': " ans
+    echo "Backup: $backup"; read -p "Type 'rollback': " ans
     [ "$ans" != "rollback" ] && return 0
 
-    migration_init
-    stop_migration_panel "$REBECCA_DIR" "Rebecca"
+    migration_init; stop_migration_panel "$REBECCA_DIR" "Rebecca"
     [ -f "$backup/pasarguard_config.tar.gz" ] && { rm -rf "$PASARGUARD_DIR"; mkdir -p "$(dirname "$PASARGUARD_DIR")"; tar -xzf "$backup/pasarguard_config.tar.gz" -C "$(dirname "$PASARGUARD_DIR")"; mok "Config restored"; }
     [ -f "$backup/pasarguard_data.tar.gz" ] && { rm -rf "$PASARGUARD_DATA"; mkdir -p "$(dirname "$PASARGUARD_DATA")"; tar -xzf "$backup/pasarguard_data.tar.gz" -C "$(dirname "$PASARGUARD_DATA")"; mok "Data restored"; }
     start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
-    echo -e "${GREEN}Rollback done${NC}"
-    migration_cleanup
-    mpause
+    echo -e "${GREEN}Rollback done${NC}"; migration_cleanup; mpause
 }
 
 migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.2            ║${NC}"
-        echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
-        echo ""
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.3            ║${NC}"
+        echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
         echo " 3) View Backups"
         echo " 4) View Log"
         echo " 0) Back"
-        echo ""
-        read -p "Select: " opt
+        echo ""; read -p "Select: " opt
         case "$opt" in
-            1) do_full_migration ;;
-            2) do_migration_rollback ;;
+            1) do_full_migration ;; 2) do_migration_rollback ;;
             3) clear; ls -lh "$BACKUP_ROOT" 2>/dev/null || echo "No backups"; mpause ;;
             4) clear; tail -50 "$MIGRATION_LOG" 2>/dev/null || echo "No log"; mpause ;;
             0) return ;;
