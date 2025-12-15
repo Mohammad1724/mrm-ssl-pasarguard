@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.4 (Fix: PostgreSQL Custom ENUM Types)
+# Version: 10.5 (Fix: PostgreSQL Arrays + Complete Type Handling)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -324,21 +324,15 @@ try:
     with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # 1. Extract custom ENUM types from CREATE TYPE statements
-    # Pattern: CREATE TYPE typename AS ENUM ('val1', 'val2', ...);
-    custom_types = {}
-    type_pattern = r"CREATE TYPE\s+(\w+)\s+AS\s+ENUM\s*\(([^)]+)\)"
-    for match in re.finditer(type_pattern, sql, re.I):
-        type_name = match.group(1).lower()
-        values = match.group(2)
-        custom_types[type_name] = values
-        print(f"    Found custom type: {type_name}")
+    # =========================================================================
+    # STEP 1: Remove PostgreSQL specific statements FIRST
+    # =========================================================================
     
-    # 2. Remove PostgreSQL client commands
+    # Remove psql client commands
     sql = re.sub(r'^\\[a-zA-Z].*$', '', sql, flags=re.M)
     
-    # 3. Remove PostgreSQL specific statements
-    patterns = [
+    # Remove PostgreSQL specific statements
+    remove_patterns = [
         r'CREATE TYPE[^;]+;',
         r'CREATE SEQUENCE[^;]+;',
         r'ALTER SEQUENCE[^;]+;',
@@ -356,49 +350,95 @@ try:
         r'ALTER [A-Z]+[^;]+OWNER TO[^;]+;',
     ]
 
-    for p in patterns:
+    for p in remove_patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-    # 4. Remove SQL comments
+    # Remove SQL comments
     sql = re.sub(r'--[^\n]*\n', '\n', sql)
 
-    # 5. Clean up schemas and defaults
+    # =========================================================================
+    # STEP 2: Handle PostgreSQL Arrays BEFORE type conversions
+    # Arrays in PostgreSQL: type[] -> MySQL: JSON
+    # =========================================================================
+    
+    # Convert any array type to JSON: somecolumn typename[] -> somecolumn JSON
+    # This handles: VARCHAR(255)[], TEXT[], INTEGER[], custom_type[], etc.
+    sql = re.sub(r'(\s+\w+\s+)\w+\s*\(\d+\)\s*\[\]', r'\1JSON', sql, flags=re.I)
+    sql = re.sub(r'(\s+\w+\s+)\w+\s*\[\]', r'\1JSON', sql, flags=re.I)
+    
+    # Remove array literal casts like '{}'::type[]
+    sql = re.sub(r"'\{\}'[^,\n\)]*", "NULL", sql)
+    sql = re.sub(r"ARRAY\[[^\]]*\][^,\n\)]*", "NULL", sql, flags=re.I)
+    
+    print("    Arrays converted to JSON")
+
+    # =========================================================================
+    # STEP 3: Clean up schemas and defaults  
+    # =========================================================================
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
-    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'::regclass\)", '', sql, flags=re.I)
+    sql = re.sub(r"DEFAULT\s+nextval\('[^']+'\s*(?:::regclass)?\s*\)", '', sql, flags=re.I)
 
-    # 6. Standard Data Type Mapping
-    types = [
+    # =========================================================================
+    # STEP 4: Standard Data Type Mapping
+    # =========================================================================
+    type_mappings = [
+        # Identity/Serial types
         (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
         (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
         (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
+        
+        # Boolean
         (r'\bBOOLEAN\b', 'TINYINT(1)'),
+        
+        # Timestamps
         (r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME'),
         (r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME'),
         (r'\bTIMESTAMPTZ\b', 'DATETIME'),
+        
+        # JSON
         (r'\bJSONB\b', 'JSON'),
-        (r'\bJSON\b', 'JSON'),
+        
+        # UUID
         (r'\bUUID\b', 'VARCHAR(36)'),
+        
+        # Binary
         (r'\bBYTEA\b', 'LONGBLOB'),
+        
+        # Network types
         (r'\bINET\b', 'VARCHAR(45)'),
         (r'\bCIDR\b', 'VARCHAR(45)'),
+        (r'\bMACADDR\b', 'VARCHAR(17)'),
+        
+        # Character types - handle with size first, then without
         (r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)'),
         (r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)'),
+        (r'\bVARCHAR\s*\((\d+)\)', r'VARCHAR(\1)'),
+        
+        # Numeric types
         (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
         (r'\bREAL\b', 'FLOAT'),
+        (r'\bNUMERIC\s*\((\d+)\s*,\s*(\d+)\)', r'DECIMAL(\1,\2)'),
+        (r'\bNUMERIC\b', 'DECIMAL(10,2)'),
         (r'\bSMALLINT\b', 'SMALLINT'),
         (r'\bBIGINT\b', 'BIGINT'),
         (r'\bINTEGER\b', 'INT'),
+        
+        # Text
+        (r'\bTEXT\b', 'TEXT'),
     ]
     
-    for p, r in types:
-        sql = re.sub(p, r, sql, flags=re.I)
+    for pattern, replacement in type_mappings:
+        sql = re.sub(pattern, replacement, sql, flags=re.I)
 
-    # 7. CRITICAL: Replace PostgreSQL custom ENUM types with VARCHAR
-    # Known Marzban/Pasarguard custom types
-    known_custom_types = [
+    # =========================================================================
+    # STEP 5: Handle Custom ENUM Types (Marzban/Pasarguard specific)
+    # These are PostgreSQL custom types that don't exist in MySQL
+    # =========================================================================
+    
+    custom_enum_types = [
         'proxyhostsecurity',
         'proxyhostfingerprint', 
         'proxyhostalpn',
@@ -412,44 +452,51 @@ try:
         'userrole',
         'protocoltype',
         'flowtype',
+        'proxytype',
+        'proxytypes',
     ]
     
-    # Add any types we found in the SQL
-    all_custom_types = set(known_custom_types)
-    for t in custom_types.keys():
-        all_custom_types.add(t.lower())
-    
-    # Replace each custom type with VARCHAR(128)
-    for custom_type in all_custom_types:
-        # Match the type name as a column type (after column name, before DEFAULT/NOT NULL/,)
-        # Pattern: column_name custom_type -> column_name VARCHAR(128)
-        pattern = r'(\s+)' + custom_type + r'(\s+(?:DEFAULT|NOT NULL|,|\)))'
-        sql = re.sub(pattern, r'\1VARCHAR(128)\2', sql, flags=re.I)
+    replaced_count = 0
+    for enum_type in custom_enum_types:
+        # Pattern: column_name enum_type ...
+        # We need to replace just the type, keeping column name and what follows
         
-        # Also handle: column_name custom_type,
-        pattern2 = r'(\s+)' + custom_type + r'(\s*,)'
-        sql = re.sub(pattern2, r'\1VARCHAR(128)\2', sql, flags=re.I)
+        # Match: whitespace + enum_type + (whitespace or DEFAULT or NOT NULL or comma or paren)
+        pattern = r'(\s+)(' + enum_type + r')(\s+(?:DEFAULT|NOT\s+NULL|PRIMARY|UNIQUE|REFERENCES)|,|\)|\s*$)'
         
-        # And: column_name custom_type)
-        pattern3 = r'(\s+)' + custom_type + r'(\s*\))'
-        sql = re.sub(pattern3, r'\1VARCHAR(128)\2', sql, flags=re.I)
+        def replace_type(m):
+            nonlocal replaced_count
+            replaced_count += 1
+            return m.group(1) + 'VARCHAR(128)' + m.group(3)
+        
+        sql = re.sub(pattern, replace_type, sql, flags=re.I|re.M)
     
-    print(f"    Replaced {len(all_custom_types)} custom types with VARCHAR(128)")
+    print(f"    Replaced {replaced_count} custom enum types")
 
-    # 8. Value corrections
+    # =========================================================================
+    # STEP 6: Value corrections
+    # =========================================================================
+    
+    # Boolean values
     sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
     sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
-    sql = re.sub(r"'t'", "'1'", sql)
-    sql = re.sub(r"'f'", "'0'", sql)
     sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
     sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
-    sql = re.sub(r'::\w+(\[\])?', '', sql)
+    
+    # Remove ALL type casts (::typename)
+    sql = re.sub(r'::[a-zA-Z_][a-zA-Z0-9_]*(\[\])?', '', sql)
+    
+    # Remove nextval calls
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # 9. Convert PostgreSQL quotes to MySQL backticks
+    # =========================================================================
+    # STEP 7: Quote identifiers (PostgreSQL " -> MySQL `)
+    # =========================================================================
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
-    
-    # 10. Quote ALL table names in SQL statements
+
+    # =========================================================================
+    # STEP 8: Quote table names (handles reserved words like 'groups')
+    # =========================================================================
     sql = re.sub(r'CREATE TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'CREATE TABLE `\1`', sql, flags=re.I)
     sql = re.sub(r'INSERT INTO\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'INSERT INTO `\1`', sql, flags=re.I)
     sql = re.sub(r'ALTER TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'ALTER TABLE `\1`', sql, flags=re.I)
@@ -457,13 +504,29 @@ try:
     sql = re.sub(r'REFERENCES\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'REFERENCES `\1`', sql, flags=re.I)
     sql = re.sub(r'\bON\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', r'ON `\1` (', sql, flags=re.I)
 
-    # 11. Fix CREATE TABLE issues
-    sql = re.sub(r',\s*CONSTRAINT\s+`[^`]+`\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
-    
-    # 12. Clean multiple empty lines
-    sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
-    sql = re.sub(r';\s*;', ';', sql)
+    # =========================================================================
+    # STEP 9: Remove unsupported constraints
+    # =========================================================================
+    sql = re.sub(r',\s*CONSTRAINT\s+`?[^`\s]+`?\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
+    sql = re.sub(r',\s*CHECK\s*\([^)]+\)', '', sql, flags=re.I)
 
+    # =========================================================================
+    # STEP 10: Clean up
+    # =========================================================================
+    
+    # Remove multiple empty lines
+    sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
+    
+    # Remove double semicolons
+    sql = re.sub(r';\s*;', ';', sql)
+    
+    # Remove empty parentheses in column definitions (edge case cleanup)
+    sql = re.sub(r'\(\s*\)', '', sql)
+
+    # =========================================================================
+    # STEP 11: Write output with MySQL header
+    # =========================================================================
+    
     header = """SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
 SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
@@ -479,7 +542,7 @@ SET FOREIGN_KEY_CHECKS=1;
     with open(dst_file, 'w', encoding='utf-8') as f:
         f.write(header + sql + footer)
     
-    print("  Python conversion successful")
+    print("  Conversion completed successfully")
         
 except Exception as e:
     print(f"  Python Error: {e}")
@@ -559,14 +622,13 @@ import_migration_to_rebecca() {
         local line_num=$(grep -oP 'at line \K[0-9]+' "$err_file" 2>/dev/null | head -1)
         if [ -n "$line_num" ]; then
             echo ""
-            mwarn "Problematic line $line_num:"
-            sed -n "${line_num}p" "$sql" | head -c 300
+            mwarn "Problematic SQL around line $line_num:"
+            sed -n "$((line_num-2)),$((line_num+2))p" "$sql" 2>/dev/null | head -10
             echo ""
         fi
         
         echo ""
         echo "Full SQL file: $sql"
-        echo "Check log: $MIGRATION_LOG"
         return 1
     fi
 }
@@ -601,7 +663,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.4        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.5        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -658,8 +720,8 @@ do_full_migration() {
     wait_migration_mysql
     
     if ! import_migration_to_rebecca "$mysql_sql"; then
-        mwarn "Import failed. You can manually retry with:"
-        echo "  docker exec -i \$(docker ps --format '{{.Names}}' | grep mysql) mysql -uroot -p\"\$PASS\" $db < $backup_dir/mysql_converted.sql"
+        mwarn "Import failed. Check the SQL file for issues."
+        echo "SQL file: $backup_dir/mysql_converted.sql"
         mpause
     fi
 
@@ -715,7 +777,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.4            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.5            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
