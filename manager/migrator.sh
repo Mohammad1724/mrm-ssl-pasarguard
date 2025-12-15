@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 13.3 (Fix: Add missing 'inbounds_groups_association' table)
+# Version: 13.4 (Fix: Handle 'jwt' table missing columns/defaults)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -164,7 +164,7 @@ export_migration_postgresql() {
     minfo "  User: $user, DB: $db"
     local cname
     cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
+    [ -z "$cname" ] && { merr "  Container not found"; return 1; }
     minfo "  Container: $cname"
 
     local i=0
@@ -371,6 +371,9 @@ import_migration_to_rebecca() {
     create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
     create_table_if_missing "hosts" "id INT PRIMARY KEY AUTO_INCREMENT, remark VARCHAR(255), address VARCHAR(255)"
     create_table_if_missing "inbounds_groups_association" "inbound_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY (inbound_id, group_id)"
+    
+    # Fix 'jwt' table
+    create_table_if_missing "jwt" "id INT PRIMARY KEY AUTO_INCREMENT"
 
     # --- Helper function to add columns dynamically AND relax constraints ---
     ensure_col() {
@@ -384,9 +387,8 @@ import_migration_to_rebecca() {
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
       else
         # If column exists, modify it to allow NULL if it's NOT NULL (fixes 'cannot be null' error)
-        # We only do this for problematic columns (like alpn)
-        if [[ "$col" == "alpn" ]]; then
-             minfo "  Fixing $table.$col to allow NULL..."
+        if [[ "$col" == "alpn" || "$col" == "subscription_secret_key" ]]; then
+             minfo "  Fixing $table.$col to allow NULL/Default..."
              docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
         fi
       fi
@@ -460,7 +462,7 @@ import_migration_to_rebecca() {
     ensure_col "hosts" "is_disabled" "TINYINT(1)"
     ensure_col "hosts" "path" "VARCHAR(255) NULL"
     ensure_col "hosts" "random_user_agent" "TINYINT(1) DEFAULT 0"
-    ensure_col "hosts" "alpn" "VARCHAR(14) NULL DEFAULT NULL"  # Fixed: Force NULL allowed
+    ensure_col "hosts" "alpn" "VARCHAR(14) NULL DEFAULT NULL"
     ensure_col "hosts" "use_sni_as_host" "TINYINT(1) DEFAULT 0"
     ensure_col "hosts" "priority" "INT NOT NULL DEFAULT 0"
     ensure_col "hosts" "http_headers" "JSON"
@@ -470,6 +472,10 @@ import_migration_to_rebecca() {
     ensure_col "hosts" "fragment_settings" "JSON"
     ensure_col "hosts" "status" "VARCHAR(60)"
     ensure_col "hosts" "ech_config_list" "VARCHAR(512) NULL"
+
+    # Fix 'jwt' table columns
+    ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
+    ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -508,7 +514,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.3        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v13.4        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -588,7 +594,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v13.3            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v13.4            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
