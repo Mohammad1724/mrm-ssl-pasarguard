@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.1 (Data-only export, public schema fix, JSON-safe, skip \commands)
+# Version: 12.2 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -336,11 +336,13 @@ import_migration_to_rebecca() {
     
     minfo "  Container: $cname, DB: $db"
     minfo "  SQL: $(du -h "$sql" | cut -f1), $(wc -l < "$sql") lines"
-    minfo "  Resetting database..."
-    docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS \`$db\`; CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+
+    # IMPORTANT: Do NOT drop database; assume Rebecca created schema & tables.
+    minfo "  Ensuring database \`$db\` exists (no DROP)..."
+    docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
     local err_file="$MIGRATION_TEMP/mysql.err"
-    minfo "  Importing..."
+    minfo "  Importing data into existing schema..."
 
     if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" <"$sql" 2>"$err_file"; then
         local tables
@@ -374,7 +376,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.1        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.2        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -387,7 +389,10 @@ do_full_migration() {
     check_migration_rebecca || { merr "Rebecca not installed"; mpause; return 1; }; mok "Rebecca found"
     check_migration_rebecca_mysql || { merr "Rebecca needs MySQL"; mpause; return 1; }; mok "MySQL verified"
 
-    echo ""; read -p "Type 'migrate' to start: " confirm
+    echo ""
+    echo -e "${YELLOW}IMPORTANT:${NC} Make sure Rebecca has been started at least once so it can create its MySQL schema (tables)."
+    echo ""
+    read -p "Type 'migrate' to start: " confirm
     [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
 
     echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
@@ -451,7 +456,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.1            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.2            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
