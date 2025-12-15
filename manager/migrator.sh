@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 11.1 (Fix: Multi-line CREATE TYPE removal)
+# Version: 11.2 (Bulletproof CREATE TYPE removal)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -263,51 +263,12 @@ import sys
 
 def convert_pg_to_mysql(input_file, output_file):
     with open(input_file, 'r', encoding='utf-8', errors='replace') as f:
-        content = f.read()
+        lines = f.readlines()
     
-    # ============================================================
-    # STEP 1: Remove multi-line PostgreSQL statements FIRST
-    # ============================================================
-    
-    # Remove CREATE TYPE ... AS ENUM (...); - can span multiple lines
-    content = re.sub(r'CREATE\s+TYPE\s+\w+\s+AS\s+ENUM\s*\([^)]+\)\s*;', '', content, flags=re.S|re.I)
-    
-    # Remove CREATE SEQUENCE ... ;
-    content = re.sub(r'CREATE\s+SEQUENCE[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove ALTER SEQUENCE ... ;
-    content = re.sub(r'ALTER\s+SEQUENCE[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove SELECT setval(...);
-    content = re.sub(r'SELECT\s+setval\s*\([^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove SELECT pg_catalog...;
-    content = re.sub(r'SELECT\s+pg_catalog\.[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove ALTER TABLE ... SET DEFAULT nextval...;
-    content = re.sub(r'ALTER\s+TABLE[^;]+SET\s+DEFAULT\s+nextval[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove ALTER ... OWNER TO ...;
-    content = re.sub(r'ALTER\s+\w+[^;]+OWNER\s+TO[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove CREATE EXTENSION ...;
-    content = re.sub(r'CREATE\s+EXTENSION[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove COMMENT ON ...;
-    content = re.sub(r'COMMENT\s+ON[^;]+;', '', content, flags=re.S|re.I)
-    
-    # Remove GRANT/REVOKE ...;
-    content = re.sub(r'GRANT\s+[^;]+;', '', content, flags=re.S|re.I)
-    content = re.sub(r'REVOKE\s+[^;]+;', '', content, flags=re.S|re.I)
-    
-    print("    Removed PostgreSQL-specific statements")
-    
-    # ============================================================
-    # STEP 2: Process line by line
-    # ============================================================
-    
-    lines = content.split('\n')
     result_lines = []
+    skip_until_semicolon = False
+    in_create_table = False
+    types_removed = 0
     
     MYSQL_TYPES = {
         'INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'MEDIUMINT',
@@ -319,27 +280,88 @@ def convert_pg_to_mysql(input_file, output_file):
         'AUTO_INCREMENT', 'PRIMARY', 'KEY', 'NOT', 'NULL', 'DEFAULT', 'UNIQUE'
     }
     
-    skip_patterns = [
-        r'^\s*\\',           # psql commands
-        r'^\s*--',           # comments  
-        r'^\s*SET\s+\w+',    # SET commands
-    ]
-    
-    in_create_table = False
-    
-    for line in lines:
-        # Skip certain lines
-        skip = False
-        for p in skip_patterns:
-            if re.match(p, line, re.I):
-                skip = True
-                break
-        if skip:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        original_line = line
+        
+        # ============================================================
+        # SKIP LOGIC - Handle multi-line statements
+        # ============================================================
+        
+        if skip_until_semicolon:
+            if ';' in line:
+                skip_until_semicolon = False
+            i += 1
             continue
         
-        # Skip empty lines at start
-        if not result_lines and not line.strip():
+        # Skip psql commands
+        if line.strip().startswith('\\'):
+            i += 1
             continue
+        
+        # Skip comments
+        if line.strip().startswith('--'):
+            i += 1
+            continue
+        
+        # Skip SET commands
+        if re.match(r'^\s*SET\s+', line, re.I):
+            i += 1
+            continue
+        
+        # ============================================================
+        # CRITICAL: Skip CREATE TYPE statements (multi-line)
+        # ============================================================
+        if re.match(r'^\s*CREATE\s+TYPE\b', line, re.I):
+            types_removed += 1
+            # Skip until we find the closing );
+            while i < len(lines):
+                if ');' in lines[i]:
+                    i += 1
+                    break
+                i += 1
+            continue
+        
+        # Skip CREATE SEQUENCE
+        if re.match(r'^\s*CREATE\s+SEQUENCE\b', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # Skip ALTER SEQUENCE
+        if re.match(r'^\s*ALTER\s+SEQUENCE\b', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # Skip SELECT setval/pg_catalog
+        if re.match(r'^\s*SELECT\s+(setval|pg_catalog)', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # Skip ALTER ... OWNER TO
+        if re.match(r'^\s*ALTER\s+.*OWNER\s+TO', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # Skip ALTER TABLE ... SET DEFAULT nextval
+        if re.match(r'^\s*ALTER\s+TABLE.*SET\s+DEFAULT\s+nextval', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # Skip COMMENT ON, GRANT, REVOKE, CREATE EXTENSION
+        if re.match(r'^\s*(COMMENT\s+ON|GRANT\s+|REVOKE\s+|CREATE\s+EXTENSION)', line, re.I):
+            skip_until_semicolon = ';' not in line
+            i += 1
+            continue
+        
+        # ============================================================
+        # TRANSFORMATIONS
+        # ============================================================
         
         # Track CREATE TABLE
         if re.match(r'^\s*CREATE\s+TABLE', line, re.I):
@@ -347,9 +369,7 @@ def convert_pg_to_mysql(input_file, output_file):
         if in_create_table and ');' in line:
             in_create_table = False
         
-        # === LINE TRANSFORMATIONS ===
-        
-        # Remove type casts: 'value'::type -> 'value'
+        # Remove type casts
         line = re.sub(r"('[^']*')::\w+(\([^)]*\))?", r'\1', line)
         line = re.sub(r"(\d+)::\w+", r'\1', line)
         line = re.sub(r"::\w+(\[\])?", '', line)
@@ -410,8 +430,9 @@ def convert_pg_to_mysql(input_file, output_file):
                 indent, col, type_name, rest = match.groups()
                 type_upper = type_name.upper()
                 base = type_upper.split('(')[0]
+                col_clean = col.strip('`').upper()
                 
-                if base not in MYSQL_TYPES and col.strip('`').upper() not in ['PRIMARY', 'UNIQUE', 'CONSTRAINT', 'CHECK', 'FOREIGN', 'KEY', 'INDEX']:
+                if base not in MYSQL_TYPES and col_clean not in ['PRIMARY', 'UNIQUE', 'CONSTRAINT', 'CHECK', 'FOREIGN', 'KEY', 'INDEX']:
                     print(f"    Unknown type: {type_name} -> VARCHAR(255)")
                     line = f"{indent}{col} VARCHAR(255){rest}"
         
@@ -420,8 +441,11 @@ def convert_pg_to_mysql(input_file, output_file):
         line = re.sub(r',?\s*CHECK\s*\([^)]+\)', '', line, flags=re.I)
         
         result_lines.append(line)
+        i += 1
     
-    result = '\n'.join(result_lines)
+    print(f"    Removed {types_removed} CREATE TYPE statements")
+    
+    result = ''.join(result_lines)
     
     # Final cleanups
     result = re.sub(r'\n\s*\n\s*\n+', '\n\n', result)
@@ -529,7 +553,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.1        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v11.2        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -617,7 +641,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v11.1            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v11.2            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
