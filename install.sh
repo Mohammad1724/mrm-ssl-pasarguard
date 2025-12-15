@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Installer for MRM Manager v2.0
+# Installer for MRM Manager v2.1 (Fix Loop Issue)
 INSTALL_DIR="/opt/mrm-manager"
-# لینک ریپازیتوری (مطمئن شوید درست است)
+# لینک ریپازیتوری شما
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
 # Colors
@@ -18,7 +18,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 1. Dependency Check (Auto-Detect OS)
+# 1. Dependency Check
 echo -e "${BLUE}Checking dependencies...${NC}"
 if ! command -v curl &> /dev/null; then
     echo -e "${YELLOW}Installing curl...${NC}"
@@ -33,6 +33,7 @@ fi
 
 # 2. Setup Directory
 echo -e "${BLUE}Installing MRM Manager...${NC}"
+rm -rf "$INSTALL_DIR" # Clean old install to prevent conflicts
 mkdir -p "$INSTALL_DIR"
 
 FILES=(
@@ -47,23 +48,16 @@ install_file() {
     local FILE=$1
     local IS_OPTIONAL=$2
 
-    # Try Local First
-    if [ -f "./$FILE" ]; then
-        cp "./$FILE" "$INSTALL_DIR/$FILE"
-        chmod +x "$INSTALL_DIR/$FILE"
-        echo -e "${GREEN}✔ Installed (Local): $FILE${NC}"
-        return 0
-    fi
-
-    # Try Download (Secure)
+    # Download Forcefully (Overwrite)
     if curl -s -L -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
         chmod +x "$INSTALL_DIR/$FILE"
         echo -e "${GREEN}✔ Downloaded: $FILE${NC}"
         return 0
     else
-        # Try Download (Insecure Fallback)
+        # Try Insecure Fallback
         if curl -s -L -k -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
              echo -e "${YELLOW}✔ Downloaded (Insecure Mode): $FILE${NC}"
+             chmod +x "$INSTALL_DIR/$FILE"
              return 0
         fi
 
@@ -87,29 +81,21 @@ for FILE in "${OPT_FILES[@]}"; do
     install_file "$FILE" "true"
 done
 
-# 3. Create Wrapper Command (FIXED)
-# این بخش باعث می‌شود دستور mrm از هر پوشه‌ای کار کند
+# 3. Create Wrapper Command (FIXED LOOP ISSUE)
+# استفاده از exec برای جلوگیری از Fork Bomb
+# استفاده از مسیر کامل /bin/bash
 echo -e "#!/bin/bash
 cd $INSTALL_DIR
-# اجرای فایل اصلی با دسترسی‌های درست
-bash ./main.sh \"\$@\"
+exec /bin/bash ./main.sh \"\$@\"
 " > /usr/local/bin/mrm
 
-# اعمال دسترسی اجرا
 chmod +x /usr/local/bin/mrm
 chmod +x "$INSTALL_DIR/main.sh"
 
-# 4. Finalize
-# پاک کردن کش مسیرها تا دستور جدید شناسایی شود
+# Refresh Hash
 hash -r 2>/dev/null
 
 echo ""
 echo -e "${GREEN}✔ Installation Complete!${NC}"
-echo -e "${YELLOW}Type 'mrm' to run the manager anytime.${NC}"
+echo -e "${YELLOW}Type 'mrm' to run the manager.${NC}"
 echo ""
-
-# 5. Launch Immediately (FIXED)
-# به جای mrm خالی، آدرس کامل را صدا می‌زنیم تا مطمئن شویم اجرا می‌شود
-echo -e "${BLUE}Launching Manager...${NC}"
-sleep 1
-/usr/local/bin/mrm
