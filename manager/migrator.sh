@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.2 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands)
+# Version: 12.3 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
+#                auto-add missing columns in admins)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -341,6 +342,15 @@ import_migration_to_rebecca() {
     minfo "  Ensuring database \`$db\` exists (no DROP)..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
+    # Auto-add missing columns in admins (for Pasarguard → Rebecca compatibility)
+    minfo "  Ensuring admins table has required columns (is_sudo, notification_enable)..."
+    docker exec "$cname" mysql -uroot -p"$pass" "$db" \
+      -e "CREATE TABLE IF NOT EXISTS admins (id INT PRIMARY KEY AUTO_INCREMENT) ENGINE=InnoDB;" 2>/dev/null || true
+    docker exec "$cname" mysql -uroot -p"$pass" "$db" \
+      -e "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;" 2>/dev/null || true
+    docker exec "$cname" mysql -uroot -p"$pass" "$db" \
+      -e "ALTER TABLE admins ADD COLUMN IF NOT EXISTS notification_enable TEXT;" 2>/dev/null || true
+
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
 
@@ -362,7 +372,7 @@ import_migration_to_rebecca() {
 
 migrate_migration_configs() {
     minfo "Migrating configs..."
-    [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ] && return 0
+    [ ! کمپغلحص  "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ] && return 0
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_SUBSCRIPTION_URL_PREFIX" "WEBHOOK_ADDRESS" "WEBHOOK_SECRET")
     local n=0
     for v in "${vars[@]}"; do
@@ -376,7 +386,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.2        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.3        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -456,7 +466,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.2            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.3            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
