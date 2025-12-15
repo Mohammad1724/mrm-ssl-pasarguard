@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.5 (Fix: PostgreSQL Arrays + Complete Type Handling)
+# Version: 10.6 (Fix: Python nonlocal scope issue)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -20,10 +20,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
-
-#==============================================================================
-# HELPERS
-#==============================================================================
 
 migration_init() {
     MIGRATION_TEMP=$(mktemp -d /tmp/mrm-migration-XXXXXX 2>/dev/null) || MIGRATION_TEMP="/tmp/mrm-migration-$$"
@@ -49,10 +45,6 @@ mpause() {
     read -n 1 -s -r
     echo ""
 }
-
-#==============================================================================
-# DATABASE DETECTION
-#==============================================================================
 
 detect_migration_db_type() {
     local panel_dir="$1" data_dir="$2"
@@ -100,10 +92,6 @@ PYEOF
 )"
 }
 
-#==============================================================================
-# CONTAINER MANAGEMENT
-#==============================================================================
-
 find_migration_pg_container() {
     local cname=""
     for svc in timescaledb db postgres postgresql database; do
@@ -150,10 +138,6 @@ stop_migration_panel() {
     mok "$name stopped"
 }
 
-#==============================================================================
-# BACKUP
-#==============================================================================
-
 create_migration_backup() {
     minfo "Creating backup..."
     local ts=$(date +%Y%m%d_%H%M%S)
@@ -196,13 +180,6 @@ create_migration_backup() {
             ;;
     esac
 
-    cat > "$CURRENT_MIGRATION_BACKUP/info.txt" << EOF
-Date: $(date)
-Host: $(hostname)
-Database: $db_type
-Export: $export_success
-EOF
-
     mok "Backup: $CURRENT_MIGRATION_BACKUP"
     [ "$export_success" = true ]
 }
@@ -226,21 +203,18 @@ export_migration_postgresql() {
     done
 
     minfo "  Running pg_dump (Safe Mode)..."
-    
     local PG_FLAGS="--no-owner --no-acl --inserts --no-comments"
 
     if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
-            local size=$(du -h "$output_file" | cut -f1)
-            mok "  Exported: $size"
+            mok "  Exported: $(du -h "$output_file" | cut -f1)"
             return 0
         fi
     fi
 
     if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
-            local size=$(du -h "$output_file" | cut -f1)
-            mok "  Exported: $size"
+            mok "  Exported: $(du -h "$output_file" | cut -f1)"
             return 0
         fi
     fi
@@ -260,10 +234,6 @@ export_migration_mysql() {
     fi
     merr "  mysqldump failed"; return 1
 }
-
-#==============================================================================
-# CONVERSION (ROBUST & SAFE)
-#==============================================================================
 
 convert_migration_to_mysql() {
     local src="$1" dst="$2" type="$3"
@@ -324,14 +294,9 @@ try:
     with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # =========================================================================
-    # STEP 1: Remove PostgreSQL specific statements FIRST
-    # =========================================================================
-    
-    # Remove psql client commands
+    # STEP 1: Remove PostgreSQL specific statements
     sql = re.sub(r'^\\[a-zA-Z].*$', '', sql, flags=re.M)
     
-    # Remove PostgreSQL specific statements
     remove_patterns = [
         r'CREATE TYPE[^;]+;',
         r'CREATE SEQUENCE[^;]+;',
@@ -353,71 +318,40 @@ try:
     for p in remove_patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
-    # Remove SQL comments
     sql = re.sub(r'--[^\n]*\n', '\n', sql)
 
-    # =========================================================================
-    # STEP 2: Handle PostgreSQL Arrays BEFORE type conversions
-    # Arrays in PostgreSQL: type[] -> MySQL: JSON
-    # =========================================================================
-    
-    # Convert any array type to JSON: somecolumn typename[] -> somecolumn JSON
-    # This handles: VARCHAR(255)[], TEXT[], INTEGER[], custom_type[], etc.
+    # STEP 2: Handle PostgreSQL Arrays -> JSON
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\(\d+\)\s*\[\]', r'\1JSON', sql, flags=re.I)
     sql = re.sub(r'(\s+\w+\s+)\w+\s*\[\]', r'\1JSON', sql, flags=re.I)
-    
-    # Remove array literal casts like '{}'::type[]
     sql = re.sub(r"'\{\}'[^,\n\)]*", "NULL", sql)
     sql = re.sub(r"ARRAY\[[^\]]*\][^,\n\)]*", "NULL", sql, flags=re.I)
-    
     print("    Arrays converted to JSON")
 
-    # =========================================================================
-    # STEP 3: Clean up schemas and defaults  
-    # =========================================================================
+    # STEP 3: Clean up
     sql = re.sub(r'public\.', '', sql)
     sql = re.sub(r'USING btree', '', sql, flags=re.I)
     sql = re.sub(r"DEFAULT\s+nextval\('[^']+'\s*(?:::regclass)?\s*\)", '', sql, flags=re.I)
 
-    # =========================================================================
     # STEP 4: Standard Data Type Mapping
-    # =========================================================================
     type_mappings = [
-        # Identity/Serial types
         (r'\bGENERATED\s+BY\s+DEFAULT\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bGENERATED\s+ALWAYS\s+AS\s+IDENTITY(\s*\([^)]*\))?', 'AUTO_INCREMENT'),
         (r'\bSERIAL\b', 'INT AUTO_INCREMENT'),
         (r'\bBIGSERIAL\b', 'BIGINT AUTO_INCREMENT'),
         (r'\bSMALLSERIAL\b', 'SMALLINT AUTO_INCREMENT'),
-        
-        # Boolean
         (r'\bBOOLEAN\b', 'TINYINT(1)'),
-        
-        # Timestamps
         (r'\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b', 'DATETIME'),
         (r'\bTIMESTAMP\s+WITHOUT\s+TIME\s+ZONE\b', 'DATETIME'),
         (r'\bTIMESTAMPTZ\b', 'DATETIME'),
-        
-        # JSON
         (r'\bJSONB\b', 'JSON'),
-        
-        # UUID
         (r'\bUUID\b', 'VARCHAR(36)'),
-        
-        # Binary
         (r'\bBYTEA\b', 'LONGBLOB'),
-        
-        # Network types
         (r'\bINET\b', 'VARCHAR(45)'),
         (r'\bCIDR\b', 'VARCHAR(45)'),
         (r'\bMACADDR\b', 'VARCHAR(17)'),
-        
-        # Character types - handle with size first, then without
         (r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)'),
         (r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)'),
         (r'\bVARCHAR\s*\((\d+)\)', r'VARCHAR(\1)'),
-        
-        # Numeric types
         (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
         (r'\bREAL\b', 'FLOAT'),
         (r'\bNUMERIC\s*\((\d+)\s*,\s*(\d+)\)', r'DECIMAL(\1,\2)'),
@@ -425,78 +359,41 @@ try:
         (r'\bSMALLINT\b', 'SMALLINT'),
         (r'\bBIGINT\b', 'BIGINT'),
         (r'\bINTEGER\b', 'INT'),
-        
-        # Text
         (r'\bTEXT\b', 'TEXT'),
     ]
     
     for pattern, replacement in type_mappings:
         sql = re.sub(pattern, replacement, sql, flags=re.I)
 
-    # =========================================================================
-    # STEP 5: Handle Custom ENUM Types (Marzban/Pasarguard specific)
-    # These are PostgreSQL custom types that don't exist in MySQL
-    # =========================================================================
-    
+    # STEP 5: Handle Custom ENUM Types -> VARCHAR(128)
     custom_enum_types = [
-        'proxyhostsecurity',
-        'proxyhostfingerprint', 
-        'proxyhostalpn',
-        'userstatus',
-        'userdatausageresetstrategy',
-        'nodeusagestatus',
-        'nodestatus',
-        'remindertype',
-        'admin_role',
-        'adminrole',
-        'userrole',
-        'protocoltype',
-        'flowtype',
-        'proxytype',
-        'proxytypes',
+        'proxyhostsecurity', 'proxyhostfingerprint', 'proxyhostalpn',
+        'userstatus', 'userdatausageresetstrategy', 'nodeusagestatus',
+        'nodestatus', 'remindertype', 'admin_role', 'adminrole',
+        'userrole', 'protocoltype', 'flowtype', 'proxytype', 'proxytypes',
     ]
     
     replaced_count = 0
     for enum_type in custom_enum_types:
-        # Pattern: column_name enum_type ...
-        # We need to replace just the type, keeping column name and what follows
-        
-        # Match: whitespace + enum_type + (whitespace or DEFAULT or NOT NULL or comma or paren)
-        pattern = r'(\s+)(' + enum_type + r')(\s+(?:DEFAULT|NOT\s+NULL|PRIMARY|UNIQUE|REFERENCES)|,|\)|\s*$)'
-        
-        def replace_type(m):
-            nonlocal replaced_count
-            replaced_count += 1
-            return m.group(1) + 'VARCHAR(128)' + m.group(3)
-        
-        sql = re.sub(pattern, replace_type, sql, flags=re.I|re.M)
+        pattern = r'(\s+)' + enum_type + r'(\s+(?:DEFAULT|NOT\s+NULL|PRIMARY|UNIQUE|REFERENCES)|,|\)|\s*$)'
+        new_sql, count = re.subn(pattern, r'\1VARCHAR(128)\2', sql, flags=re.I|re.M)
+        replaced_count += count
+        sql = new_sql
     
     print(f"    Replaced {replaced_count} custom enum types")
 
-    # =========================================================================
     # STEP 6: Value corrections
-    # =========================================================================
-    
-    # Boolean values
     sql = re.sub(r"'t'::boolean", "'1'", sql, flags=re.I)
     sql = re.sub(r"'f'::boolean", "'0'", sql, flags=re.I)
     sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
     sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
-    
-    # Remove ALL type casts (::typename)
     sql = re.sub(r'::[a-zA-Z_][a-zA-Z0-9_]*(\[\])?', '', sql)
-    
-    # Remove nextval calls
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # =========================================================================
-    # STEP 7: Quote identifiers (PostgreSQL " -> MySQL `)
-    # =========================================================================
+    # STEP 7: Quote identifiers
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
 
-    # =========================================================================
-    # STEP 8: Quote table names (handles reserved words like 'groups')
-    # =========================================================================
+    # STEP 8: Quote table names
     sql = re.sub(r'CREATE TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'CREATE TABLE `\1`', sql, flags=re.I)
     sql = re.sub(r'INSERT INTO\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'INSERT INTO `\1`', sql, flags=re.I)
     sql = re.sub(r'ALTER TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'ALTER TABLE `\1`', sql, flags=re.I)
@@ -504,29 +401,15 @@ try:
     sql = re.sub(r'REFERENCES\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'REFERENCES `\1`', sql, flags=re.I)
     sql = re.sub(r'\bON\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', r'ON `\1` (', sql, flags=re.I)
 
-    # =========================================================================
     # STEP 9: Remove unsupported constraints
-    # =========================================================================
     sql = re.sub(r',\s*CONSTRAINT\s+`?[^`\s]+`?\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
     sql = re.sub(r',\s*CHECK\s*\([^)]+\)', '', sql, flags=re.I)
 
-    # =========================================================================
     # STEP 10: Clean up
-    # =========================================================================
-    
-    # Remove multiple empty lines
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
-    
-    # Remove double semicolons
     sql = re.sub(r';\s*;', ';', sql)
-    
-    # Remove empty parentheses in column definitions (edge case cleanup)
     sql = re.sub(r'\(\s*\)', '', sql)
 
-    # =========================================================================
-    # STEP 11: Write output with MySQL header
-    # =========================================================================
-    
     header = """SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
 SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';
@@ -560,10 +443,6 @@ PYEOF
     fi
 }
 
-#==============================================================================
-# REBECCA FUNCTIONS
-#==============================================================================
-
 check_migration_rebecca() { [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]; }
 check_migration_rebecca_mysql() { [ -f "$REBECCA_DIR/.env" ] && grep -qiE "mysql|mariadb" "$REBECCA_DIR/.env"; }
 
@@ -594,9 +473,7 @@ import_migration_to_rebecca() {
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
-    local sql_size=$(du -h "$sql" | cut -f1)
-    local sql_lines=$(wc -l < "$sql")
-    minfo "  SQL file: $sql_size, $sql_lines lines"
+    minfo "  SQL file: $(du -h "$sql" | cut -f1), $(wc -l < "$sql") lines"
 
     minfo "  Resetting database..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS \`$db\`; CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
@@ -617,14 +494,12 @@ import_migration_to_rebecca() {
     else
         merr "Import failed! Error details:"
         grep -v "Using a password" "$err_file" | tail -15
-        mlog "MySQL Error: $(cat $err_file)"
         
         local line_num=$(grep -oP 'at line \K[0-9]+' "$err_file" 2>/dev/null | head -1)
         if [ -n "$line_num" ]; then
             echo ""
             mwarn "Problematic SQL around line $line_num:"
             sed -n "$((line_num-2)),$((line_num+2))p" "$sql" 2>/dev/null | head -10
-            echo ""
         fi
         
         echo ""
@@ -649,21 +524,13 @@ migrate_migration_configs() {
         fi
     done
     mok "Migrated $n variables"
-
-    [ -d "$PASARGUARD_DATA/certs" ] && { mkdir -p "$REBECCA_DATA/certs"; cp -r "$PASARGUARD_DATA/certs/"* "$REBECCA_DATA/certs/" 2>/dev/null; }
-    [ -f "$PASARGUARD_DATA/xray_config.json" ] && { mkdir -p "$REBECCA_DATA"; cp "$PASARGUARD_DATA/xray_config.json" "$REBECCA_DATA/" 2>/dev/null; }
-    [ -d "$PASARGUARD_DATA/templates" ] && { mkdir -p "$REBECCA_DATA/templates"; cp -r "$PASARGUARD_DATA/templates/"* "$REBECCA_DATA/templates/" 2>/dev/null; }
 }
-
-#==============================================================================
-# MAIN MIGRATION
-#==============================================================================
 
 do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.5        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.6        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -734,7 +601,6 @@ do_full_migration() {
     echo -e "${GREEN}   Migration completed!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
-    echo "Converted SQL: $backup_dir/mysql_converted.sql"
 
     migration_cleanup
     mpause
@@ -777,7 +643,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.5            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.6            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
