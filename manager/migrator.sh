@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca
-# Version: 10.2 (Fix: Binary Mode Import & Backslash Escape)
+# Version: 10.3 (Fix: MySQL Reserved Keywords - groups, order, user, etc.)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -227,11 +227,8 @@ export_migration_postgresql() {
 
     minfo "  Running pg_dump (Safe Mode)..."
     
-    # CRITICAL: --inserts creates INSERT statements instead of COPY
-    # --no-comments removes PostgreSQL comments
     local PG_FLAGS="--no-owner --no-acl --inserts --no-comments"
 
-    # Try with user
     if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
@@ -240,7 +237,6 @@ export_migration_postgresql() {
         fi
     fi
 
-    # Try with password
     if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
@@ -328,7 +324,7 @@ try:
     with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
         sql = f.read()
 
-    # 1. Remove PostgreSQL client commands (CRITICAL: \connect, \c, etc.)
+    # 1. Remove PostgreSQL client commands
     sql = re.sub(r'^\\[a-zA-Z].*$', '', sql, flags=re.M)
     
     # 2. Remove PostgreSQL specific statements
@@ -378,7 +374,6 @@ try:
         (r'\bBYTEA\b', 'LONGBLOB'),
         (r'\bINET\b', 'VARCHAR(45)'),
         (r'\bCIDR\b', 'VARCHAR(45)'),
-        (r'\bMACCHARACTER\b', 'VARCHAR(17)'),
         (r'\bCHARACTER\s+VARYING\s*\((\d+)\)', r'VARCHAR(\1)'),
         (r'\bCHARACTER\s+VARYING\b', 'VARCHAR(255)'),
         (r'\bDOUBLE\s+PRECISION\b', 'DOUBLE'),
@@ -398,24 +393,38 @@ try:
     sql = re.sub(r"'f'", "'0'", sql)
     sql = re.sub(r'\bTRUE\b', '1', sql, flags=re.I)
     sql = re.sub(r'\bFALSE\b', '0', sql, flags=re.I)
-    
-    # Remove type casts like ::text, ::integer, ::jsonb[]
     sql = re.sub(r'::\w+(\[\])?', '', sql)
-    
-    # Remove nextval calls
     sql = re.sub(r"nextval\('[^']+'\)", 'NULL', sql, flags=re.I)
 
-    # 7. Quotes: PostgreSQL "name" -> MySQL `name`
+    # 7. Convert PostgreSQL quotes to MySQL backticks
     sql = re.sub(r'"([a-zA-Z_][a-zA-Z0-9_]*)"', r'`\1`', sql)
     
-    # 8. Fix CREATE TABLE issues
-    # Remove CONSTRAINT with complex expressions
+    # 8. CRITICAL: Quote ALL table names in SQL statements (fixes reserved keywords like 'groups')
+    # This ensures table names like 'groups', 'order', 'user' are properly quoted
+    
+    # CREATE TABLE tablename -> CREATE TABLE `tablename`
+    sql = re.sub(r'CREATE TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'CREATE TABLE `\1`', sql, flags=re.I)
+    
+    # INSERT INTO tablename -> INSERT INTO `tablename`
+    sql = re.sub(r'INSERT INTO\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'INSERT INTO `\1`', sql, flags=re.I)
+    
+    # ALTER TABLE tablename -> ALTER TABLE `tablename`
+    sql = re.sub(r'ALTER TABLE\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'ALTER TABLE `\1`', sql, flags=re.I)
+    
+    # DROP TABLE tablename -> DROP TABLE `tablename`
+    sql = re.sub(r'DROP TABLE\s+(?:IF EXISTS\s+)?(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'DROP TABLE IF EXISTS `\1`', sql, flags=re.I)
+    
+    # REFERENCES tablename -> REFERENCES `tablename`
+    sql = re.sub(r'REFERENCES\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)', r'REFERENCES `\1`', sql, flags=re.I)
+    
+    # CREATE INDEX ... ON tablename -> ON `tablename`
+    sql = re.sub(r'\bON\s+(?!`)([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', r'ON `\1` (', sql, flags=re.I)
+
+    # 9. Fix CREATE TABLE issues
     sql = re.sub(r',\s*CONSTRAINT\s+`[^`]+`\s+CHECK\s*\([^)]+\)', '', sql, flags=re.I)
     
-    # 9. Clean multiple empty lines
+    # 10. Clean multiple empty lines
     sql = re.sub(r'\n\s*\n\s*\n+', '\n\n', sql)
-    
-    # 10. Remove empty statements
     sql = re.sub(r';\s*;', ';', sql)
 
     header = """SET NAMES utf8mb4;
@@ -485,25 +494,20 @@ import_migration_to_rebecca() {
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
-    # Show SQL file info
     local sql_size=$(du -h "$sql" | cut -f1)
     local sql_lines=$(wc -l < "$sql")
     minfo "  SQL file: $sql_size, $sql_lines lines"
 
-    # Reset DB
     minfo "  Resetting database..."
     docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS \`$db\`; CREATE DATABASE \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
-    # Import using stdin with binary mode (CRITICAL: prevents \c interpretation)
     local err_file="$MIGRATION_TEMP/mysql_import.err"
     minfo "  Running MySQL import (binary mode)..."
 
     if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" < "$sql" 2> "$err_file"; then
-        # Count tables
         local tables=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | wc -l)
         mok "Import successful! ($tables tables created)"
         
-        # Show table names
         minfo "  Tables:"
         docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | while read t; do
             echo "    - $t"
@@ -512,18 +516,15 @@ import_migration_to_rebecca() {
         return 0
     else
         merr "Import failed! Error details:"
-        # Filter out password warning
         grep -v "Using a password" "$err_file" | tail -15
         mlog "MySQL Error: $(cat $err_file)"
         
-        # Try to find problematic line
         local line_num=$(grep -oP 'at line \K[0-9]+' "$err_file" 2>/dev/null | head -1)
         if [ -n "$line_num" ]; then
             echo ""
             mwarn "Problematic line $line_num:"
             sed -n "${line_num}p" "$sql" | head -c 300
             echo ""
-            echo "..."
         fi
         
         echo ""
@@ -563,7 +564,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.2        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.3        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -587,7 +588,6 @@ do_full_migration() {
     read -p "Type 'migrate' to start: " confirm
     [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
 
-    # Step 1: Backup
     echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
     is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
     create_migration_backup || { merr "Backup failed"; mpause; migration_cleanup; return 1; }
@@ -595,7 +595,6 @@ do_full_migration() {
     local backup_dir=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     [ ! -d "$backup_dir" ] && { merr "Backup dir not found"; mpause; return 1; }
 
-    # Step 2: Verify
     echo -e "\n${CYAN}━━━ STEP 2: VERIFY ━━━${NC}"
     local src=""
     case "$db_type" in
@@ -605,33 +604,28 @@ do_full_migration() {
     [ ! -s "$src" ] && { merr "Source empty: $src"; mpause; return 1; }
     mok "Source: $(du -h "$src" | cut -f1)"
 
-    # Step 3: Convert
     echo -e "\n${CYAN}━━━ STEP 3: CONVERT ━━━${NC}"
     local mysql_sql="$MIGRATION_TEMP/mysql_import.sql"
     convert_migration_to_mysql "$src" "$mysql_sql" "$db_type" || { mpause; return 1; }
     cp "$mysql_sql" "$backup_dir/mysql_converted.sql" 2>/dev/null
     minfo "Converted SQL saved to: $backup_dir/mysql_converted.sql"
 
-    # Step 4: Stop Pasarguard
     echo -e "\n${CYAN}━━━ STEP 4: STOP PASARGUARD ━━━${NC}"
     stop_migration_panel "$PASARGUARD_DIR" "Pasarguard"
 
-    # Step 5: Migrate configs
     echo -e "\n${CYAN}━━━ STEP 5: CONFIGS ━━━${NC}"
     migrate_migration_configs
 
-    # Step 6: Import
     echo -e "\n${CYAN}━━━ STEP 6: IMPORT ━━━${NC}"
     is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Rebecca"
     wait_migration_mysql
     
     if ! import_migration_to_rebecca "$mysql_sql"; then
         mwarn "Import failed. You can manually retry with:"
-        echo "  docker exec -i $cname mysql -uroot -p\"\$PASS\" $db < $backup_dir/mysql_converted.sql"
+        echo "  docker exec -i \$(docker ps --format '{{.Names}}' | grep mysql) mysql -uroot -p\"\$PASS\" $db < $backup_dir/mysql_converted.sql"
         mpause
     fi
 
-    # Step 7: Restart
     echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
     (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null
     sleep 3
@@ -684,7 +678,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v10.2            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.3            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
