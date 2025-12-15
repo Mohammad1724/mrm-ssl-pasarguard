@@ -17,21 +17,19 @@ detect_active_panel > /dev/null
 
 # --- HELPER FUNCTIONS ---
 edit_file() {
-    if [ -f "$1" ]; then
+    if [ -f "$1" ]; then 
         nano "$1"
-    else
+    else 
         echo -e "${RED}File not found: $1${NC}"
         pause
     fi
 }
 
-# --- CONTROL MENU ---
+# --- CONTROL MENU (NEW) ---
 control_menu() {
     while true; do
         clear
         ui_header "ADMIN & CONTROL ($PANEL_DIR)"
-
-        echo ""
 
         echo -e "${YELLOW}--- Service Control ---${NC}"
         echo "1) Restart Panel"
@@ -51,13 +49,14 @@ control_menu() {
         read -p "Select: " C_OPT
         case $C_OPT in
             1) restart_service "panel"; pause ;;
-            2) cd "$PANEL_DIR" && docker compose down; pause ;;
-            3) cd "$PANEL_DIR" && docker compose up -d; pause ;;
+            2) cd "$PANEL_DIR" && docker compose down; echo "Stopped."; pause ;;
+            3) cd "$PANEL_DIR" && docker compose up -d; echo "Started."; pause ;;
             4) cd "$PANEL_DIR" && docker compose logs -f ;;
             5) admin_create; pause ;;
             6) admin_reset; pause ;;
             7) admin_delete; pause ;;
             0) return ;;
+            *) ;;
         esac
     done
 }
@@ -67,7 +66,6 @@ tools_menu() {
     while true; do
         clear
         ui_header "TOOLS & SETTINGS"
-
         echo "1) Fake Site / Camouflage (Nginx)"
         echo "2) Domain Separator (Panel & Sub)"
         echo "3) Port Manager (Single/Dual Port)"
@@ -79,7 +77,7 @@ tools_menu() {
         echo "9) Restart Node Service"
         echo "10) Show Node SSL Paths"
         echo "0) Back"
-
+        echo ""
         read -p "Select: " T_OPT
         case $T_OPT in
             1) site_menu ;;
@@ -93,6 +91,7 @@ tools_menu() {
             9) restart_service "node"; pause ;;
             10) show_node_ssl ;;
             0) return ;;
+            *) ;;
         esac
     done
 }
@@ -106,20 +105,21 @@ while true; do
     ui_header "MRM MANAGER v2.0"
     ui_status_bar
 
-    echo ""
     echo "  1) SSL Certificates"
     echo "  2) Backup & Restore"
     echo "  3) Tools & Settings"
-    echo "  4) Admin & Service Control"
+    echo "  4) Admin & Service Control"  # New!
+    echo ""
     echo "  0) Exit"
     echo ""
-
     read -p "Select: " OPTION
+
     case $OPTION in
         1) ssl_menu ;;
         2) bash /opt/mrm-manager/backup.sh ;;
         3) tools_menu ;;
         4) control_menu ;;
         0) exit 0 ;;
+        *) ;;
     esac
 done
