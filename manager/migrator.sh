@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #==============================================================================
 # MRM Migration Tool - Pasarguard -> Rebecca  
-# Version: 12.4 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
-#                auto-add missing columns in admins with SHOW COLUMNS)
+# Version: 12.5 (Data-only, no DB DROP, public fix, JSON-safe, skip \commands,
+#                auto-add missing columns in admins)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -25,11 +25,11 @@ migration_init() {
 }
 
 migration_cleanup() { [[ "$MIGRATION_TEMP" == /tmp/* ]] && rm -rf "$MIGRATION_TEMP" 2>/dev/null; }
-mlog() { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG"; }
-minfo() { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
-mok() { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
-mwarn() { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
-merr() { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
+mlog()   { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG"; }
+minfo()  { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
+mok()    { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
+mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
+merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key...${NC}"; read -n 1 -s -r; echo ""; }
 
 detect_migration_db_type() {
@@ -342,29 +342,35 @@ import_migration_to_rebecca() {
     docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
 
     # Auto-add missing columns in admins
-    minfo "  Ensuring admins table & columns (is_sudo, notification_enable)..."
+    minfo "  Ensuring admins table & columns (is_sudo, password_reset_at, telegram_id, discord_webhook, used_traffic, is_disabled, sub_template, sub_domain, profile_title, support_url, discord_id, notification_enable)..."
 
-    # اگر جدول admins وجود ندارد، ایجاد مینیمال (در اکثر موارد، خود Rebecca آن را ساخته است)
+    # اگر جدول admins وجود ندارد، ایجاد مینیمال
     docker exec "$cname" mysql -uroot -p"$pass" "$db" \
       -e "CREATE TABLE IF NOT EXISTS admins (id INT PRIMARY KEY AUTO_INCREMENT) ENGINE=InnoDB;" 2>/dev/null || true
 
-    # چک وجود ستون is_sudo
-    local has_is_sudo
-    has_is_sudo=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM admins LIKE 'is_sudo';" 2>/dev/null || true)
-    if [ -z "$has_is_sudo" ]; then
-        minfo "  Adding column admins.is_sudo..."
+    ensure_col() {
+      local col="$1" def="$2"
+      local exists
+      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM admins LIKE '$col';" 2>/dev/null || true)
+      if [ -z "$exists" ]; then
+        minfo "  Adding column admins.$col ..."
         docker exec "$cname" mysql -uroot -p"$pass" "$db" \
-          -e "ALTER TABLE admins ADD COLUMN is_sudo TINYINT(1) DEFAULT 0;" 2>/dev/null || true
-    fi
+          -e "ALTER TABLE admins ADD COLUMN $col $def;" 2>/dev/null || true
+      fi
+    }
 
-    # چک وجود ستون notification_enable
-    local has_notif
-    has_notif=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM admins LIKE 'notification_enable';" 2>/dev/null || true)
-    if [ -z "$has_notif" ]; then
-        minfo "  Adding column admins.notification_enable..."
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" \
-          -e "ALTER TABLE admins ADD COLUMN notification_enable TEXT;" 2>/dev/null || true
-    fi
+    ensure_col "is_sudo"            "TINYINT(1) DEFAULT 0"
+    ensure_col "password_reset_at"  "DATETIME NULL"
+    ensure_col "telegram_id"        "BIGINT NULL"
+    ensure_col "discord_webhook"    "TEXT NULL"
+    ensure_col "used_traffic"       "BIGINT NULL"
+    ensure_col "is_disabled"        "TINYINT(1) DEFAULT 0"
+    ensure_col "sub_template"       "TEXT NULL"
+    ensure_col "sub_domain"         "TEXT NULL"
+    ensure_col "profile_title"      "TEXT NULL"
+    ensure_col "support_url"        "TEXT NULL"
+    ensure_col "discord_id"         "BIGINT NULL"
+    ensure_col "notification_enable" "TEXT NULL"
 
     local err_file="$MIGRATION_TEMP/mysql.err"
     minfo "  Importing data into existing schema..."
@@ -387,8 +393,9 @@ import_migration_to_rebecca() {
 
 migrate_migration_configs() {
     minfo "Migrating configs..."
-    # فیکس شرط خراب‌شده قبلی
-    [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ] && return 0
+    if [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ]; then
+      return 0
+    fi
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_SUBSCRIPTION_URL_PREFIX" "WEBHOOK_ADDRESS" "WEBHOOK_SECRET")
     local n=0
     for v in "${vars[@]}"; do
@@ -402,7 +409,7 @@ migrate_migration_configs() {
 do_full_migration() {
     migration_init; clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.4        ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v12.5        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
 
     for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
@@ -482,7 +489,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v12.4            ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v12.5            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
         echo " 1) Migrate Pasarguard → Rebecca"
         echo " 2) Rollback to Pasarguard"
