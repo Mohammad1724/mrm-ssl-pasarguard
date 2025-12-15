@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Pasarguard → Rebecca
-# Version: 9.9 (Fix: Verbose Import Error & Robust Conversion)
+# MRM Migration Tool - Pasarguard -> Rebecca
+# Version: 10.1 (Fix: MySQL Import Error & Syntax Fixes)
 #==============================================================================
 
 PASARGUARD_DIR="${PASARGUARD_DIR:-/opt/pasarguard}"
@@ -57,7 +57,7 @@ mpause() {
 detect_migration_db_type() {
     local panel_dir="$1" data_dir="$2"
     [ ! -d "$panel_dir" ] && { echo "not_found"; return 1; }
-    
+
     local env_file="$panel_dir/.env"
     if [ -f "$env_file" ]; then
         local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
@@ -78,9 +78,9 @@ get_migration_db_credentials() {
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_HOST=""; MIG_DB_PORT=""; MIG_DB_NAME=""
     [ ! -f "$env_file" ] && return 1
-    
+
     local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
-    
+
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -212,9 +212,9 @@ export_migration_postgresql() {
     get_migration_db_credentials "$PASARGUARD_DIR"
     local user="${MIG_DB_USER:-pasarguard}"
     local db="${MIG_DB_NAME:-pasarguard}"
-    
+
     minfo "  User: $user, DB: $db"
-    
+
     local cname=$(find_migration_pg_container)
     [ -z "$cname" ] && { merr "  PostgreSQL container not found!"; return 1; }
     minfo "  Container: $cname"
@@ -225,9 +225,14 @@ export_migration_postgresql() {
         sleep 2; i=$((i+2))
     done
 
-    minfo "  Running pg_dump..."
+    minfo "  Running pg_dump (Safe Mode)..."
+    
+    # CRITICAL FIX: Added --attribute-inserts and --disable-dollar-quoting
+    # This forces standard SQL output (INSERT INTO) instead of PostgreSQL COPY
+    local PG_FLAGS="--no-owner --no-acl --attribute-inserts --disable-dollar-quoting"
+
     # Try with user (no password if trust/local)
-    if docker exec "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+    if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
             mok "  Exported: $size"
@@ -236,7 +241,7 @@ export_migration_postgresql() {
     fi
 
     # Try with password
-    if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" --no-owner --no-acl > "$output_file" 2>/dev/null; then
+    if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS > "$output_file" 2>/dev/null; then
         if [ -s "$output_file" ]; then
             local size=$(du -h "$output_file" | cut -f1)
             mok "  Exported: $size"
@@ -253,7 +258,7 @@ export_migration_mysql() {
     get_migration_db_credentials "$PASARGUARD_DIR"
     local cname=$(docker ps --format '{{.Names}}' | grep -iE "pasarguard.*(mysql|mariadb|db)" | head -1)
     [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
-    
+
     if docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" > "$output_file" 2>/dev/null; then
         [ -s "$output_file" ] && { mok "  Exported"; return 0; }
     fi
@@ -278,7 +283,7 @@ convert_migration_sqlite() {
     local src="$1" dst="$2"
     minfo "Converting SQLite → MySQL..."
     [ ! -f "$src" ] && { merr "Source not found"; return 1; }
-    
+
     local dump="$MIGRATION_TEMP/sqlite_dump.sql"
     sqlite3 "$src" .dump > "$dump" 2>/dev/null || { merr "Dump failed"; return 1; }
 
@@ -337,7 +342,7 @@ try:
         r'GRANT\s+[^;]+;',
         r'REVOKE\s+[^;]+;'
     ]
-    
+
     for p in patterns:
         sql = re.sub(p, '', sql, flags=re.S|re.I)
 
@@ -394,7 +399,7 @@ except Exception as e:
     print(f"  Python Error: {e}")
     sys.exit(1)
 PYEOF
-    
+
     if [ $? -eq 0 ] && [ -s "$dst" ]; then
         mok "Conversion successful"
         return 0
@@ -433,7 +438,7 @@ import_migration_to_rebecca() {
     local db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'" || echo "marzban")
     local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
     local cname=$(find_migration_mysql_container)
-    
+
     [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
     minfo "  Container: $cname, DB: $db"
 
@@ -444,9 +449,9 @@ import_migration_to_rebecca() {
     # 2. Reset DB and Import
     local err_file="$MIGRATION_TEMP/mysql_import.err"
     minfo "  Running MySQL import..."
-    
+
     docker exec "$cname" mysql -uroot -p"$pass" -e "DROP DATABASE IF EXISTS $db; CREATE DATABASE $db;" 2>/dev/null
-    
+
     if docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "SOURCE /tmp/migration_dump.sql" > "$err_file" 2>&1; then
         mok "Import successful"
         return 0
@@ -490,7 +495,7 @@ do_full_migration() {
     migration_init
     clear
     echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v9.9         ║${NC}"
+    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v10.1        ║${NC}"
     echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
     echo ""
 
@@ -518,7 +523,7 @@ do_full_migration() {
     echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
     is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Pasarguard"
     create_migration_backup || { merr "Backup failed"; mpause; migration_cleanup; return 1; }
-    
+
     local backup_dir=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     [ ! -d "$backup_dir" ] && { merr "Backup dir not found"; mpause; return 1; }
 
@@ -562,7 +567,7 @@ do_full_migration() {
     echo -e "${GREEN}   Migration completed!${NC}"
     echo -e "${GREEN}════════════════════════════════════════${NC}"
     echo "Backup: $backup_dir"
-    
+
     migration_cleanup
     mpause
 }
@@ -604,7 +609,7 @@ migrator_menu() {
     while true; do
         clear
         echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v9.9             ║${NC}"
+        echo -e "${BLUE}║   MIGRATION TOOLS v10.1            ║${NC}"
         echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
         echo ""
         echo " 1) Migrate Pasarguard → Rebecca"
