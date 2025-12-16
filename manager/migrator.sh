@@ -384,13 +384,38 @@ do_rollback() {
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
     
-    if ui_confirm "Restore $last to Source?" "n"; then
+    echo -e "Restoring backup: ${CYAN}$last${NC}"
+    if ui_confirm "Restore to Source (Pasarguard)?" "n"; then
+        
+        # 1. Find Source Path Again
         local TGT=$(detect_source_panel)
+        [ -z "$TGT" ] && TGT="/opt/pasarguard" # Fallback default
+        
+        minfo "Target for restore: $TGT"
+        
+        # 2. Stop Services
         (cd "$TGT" && docker compose down) &>/dev/null
-        tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
-        tar -xzf "$last/data.tar.gz" -C "/var/lib"
-        (cd "$TGT" && docker compose up -d) &>/dev/null
-        mok "Restored"
+        # Stop Rebecca too just in case
+        local NEW_PANEL=$(detect_target_panel)
+        [ -n "$NEW_PANEL" ] && (cd "$NEW_PANEL" && docker compose down) &>/dev/null
+
+        # 3. Restore Files
+        if [ -f "$last/config.tar.gz" ]; then
+            tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
+            mok "Configs restored"
+        fi
+        
+        if [ -f "$last/data.tar.gz" ]; then
+            # Extract to /var/lib
+            tar -xzf "$last/data.tar.gz" -C "/var/lib"
+            mok "Data directory restored"
+        fi
+        
+        # 4. Start Old Panel
+        minfo "Starting Pasarguard..."
+        (cd "$TGT" && docker compose up -d)
+        
+        mok "Rollback Complete. Pasarguard is running."
     fi
     mpause
 }
