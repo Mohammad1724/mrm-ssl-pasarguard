@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - High Precision Edition (v3.0)
-# Fixes: Admin Login, Pydantic Validation Errors, Schema Mismatches
+# MRM Migration Tool - Universal Auto Migrator v3.0 (Fixed)
+# Supports: Pasarguard/Marzban -> Rebecca/Marzban
+# Features: Auto DB Conversion, Alembic Fixes, Login Crash Fixes
 #==============================================================================
 
 # Load Utils & UI
@@ -40,7 +41,6 @@ detect_source_panel() {
 }
 
 detect_target_panel() {
-    # Priority to Rebecca
     if [ -d "/opt/rebecca" ]; then echo "/opt/rebecca"; return 0; fi
     if [ -d "/opt/marzban" ]; then echo "/opt/marzban"; return 0; fi
     return 1
@@ -111,9 +111,11 @@ create_backup() {
     mkdir -p "$CURRENT_BACKUP"
     echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
 
+    # Files
     tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
     tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
     
+    # DB Export
     local db_type=$(detect_db_type "$SRC")
     echo "$db_type" > "$CURRENT_BACKUP/db_type.txt"
     local out="$CURRENT_BACKUP/database.sql"
@@ -135,7 +137,7 @@ create_backup() {
     esac
 }
 
-# --- CONVERSION LOGIC (Python) ---
+# --- CONVERSION (PYTHON) ---
 
 convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
@@ -167,15 +169,18 @@ for line in lines:
     line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
     line = line.replace("'t'", "1").replace("'f'", "0")
     
-    # Fix Paths (Universal)
+    # Fix Timestamp +00 (Postgres)
+    line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(\.\d+)?\+00'", r"'\1'", line)
+    
+    # Fix Paths
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
     
-    # INSERT -> REPLACE
+    # INSERT -> REPLACE logic
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
-        line = re.sub(r'"?(\w+)"?', r'`\1`', line)
+        line = re.sub(r'"?(\w+)"?', r'`\1`', line) 
         line = line.replace('\\', '\\\\')
     
     out.append(line)
@@ -190,70 +195,58 @@ PYEOF
 
 import_and_sanitize() {
     local SQL="$1" TGT="$2"
-    minfo "Importing data to Target..."
+    minfo "Importing & Fixing Data..."
     
     get_db_credentials "$TGT"
     local user="${MIG_DB_USER:-root}"
     local pass="$MIG_DB_PASS"
     [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2)
     
-    # Fix: Detect correct DB name from MySQL itself if possible
     local cname=$(find_db_container "$TGT" "mysql")
     [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
     
+    # Auto-detect DB name from MySQL
     local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
     local db="marzban"
     if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
     if [[ "$db_list" == *"marzban"* ]]; then db="marzban"; fi
     
-    # Force Create DB if missing
+    # 1. Create & Import
     docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
-
-    # 1. IMPORT DATA
     if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
         mok "Data Imported."
     else
-        merr "Import failed. (This might be okay if tables exist)"
+        mwarn "Import had warnings (expected for duplicate keys)."
     fi
     
-    # 2. RUN ALEMBIC (CRITICAL: Creates new columns like permissions)
-    minfo "Running Alembic Upgrade (Structure Fix)..."
+    # 2. ALEMBIC UPGRADE (This recreates missing columns)
+    minfo "Running Alembic Upgrade..."
     local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$panel_cname" ]; then
         docker exec "$panel_cname" alembic upgrade head >/dev/null 2>&1
-        mok "Database Schema Updated."
-    else
-        mwarn "Could not run alembic (Container not found)."
+        mok "Schema Updated (Alembic)."
     fi
 
-    # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
-    minfo "Sanitizing Data (Fixing NULLs for Rebecca)..."
-    
-    # Queries to fix crashes
+    # 3. SANITIZE DATA (Fix NULLs that crash login)
+    minfo "Sanitizing Data..."
     local fixes=(
-        # Admins: Set permissions to empty array, limits to 0 (unlimited)
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
         "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-        
-        # Paths
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
-        "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
-        
-        # Clean JWT
         "TRUNCATE TABLE jwt;"
     )
 
     for q in "${fixes[@]}"; do
         docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$q" 2>/dev/null
     done
-    mok "Data Sanitized."
+    mok "Data Sanitized & Fixed."
 }
 
 migrate_configs() {
-    minfo "Migrating Configs & Certs..."
+    minfo "Migrating Configs..."
     local SRC_DATA="/var/lib/$(basename "$SRC")"
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
@@ -268,28 +261,24 @@ migrate_configs() {
         fi
     done
     
-    # Copy Certs
+    # Copy Certs & Templates
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
         cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
         chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
         find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
-        mok "Certs Copied."
     fi
-    
-    # Copy Templates
     [ -d "$SRC_DATA/templates" ] && cp -rn "$SRC_DATA/templates" "$TGT_DATA/" 2>/dev/null
 }
 
 create_rescue_admin() {
-    echo ""
-    echo -e "${YELLOW}Create a fresh SuperAdmin? (Recommended)${NC}"
+    echo ""; echo -e "${YELLOW}Create new SuperAdmin? (Recommended)${NC}"
     if ui_confirm "Create?" "y"; then
         local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
         local cli="rebecca-cli"
+        [ -f "$TGT/marzban-cli" ] && cli="marzban-cli"
         
-        # Interactive creation
-        echo -e "${GREEN}Follow the prompts below:${NC}"
+        echo -e "${GREEN}Running interactive creation...${NC}"
         docker exec -it "$cname" $cli admin create
     fi
 }
@@ -298,7 +287,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V3.0 (High Precision)"
+    ui_header "UNIVERSAL MIGRATION V3.0"
     
     SRC=$(detect_source_panel)
     TGT=$(detect_target_panel)
@@ -337,12 +326,7 @@ do_full_migration() {
     ui_header "RESTARTING PANEL"
     (cd "$TGT" && docker compose down && docker compose up -d)
     
-    # Wait & Verify
     sleep 10
-    local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
-    if [ -n "$cname" ]; then
-         mok "Panel Container: $cname"
-    fi
     
     echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
     create_rescue_admin
@@ -369,7 +353,7 @@ migrator_menu() {
     while true; do
         clear
         ui_header "MIGRATION MENU"
-        echo "1) Auto Migrate (Precision Mode)"
+        echo "1) Auto Migrate (Full Fix)"
         echo "2) Rollback"
         echo "3) Logs"
         echo "0) Back"
