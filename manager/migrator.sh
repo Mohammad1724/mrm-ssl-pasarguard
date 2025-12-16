@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool-Universal Auto Migrator v5.2
-# Fixes: MySQL Detection, Service Startup Logic, Import Stability
+# MRM Migration Tool - High Precision Edition (v7.0)
+# Fixes: PostgreSQL Port 6432, Commented Env Lines, SSL Paths, Bot Token
 #==============================================================================
 
 # Load Utils & UI
@@ -34,7 +34,7 @@ mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
 
-# --- DETECTION LOGIC ---
+# --- DETECTION ---
 
 detect_source_panel() {
     if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
@@ -42,7 +42,30 @@ detect_source_panel() {
     return 1
 }
 
-# --- INSTALLATION LOGIC ---
+# --- INSTALLATION & FIXES ---
+
+fix_rebecca_env() {
+    local target="$1"
+    local env_file="$target/.env"
+    
+    minfo "Applying fixes to .env for Host Network..."
+    
+    # 1. Change Driver to pymysql
+    sed -i 's/mysql+asyncmy/mysql+pymysql/g' "$env_file"
+    sed -i 's/mysql+aiomysql/mysql+pymysql/g' "$env_file"
+    
+    # 2. Change Host to 127.0.0.1
+    sed -i 's/@mysql/@127.0.0.1:3306/g' "$env_file"
+    sed -i 's/@mariadb/@127.0.0.1:3306/g' "$env_file"
+    
+    # Ensure it is set if sed failed
+    if ! grep -q "pymysql" "$env_file"; then
+        local pass=$(grep "MYSQL_ROOT_PASSWORD" "$env_file" | cut -d'=' -f2)
+        echo "" >> "$env_file"
+        echo "SQLALCHEMY_DATABASE_URL=\"mysql+pymysql://root:$pass@127.0.0.1:3306/rebecca\"" >> "$env_file"
+    fi
+    mok "Env Fixed."
+}
 
 install_rebecca_wizard() {
     clear
@@ -57,10 +80,10 @@ install_rebecca_wizard() {
     
     eval "$REBECCA_INSTALL_CMD"
     
-    # Check if files exist (ignoring exit code due to Ctrl+C)
     if [ -d "/opt/rebecca" ] && [ -f "/opt/rebecca/docker-compose.yml" ]; then
         echo ""
         mok "Rebecca Installation Verified."
+        fix_rebecca_env "/opt/rebecca"
         return 0
     else
         echo ""
@@ -76,7 +99,8 @@ detect_db_type() {
     [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
 
     if [ -f "$env_file" ]; then
-        local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        # FIX: Only read non-commented lines
+        local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
         case "$db_url" in
             *timescale*|*postgresql*) echo "postgresql" ;;
             *mysql*|*mariadb*) echo "mysql" ;;
@@ -94,15 +118,8 @@ find_db_container() {
     [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
     [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
     
-    # Method 1: Docker Compose (Precise)
     local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
-    
-    # Method 2: Global Search (Fallback if compose is weird)
-    if [ -z "$cname" ]; then
-        local base_name=$(basename "$panel_dir")
-        cname=$(docker ps --format '{{.Names}}' | grep -iE "${base_name}.*(${keywords})" | head -1)
-    fi
-    
+    [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
     echo "$cname"
 }
 
@@ -111,7 +128,9 @@ get_db_credentials() {
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
     
-    local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    # FIX: Get only active config
+    local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -153,7 +172,8 @@ create_backup() {
         postgresql)
             local cname=$(find_db_container "$SRC" "postgresql")
             get_db_credentials "$SRC"
-            docker exec "$cname" pg_dump -U "${MIG_DB_USER:-marzban}" -d "${MIG_DB_NAME:-marzban}" --data-only --column-inserts --disable-dollar-quoting > "$out" 2>/dev/null
+            # Using credentials from .env
+            docker exec "$cname" pg_dump -U "${MIG_DB_USER:-pasarguard}" -d "${MIG_DB_NAME:-pasarguard}" --data-only --column-inserts --disable-dollar-quoting > "$out" 2>/dev/null
             [ -s "$out" ] && mok "Postgres exported" || merr "pg_dump failed"
             ;;
         mysql)
@@ -204,7 +224,7 @@ for line in lines:
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
     
-    # INSERT -> REPLACE logic
+    # INSERT -> REPLACE
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
@@ -233,30 +253,33 @@ import_and_sanitize() {
     local cname=$(find_db_container "$TGT" "mysql")
     [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
     
-    # Auto-detect DB name from MySQL
+    # Auto-detect DB name
     local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
     local db="marzban"
     if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
-    if [[ "$db_list" == *"marzban"* ]]; then db="marzban"; fi
     
     # 1. Create & Import
     docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
     if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
         mok "Data Imported."
     else
-        mwarn "Import had warnings (Duplicate keys or table exists)."
+        mwarn "Import had warnings."
     fi
     
-    # 2. ALEMBIC UPGRADE
-    minfo "Running Alembic Upgrade..."
-    local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
-    if [ -n "$panel_cname" ]; then
-        docker exec "$panel_cname" alembic upgrade head >/dev/null 2>&1
-        mok "Schema Updated (Alembic)."
-    else
-        mwarn "Could not run alembic (Container not found)."
-    fi
-
+    # 2. SCHEMA FIX (MANUAL)
+    minfo "Patching Schema (Manual)..."
+    
+    run_sql() {
+        docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null
+    }
+    
+    # Admins
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;"
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;"
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;"
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;"
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;"
+    
     # 3. SANITIZE DATA
     minfo "Sanitizing Data..."
     local fixes=(
@@ -265,12 +288,17 @@ import_and_sanitize() {
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
+        
+        # Path Correction (Hardcoded for Pasarguard -> Rebecca)
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        
+        # Clean JWT
         "TRUNCATE TABLE jwt;"
     )
 
     for q in "${fixes[@]}"; do
-        docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$q" 2>/dev/null
+        run_sql "$q"
     done
     mok "Data Sanitized & Fixed."
 }
@@ -283,18 +311,36 @@ migrate_configs() {
 
     # Env Merge
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    
+    # Special migration: Map BACKUP_TELEGRAM_BOT_KEY to TELEGRAM_API_TOKEN if needed
+    local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
+    local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
+    
+    if [ -n "$backup_key" ]; then
+        if ! grep -q "^TELEGRAM_API_TOKEN" "$TGT/.env"; then
+            echo "TELEGRAM_API_TOKEN=$backup_key" >> "$TGT/.env"
+            echo "TELEGRAM_ADMIN_ID=$backup_chat" >> "$TGT/.env"
+            minfo "Migrated Backup Bot to Main Bot."
+        fi
+    fi
+
     for v in "${vars[@]}"; do
         local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
         if [ -n "$val" ]; then
+            # Path Replacement
+            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
+            
             sed -i "/^${v}=/d" "$TGT/.env"
             echo "${v}=${val}" >> "$TGT/.env"
         fi
     done
     
-    # Copy Certs
+    # Copy Certs (Recursive)
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
         cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
+        # Fix permissions
         chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
         find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
     fi
@@ -317,13 +363,14 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V5.2"
+    ui_header "UNIVERSAL MIGRATION V7.0"
     
     SRC=$(detect_source_panel)
     
     # --- AUTO INSTALL TRIGGER ---
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
+        fix_rebecca_env "$TGT"
     elif [ -d "/opt/marzban" ]; then
         TGT="/opt/marzban"
     else
@@ -385,7 +432,12 @@ do_rollback() {
     
     if ui_confirm "Restore $last to Source?" "n"; then
         local TGT=$(detect_source_panel)
+        [ -z "$TGT" ] && TGT="/opt/pasarguard"
+        
         (cd "$TGT" && docker compose down) &>/dev/null
+        local NEW_PANEL=$(detect_target_panel)
+        [ -n "$NEW_PANEL" ] && (cd "$NEW_PANEL" && docker compose down) &>/dev/null
+        
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
         (cd "$TGT" && docker compose up -d) &>/dev/null
