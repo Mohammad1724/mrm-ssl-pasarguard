@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Universal Auto Migrator v3.0 (Fixed)
-# Supports: Pasarguard/Marzban -> Rebecca/Marzban
-# Features: Auto DB Conversion, Alembic Fixes, Login Crash Fixes
+# MRM Migration Tool - Universal Auto Migrator v3.1
+# Fixes: Detection Logic, Manual Path Fallback, Full Schema Patching
 #==============================================================================
 
 # Load Utils & UI
@@ -35,12 +34,19 @@ mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -
 # --- DETECTION LOGIC ---
 
 detect_source_panel() {
+    # Check Env vars first
+    if [ -n "$PASARGUARD_DIR" ] && [ -d "$PASARGUARD_DIR" ]; then echo "$PASARGUARD_DIR"; return 0; fi
+    
     if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
     if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then echo "/opt/marzban"; return 0; fi
     return 1
 }
 
 detect_target_panel() {
+    # Check Env vars first
+    if [ -n "$REBECCA_DIR" ] && [ -d "$REBECCA_DIR" ]; then echo "$REBECCA_DIR"; return 0; fi
+
+    # Standard Paths
     if [ -d "/opt/rebecca" ]; then echo "/opt/rebecca"; return 0; fi
     if [ -d "/opt/marzban" ]; then echo "/opt/marzban"; return 0; fi
     return 1
@@ -111,11 +117,9 @@ create_backup() {
     mkdir -p "$CURRENT_BACKUP"
     echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
 
-    # Files
     tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
     tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
     
-    # DB Export
     local db_type=$(detect_db_type "$SRC")
     echo "$db_type" > "$CURRENT_BACKUP/db_type.txt"
     local out="$CURRENT_BACKUP/database.sql"
@@ -137,7 +141,7 @@ create_backup() {
     esac
 }
 
-# --- CONVERSION (PYTHON) ---
+# --- CONVERSION LOGIC (Python) ---
 
 convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
@@ -172,11 +176,11 @@ for line in lines:
     # Fix Timestamp +00 (Postgres)
     line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(\.\d+)?\+00'", r"'\1'", line)
     
-    # Fix Paths
+    # Fix Paths (Universal)
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
     
-    # INSERT -> REPLACE logic
+    # INSERT -> REPLACE
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
@@ -195,7 +199,7 @@ PYEOF
 
 import_and_sanitize() {
     local SQL="$1" TGT="$2"
-    minfo "Importing & Fixing Data..."
+    minfo "Importing data to Target..."
     
     get_db_credentials "$TGT"
     local user="${MIG_DB_USER:-root}"
@@ -219,15 +223,17 @@ import_and_sanitize() {
         mwarn "Import had warnings (expected for duplicate keys)."
     fi
     
-    # 2. ALEMBIC UPGRADE (This recreates missing columns)
+    # 2. ALEMBIC UPGRADE (CRITICAL)
     minfo "Running Alembic Upgrade..."
     local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$panel_cname" ]; then
         docker exec "$panel_cname" alembic upgrade head >/dev/null 2>&1
         mok "Schema Updated (Alembic)."
+    else
+        mwarn "Could not run alembic (Container not found)."
     fi
 
-    # 3. SANITIZE DATA (Fix NULLs that crash login)
+    # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
     minfo "Sanitizing Data..."
     local fixes=(
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
@@ -261,7 +267,7 @@ migrate_configs() {
         fi
     done
     
-    # Copy Certs & Templates
+    # Copy Certs
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
         cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
@@ -287,45 +293,52 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V3.0"
+    ui_header "UNIVERSAL MIGRATION V3.1"
     
+    # 1. Detect Panels with Fallback
     SRC=$(detect_source_panel)
     TGT=$(detect_target_panel)
     
-    [ -z "$SRC" ] && { merr "Source not found"; mpause; return; }
-    [ -z "$TGT" ] && { merr "Target not found"; mpause; return; }
+    if [ -z "$SRC" ]; then
+        echo -e "${YELLOW}Source not found automatically.${NC}"
+        read -p "Enter Source Path (e.g. /opt/pasarguard): " SRC
+    fi
+    if [ -z "$TGT" ]; then
+        echo -e "${YELLOW}Target not found automatically.${NC}"
+        read -p "Enter Target Path (e.g. /opt/rebecca): " TGT
+    fi
+    
+    [ ! -d "$SRC" ] && { merr "Source directory invalid"; mpause; return; }
+    [ ! -d "$TGT" ] && { merr "Target directory invalid"; mpause; return; }
     
     echo -e "Source: ${RED}$SRC${NC}"
     echo -e "Target: ${GREEN}$TGT${NC}"
     
     if ! ui_confirm "Start Migration? This stops both panels." "y"; then return; fi
     
-    # 1. Backup
+    # 2. Backup
     create_backup "$SRC"
     local db_type=$(cat "$CURRENT_BACKUP/db_type.txt")
     local src_sql="$CURRENT_BACKUP/database.sql"
     [ "$db_type" == "sqlite" ] && src_sql="$CURRENT_BACKUP/database.sqlite3"
     
-    # 2. Convert
+    # 3. Convert
     local final_sql="$MIGRATION_TEMP/import.sql"
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
     
-    # 3. Stop Panels
+    # 4. Stop & Import
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
     
-    # 4. Start Target DB Only
     minfo "Starting Target MySQL..."
     (cd "$TGT" && docker compose up -d mysql mariadb db 2>/dev/null); sleep 15
     
-    # 5. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
     migrate_configs
     
-    # 6. Full Restart
+    # 5. Full Restart
     ui_header "RESTARTING PANEL"
     (cd "$TGT" && docker compose down && docker compose up -d)
-    
     sleep 10
     
     echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
@@ -340,6 +353,8 @@ do_rollback() {
     
     if ui_confirm "Restore $last to Source?" "n"; then
         local TGT=$(detect_source_panel)
+        [ -z "$TGT" ] && read -p "Enter Restore Path: " TGT
+        
         (cd "$TGT" && docker compose down) &>/dev/null
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
