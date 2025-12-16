@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Universal Auto Migrator v3.1
-# Fixes: Detection Logic, Manual Path Fallback, Full Schema Patching
+# MRM Migration Tool - Universal Auto Migrator v5.0 (Official Install)
+# Features: Auto-Install (Official Script), Auto-Fix DB, Admin Rescue
 #==============================================================================
 
 # Load Utils & UI
@@ -13,6 +13,9 @@ BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
 MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
 MYSQL_WAIT=60
+
+# Official Rebecca Install Script
+REBECCA_INSTALL_CMD="bash -c \"\$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)\" @ install --database mysql"
 
 # --- HELPER FUNCTIONS ---
 
@@ -34,22 +37,36 @@ mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -
 # --- DETECTION LOGIC ---
 
 detect_source_panel() {
-    # Check Env vars first
-    if [ -n "$PASARGUARD_DIR" ] && [ -d "$PASARGUARD_DIR" ]; then echo "$PASARGUARD_DIR"; return 0; fi
-    
     if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
     if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then echo "/opt/marzban"; return 0; fi
     return 1
 }
 
-detect_target_panel() {
-    # Check Env vars first
-    if [ -n "$REBECCA_DIR" ] && [ -d "$REBECCA_DIR" ]; then echo "$REBECCA_DIR"; return 0; fi
+# --- INSTALLATION LOGIC (OFFICIAL) ---
 
-    # Standard Paths
-    if [ -d "/opt/rebecca" ]; then echo "/opt/rebecca"; return 0; fi
-    if [ -d "/opt/marzban" ]; then echo "/opt/marzban"; return 0; fi
-    return 1
+install_rebecca_wizard() {
+    clear
+    ui_header "INSTALLING REBECCA (OFFICIAL)"
+    echo -e "${YELLOW}Target panel not found. Starting official installer...${NC}"
+    echo -e "${BLUE}This will install Rebecca with MySQL database.${NC}"
+    echo ""
+    
+    if ! ui_confirm "Proceed with installation?" "y"; then return 1; fi
+    
+    # Run the official command
+    # We use eval to handle the complex quoting in the curl command
+    eval "$REBECCA_INSTALL_CMD"
+    
+    local INSTALL_RES=$?
+    
+    echo ""
+    if [ $INSTALL_RES -eq 0 ] && [ -d "/opt/rebecca" ]; then
+        mok "Rebecca Installed Successfully!"
+        return 0
+    else
+        merr "Installation failed or directory /opt/rebecca missing."
+        return 1
+    fi
 }
 
 detect_db_type() {
@@ -141,7 +158,7 @@ create_backup() {
     esac
 }
 
-# --- CONVERSION LOGIC (Python) ---
+# --- CONVERSION LOGIC ---
 
 convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
@@ -180,7 +197,7 @@ for line in lines:
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
     
-    # INSERT -> REPLACE
+    # INSERT -> REPLACE logic
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
@@ -199,7 +216,7 @@ PYEOF
 
 import_and_sanitize() {
     local SQL="$1" TGT="$2"
-    minfo "Importing data to Target..."
+    minfo "Importing & Fixing Data..."
     
     get_db_credentials "$TGT"
     local user="${MIG_DB_USER:-root}"
@@ -220,10 +237,10 @@ import_and_sanitize() {
     if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
         mok "Data Imported."
     else
-        mwarn "Import had warnings (expected for duplicate keys)."
+        mwarn "Import had warnings (Duplicate keys or table exists)."
     fi
     
-    # 2. ALEMBIC UPGRADE (CRITICAL)
+    # 2. ALEMBIC UPGRADE (CRITICAL: Creates new columns like permissions)
     minfo "Running Alembic Upgrade..."
     local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$panel_cname" ]; then
@@ -234,14 +251,22 @@ import_and_sanitize() {
     fi
 
     # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
-    minfo "Sanitizing Data..."
+    minfo "Sanitizing Data (Fixing NULLs for Rebecca)..."
+    
+    # This block fixes the "Field required" Pydantic errors
     local fixes=(
+        # Admins
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
         "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
+        
+        # Paths
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        
+        # Clean JWT to force login
         "TRUNCATE TABLE jwt;"
     )
 
@@ -293,53 +318,61 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V3.1"
+    ui_header "UNIVERSAL MIGRATION V5.0"
     
-    # 1. Detect Panels with Fallback
     SRC=$(detect_source_panel)
-    TGT=$(detect_target_panel)
     
-    if [ -z "$SRC" ]; then
-        echo -e "${YELLOW}Source not found automatically.${NC}"
-        read -p "Enter Source Path (e.g. /opt/pasarguard): " SRC
-    fi
-    if [ -z "$TGT" ]; then
-        echo -e "${YELLOW}Target not found automatically.${NC}"
-        read -p "Enter Target Path (e.g. /opt/rebecca): " TGT
+    # --- AUTO INSTALL TRIGGER ---
+    if [ -d "/opt/rebecca" ]; then
+        TGT="/opt/rebecca"
+    elif [ -d "/opt/marzban" ]; then
+        TGT="/opt/marzban"
+    else
+        # Not found? Install it.
+        if ! install_rebecca_wizard; then
+             merr "Installation failed or aborted."; mpause; return;
+        fi
+        TGT="/opt/rebecca"
     fi
     
-    [ ! -d "$SRC" ] && { merr "Source directory invalid"; mpause; return; }
-    [ ! -d "$TGT" ] && { merr "Target directory invalid"; mpause; return; }
+    [ -z "$SRC" ] && { merr "Source (Pasarguard/Marzban) not found"; mpause; return; }
     
     echo -e "Source: ${RED}$SRC${NC}"
     echo -e "Target: ${GREEN}$TGT${NC}"
     
     if ! ui_confirm "Start Migration? This stops both panels." "y"; then return; fi
     
-    # 2. Backup
+    # 1. Backup
     create_backup "$SRC"
     local db_type=$(cat "$CURRENT_BACKUP/db_type.txt")
     local src_sql="$CURRENT_BACKUP/database.sql"
     [ "$db_type" == "sqlite" ] && src_sql="$CURRENT_BACKUP/database.sqlite3"
     
-    # 3. Convert
+    # 2. Convert
     local final_sql="$MIGRATION_TEMP/import.sql"
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
     
-    # 4. Stop & Import
+    # 3. Stop Panels
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
     
+    # 4. Start Target DB Only
     minfo "Starting Target MySQL..."
     (cd "$TGT" && docker compose up -d mysql mariadb db 2>/dev/null); sleep 15
     
+    # 5. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
     migrate_configs
     
-    # 5. Full Restart
+    # 6. Full Restart
     ui_header "RESTARTING PANEL"
     (cd "$TGT" && docker compose down && docker compose up -d)
+    
     sleep 10
+    local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
+    if [ -n "$cname" ]; then
+         mok "Panel Running: $cname"
+    fi
     
     echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
     create_rescue_admin
@@ -353,8 +386,6 @@ do_rollback() {
     
     if ui_confirm "Restore $last to Source?" "n"; then
         local TGT=$(detect_source_panel)
-        [ -z "$TGT" ] && read -p "Enter Restore Path: " TGT
-        
         (cd "$TGT" && docker compose down) &>/dev/null
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
