@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Universal Auto Migrator v5.0 (Official Install)
-# Features: Auto-Install (Official Script), Auto-Fix DB, Admin Rescue
+# MRM Migration Tool - Universal Auto Migrator v5.1 (Install Fix)
+# Fixes: Ctrl+C handling during install, Robust Env parsing
 #==============================================================================
 
 # Load Utils & UI
@@ -42,28 +42,30 @@ detect_source_panel() {
     return 1
 }
 
-# --- INSTALLATION LOGIC (OFFICIAL) ---
+# --- INSTALLATION LOGIC (ROBUST) ---
 
 install_rebecca_wizard() {
     clear
-    ui_header "INSTALLING REBECCA (OFFICIAL)"
-    echo -e "${YELLOW}Target panel not found. Starting official installer...${NC}"
-    echo -e "${BLUE}This will install Rebecca with MySQL database.${NC}"
+    ui_header "INSTALLING REBECCA"
+    echo -e "${YELLOW}Target panel not found.${NC}"
+    echo -e "${BLUE}Starting official installer (MySQL)...${NC}"
+    echo ""
+    echo -e "${YELLOW}NOTE: When installation finishes and logs appear, press Ctrl+C once to continue.${NC}"
     echo ""
     
-    if ! ui_confirm "Proceed with installation?" "y"; then return 1; fi
+    if ! ui_confirm "Proceed?" "y"; then return 1; fi
     
-    # Run the official command
-    # We use eval to handle the complex quoting in the curl command
+    # Run installation
     eval "$REBECCA_INSTALL_CMD"
     
-    local INSTALL_RES=$?
-    
-    echo ""
-    if [ $INSTALL_RES -eq 0 ] && [ -d "/opt/rebecca" ]; then
-        mok "Rebecca Installed Successfully!"
+    # CRITICAL FIX: Check files instead of exit code
+    # Because Ctrl+C on logs returns error code 130
+    if [ -d "/opt/rebecca" ] && [ -f "/opt/rebecca/docker-compose.yml" ]; then
+        echo ""
+        mok "Rebecca Installation Verified."
         return 0
     else
+        echo ""
         merr "Installation failed or directory /opt/rebecca missing."
         return 1
     fi
@@ -251,22 +253,15 @@ import_and_sanitize() {
     fi
 
     # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
-    minfo "Sanitizing Data (Fixing NULLs for Rebecca)..."
-    
-    # This block fixes the "Field required" Pydantic errors
+    minfo "Sanitizing Data..."
+    # Fixes for Pydantic validation errors
     local fixes=(
-        # Admins
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
         "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-        
-        # Paths
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
-        "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
-        
-        # Clean JWT to force login
         "TRUNCATE TABLE jwt;"
     )
 
@@ -282,15 +277,17 @@ migrate_configs() {
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # Env Merge
+    # Env Merge (Improved regex)
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
     for v in "${vars[@]}"; do
-        local val=$(grep "^${v}=" "$SRC/.env" 2>/dev/null | sed 's/[^=]*=//')
+        # Handle quoted/unquoted values
+        local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
         if [ -n "$val" ]; then
             sed -i "/^${v}=/d" "$TGT/.env"
             echo "${v}=${val}" >> "$TGT/.env"
         fi
     done
+    mok "Variables Migrated."
     
     # Copy Certs
     if [ -d "$SRC_DATA/certs" ]; then
@@ -318,7 +315,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V5.0"
+    ui_header "UNIVERSAL MIGRATION V5.1"
     
     SRC=$(detect_source_panel)
     
@@ -328,9 +325,9 @@ do_full_migration() {
     elif [ -d "/opt/marzban" ]; then
         TGT="/opt/marzban"
     else
-        # Not found? Install it.
+        # Install
         if ! install_rebecca_wizard; then
-             merr "Installation failed or aborted."; mpause; return;
+             mpause; return;
         fi
         TGT="/opt/rebecca"
     fi
@@ -384,38 +381,13 @@ do_rollback() {
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
     
-    echo -e "Restoring backup: ${CYAN}$last${NC}"
-    if ui_confirm "Restore to Source (Pasarguard)?" "n"; then
-        
-        # 1. Find Source Path Again
+    if ui_confirm "Restore $last to Source?" "n"; then
         local TGT=$(detect_source_panel)
-        [ -z "$TGT" ] && TGT="/opt/pasarguard" # Fallback default
-        
-        minfo "Target for restore: $TGT"
-        
-        # 2. Stop Services
         (cd "$TGT" && docker compose down) &>/dev/null
-        # Stop Rebecca too just in case
-        local NEW_PANEL=$(detect_target_panel)
-        [ -n "$NEW_PANEL" ] && (cd "$NEW_PANEL" && docker compose down) &>/dev/null
-
-        # 3. Restore Files
-        if [ -f "$last/config.tar.gz" ]; then
-            tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
-            mok "Configs restored"
-        fi
-        
-        if [ -f "$last/data.tar.gz" ]; then
-            # Extract to /var/lib
-            tar -xzf "$last/data.tar.gz" -C "/var/lib"
-            mok "Data directory restored"
-        fi
-        
-        # 4. Start Old Panel
-        minfo "Starting Pasarguard..."
-        (cd "$TGT" && docker compose up -d)
-        
-        mok "Rollback Complete. Pasarguard is running."
+        tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
+        tar -xzf "$last/data.tar.gz" -C "/var/lib"
+        (cd "$TGT" && docker compose up -d) &>/dev/null
+        mok "Restored"
     fi
     mpause
 }
