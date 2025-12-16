@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Universal Auto Migrator v5.2
+# MRM Migration Tool-Universal Auto Migrator v5.2
 # Fixes: MySQL Detection, Service Startup Logic, Import Stability
 #==============================================================================
 
