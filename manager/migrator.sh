@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Universal Auto Migrator v5.1 (Install Fix)
-# Fixes: Ctrl+C handling during install, Robust Env parsing
+# MRM Migration Tool - Universal Auto Migrator v5.2
+# Fixes: MySQL Detection, Service Startup Logic, Import Stability
 #==============================================================================
 
 # Load Utils & UI
@@ -42,7 +42,7 @@ detect_source_panel() {
     return 1
 }
 
-# --- INSTALLATION LOGIC (ROBUST) ---
+# --- INSTALLATION LOGIC ---
 
 install_rebecca_wizard() {
     clear
@@ -55,11 +55,9 @@ install_rebecca_wizard() {
     
     if ! ui_confirm "Proceed?" "y"; then return 1; fi
     
-    # Run installation
     eval "$REBECCA_INSTALL_CMD"
     
-    # CRITICAL FIX: Check files instead of exit code
-    # Because Ctrl+C on logs returns error code 130
+    # Check if files exist (ignoring exit code due to Ctrl+C)
     if [ -d "/opt/rebecca" ] && [ -f "/opt/rebecca/docker-compose.yml" ]; then
         echo ""
         mok "Rebecca Installation Verified."
@@ -96,8 +94,15 @@ find_db_container() {
     [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
     [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
     
+    # Method 1: Docker Compose (Precise)
     local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
-    [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
+    
+    # Method 2: Global Search (Fallback if compose is weird)
+    if [ -z "$cname" ]; then
+        local base_name=$(basename "$panel_dir")
+        cname=$(docker ps --format '{{.Names}}' | grep -iE "${base_name}.*(${keywords})" | head -1)
+    fi
+    
     echo "$cname"
 }
 
@@ -242,7 +247,7 @@ import_and_sanitize() {
         mwarn "Import had warnings (Duplicate keys or table exists)."
     fi
     
-    # 2. ALEMBIC UPGRADE (CRITICAL: Creates new columns like permissions)
+    # 2. ALEMBIC UPGRADE
     minfo "Running Alembic Upgrade..."
     local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$panel_cname" ]; then
@@ -252,9 +257,8 @@ import_and_sanitize() {
         mwarn "Could not run alembic (Container not found)."
     fi
 
-    # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
+    # 3. SANITIZE DATA
     minfo "Sanitizing Data..."
-    # Fixes for Pydantic validation errors
     local fixes=(
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
         "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
@@ -277,17 +281,15 @@ migrate_configs() {
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # Env Merge (Improved regex)
+    # Env Merge
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
     for v in "${vars[@]}"; do
-        # Handle quoted/unquoted values
         local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
         if [ -n "$val" ]; then
             sed -i "/^${v}=/d" "$TGT/.env"
             echo "${v}=${val}" >> "$TGT/.env"
         fi
     done
-    mok "Variables Migrated."
     
     # Copy Certs
     if [ -d "$SRC_DATA/certs" ]; then
@@ -315,7 +317,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V5.1"
+    ui_header "UNIVERSAL MIGRATION V5.2"
     
     SRC=$(detect_source_panel)
     
@@ -353,15 +355,15 @@ do_full_migration() {
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
     
-    # 4. Start Target DB Only
-    minfo "Starting Target MySQL..."
-    (cd "$TGT" && docker compose up -d mysql mariadb db 2>/dev/null); sleep 15
+    # 4. Start Target (FULL STARTUP TO ENSURE DB IS UP)
+    minfo "Starting Target Panel (Full stack)..."
+    (cd "$TGT" && docker compose up -d); sleep 20
     
     # 5. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
     migrate_configs
     
-    # 6. Full Restart
+    # 6. Restart to apply configs
     ui_header "RESTARTING PANEL"
     (cd "$TGT" && docker compose down && docker compose up -d)
     
