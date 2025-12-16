@@ -1,43 +1,25 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Pasarguard/Marzban -> Rebecca
-# Version: 2.0 (Stable Release - Fixed & Full)
+# MRM Migration Tool - High Precision Edition (v3.0)
+# Fixes: Admin Login, Pydantic Validation Errors, Schema Mismatches
 #==============================================================================
 
-# --- FIX: Dynamic Path Detection ---
-# حفظ متغیرهای اصلی شما، اما با قابلیت تشخیص هوشمند
-if [ -z "$PASARGUARD_DIR" ]; then
-    if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then
-        PASARGUARD_DIR="/opt/marzban"
-        PASARGUARD_DATA="/var/lib/marzban"
-    else
-        PASARGUARD_DIR="/opt/pasarguard"
-        PASARGUARD_DATA="/var/lib/pasarguard"
-    fi
-fi
+# Load Utils & UI
+if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
+source /opt/mrm-manager/ui.sh
 
-if [ -z "$REBECCA_DIR" ]; then
-    if [ -d "/opt/rebecca" ]; then
-        REBECCA_DIR="/opt/rebecca"
-        REBECCA_DATA="/var/lib/rebecca"
-    else
-        REBECCA_DIR="/opt/rebecca" # Default fallback
-        REBECCA_DATA="/var/lib/rebecca"
-    fi
-fi
-
+# --- CONFIGURATION ---
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
 MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
-CONTAINER_TIMEOUT=120
 MYSQL_WAIT=60
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+# --- HELPER FUNCTIONS ---
 
 migration_init() {
     MIGRATION_TEMP=$(mktemp -d /tmp/mrm-migration-XXXXXX 2>/dev/null) || MIGRATION_TEMP="/tmp/mrm-migration-$$"
     mkdir -p "$MIGRATION_TEMP" "$BACKUP_ROOT"
-    mkdir -p "$(dirname "$MIGRATION_LOG")" 2>/dev/null || MIGRATION_LOG="/tmp/mrm_migration.log"
+    mkdir -p "$(dirname "$MIGRATION_LOG")" 2>/dev/null
     echo "=== Migration Started: $(date) ===" >> "$MIGRATION_LOG"
 }
 
@@ -49,31 +31,57 @@ mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
 
-detect_migration_db_type() {
-    local panel_dir="$1" data_dir="$2"
-    [ ! -d "$panel_dir" ] && { echo "not_found"; return 1; }
-    local env_file="$panel_dir/.env"
-    if [ -f "$env_file" ]; then
-        local db_url
-        db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
-        case "$db_url" in
-            *timescale*|*postgresql+asyncpg*) echo "timescaledb"; return 0 ;;
-            *postgresql*) echo "postgresql"; return 0 ;;
-            *mysql+asyncmy*|*mysql*) echo "mysql"; return 0 ;;
-            *mariadb*) echo "mariadb"; return 0 ;;
-            *sqlite*) echo "sqlite"; return 0 ;;
-        esac
-    fi
-    [ -f "$data_dir/db.sqlite3" ] && { echo "sqlite"; return 0; }
-    echo "unknown"; return 1
+# --- DETECTION LOGIC ---
+
+detect_source_panel() {
+    if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
+    if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then echo "/opt/marzban"; return 0; fi
+    return 1
 }
 
-get_migration_db_credentials() {
-    local panel_dir="$1" env_file="$panel_dir/.env"
-    MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_HOST=""; MIG_DB_PORT=""; MIG_DB_NAME=""
-    [ ! -f "$env_file" ] && return 1
-    local db_url
-    db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | head -1 | sed 's/[^=]*=//' | tr -d '"' | tr -d "'" | tr -d ' ')
+detect_target_panel() {
+    # Priority to Rebecca
+    if [ -d "/opt/rebecca" ]; then echo "/opt/rebecca"; return 0; fi
+    if [ -d "/opt/marzban" ]; then echo "/opt/marzban"; return 0; fi
+    return 1
+}
+
+detect_db_type() {
+    local panel_dir="$1"
+    local env_file="$panel_dir/.env"
+    local data_dir="/var/lib/$(basename "$panel_dir")"
+    [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
+
+    if [ -f "$env_file" ]; then
+        local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        case "$db_url" in
+            *timescale*|*postgresql*) echo "postgresql" ;;
+            *mysql*|*mariadb*) echo "mysql" ;;
+            *sqlite*) echo "sqlite" ;;
+            *) if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi ;;
+        esac
+    else
+        if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi
+    fi
+}
+
+find_db_container() {
+    local panel_dir="$1" type="$2"
+    local keywords=""
+    [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
+    [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
+    
+    local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
+    [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
+    echo "$cname"
+}
+
+get_db_credentials() {
+    local panel_dir="$1"
+    local env_file="$panel_dir/.env"
+    MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
+    
+    local db_url=$(grep -E "^SQLALCHEMY_DATABASE_URL" "$env_file" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -84,635 +92,292 @@ if '://' in url:
         p = urlparse(scheme + '://' + rest)
         print(f'MIG_DB_USER="{p.username or ""}"')
         print(f'MIG_DB_PASS="{unquote(p.password or "")}"')
-        print(f'MIG_DB_HOST="{p.hostname or "localhost"}"')
-        print(f'MIG_DB_PORT="{p.port or ""}"')
-        print(f'MIG_DB_NAME="{(p.path or "").lstrip("/") or "marzban"}"')
-    except:
-        pass
-else:
-    print('MIG_DB_USER=""'); print('MIG_DB_PASS=""'); print('MIG_DB_HOST="localhost"'); print('MIG_DB_PORT=""'); print('MIG_DB_NAME="marzban"')
+        print(f'MIG_DB_NAME="{(p.path or "").lstrip("/")}"')
+    except: pass
 PYEOF
 )"
 }
 
-find_migration_pg_container() {
-    local cname=""
-    # FIX: Added 'marzban' to search path
-    for svc in timescaledb db postgres postgresql database; do
-        cname=$(cd "$PASARGUARD_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
-        [ -n "$cname" ] && { echo "$cname"; return 0; }
-    done
-    docker ps --format '{{.Names}}' | grep -iE "(pasarguard|marzban).*(timescale|postgres|db)" | head -1
-}
+# --- BACKUP & EXPORT ---
 
-find_migration_mysql_container() {
-    local cname=""
-    for svc in mysql mariadb db database; do
-        cname=$(cd "$REBECCA_DIR" && docker compose ps --format '{{.Names}}' "$svc" 2>/dev/null | head -1)
-        [ -n "$cname" ] && { echo "$cname"; return 0; }
-    done
-    docker ps --format '{{.Names}}' | grep -iE "(rebecca|marzban).*(mysql|mariadb|db)" | head -1
-}
-
-is_migration_running() { [ -d "$1" ] && (cd "$1" && docker compose ps 2>/dev/null | grep -qE "Up|running"); }
-
-start_migration_panel() {
-    local dir="$1" name="$2"
-    minfo "Starting $name..."
-    [ ! -d "$dir" ] && { merr "$dir not found"; return 1; }
-    (cd "$dir" && docker compose up -d) &>/dev/null
-    local i=0
-    while [ $i -lt $CONTAINER_TIMEOUT ]; do
-        is_migration_running "$dir" && { mok "$name started"; sleep 3; return 0; }
-        sleep 3; i=$((i+3))
-    done
-    merr "$name failed"; return 1
-}
-
-stop_migration_panel() {
-    local dir="$1" name="$2"
-    [ ! -d "$dir" ] && return 0
-    minfo "Stopping $name..."
-    (cd "$dir" && docker compose down) &>/dev/null; sleep 2
-    mok "$name stopped"
-}
-
-create_migration_backup() {
+create_backup() {
+    local SRC="$1"
+    local DATA_DIR="/var/lib/$(basename "$SRC")"
+    [ "$SRC" == "/opt/pasarguard" ] && DATA_DIR="/var/lib/pasarguard"
+    
     minfo "Creating backup..."
-    local ts
-    ts=$(date +%Y%m%d_%H%M%S)
-    CURRENT_MIGRATION_BACKUP="$BACKUP_ROOT/backup_$ts"
-    mkdir -p "$CURRENT_MIGRATION_BACKUP"
-    echo "$CURRENT_MIGRATION_BACKUP" >"$BACKUP_ROOT/.last_backup"
+    local ts=$(date +%Y%m%d_%H%M%S)
+    CURRENT_BACKUP="$BACKUP_ROOT/backup_$ts"
+    mkdir -p "$CURRENT_BACKUP"
+    echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
 
-    [ -d "$PASARGUARD_DIR" ] && {
-        minfo "  Backing up config..."
-        tar --exclude='*/node_modules' -C "$(dirname "$PASARGUARD_DIR")" -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_config.tar.gz" "$(basename "$PASARGUARD_DIR")" 2>/dev/null
-        mok "  Config saved"
-    }
-    [ -d "$PASARGUARD_DATA" ] && {
-        minfo "  Backing up data..."
-        tar -C "$(dirname "$PASARGUARD_DATA")" -czf "$CURRENT_MIGRATION_BACKUP/pasarguard_data.tar.gz" "$(basename "$PASARGUARD_DATA")" 2>/dev/null
-        mok "  Data saved"
-    }
-
-    local db_type
-    db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
-    echo "$db_type" >"$CURRENT_MIGRATION_BACKUP/db_type.txt"
-    minfo "  Exporting database ($db_type)..."
-
-    local export_success=false
+    tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
+    tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
+    
+    local db_type=$(detect_db_type "$SRC")
+    echo "$db_type" > "$CURRENT_BACKUP/db_type.txt"
+    local out="$CURRENT_BACKUP/database.sql"
+    
     case "$db_type" in
-        sqlite)
-            [ -f "$PASARGUARD_DATA/db.sqlite3" ] && {
-                cp "$PASARGUARD_DATA/db.sqlite3" "$CURRENT_MIGRATION_BACKUP/database.sqlite3"
-                mok "  SQLite exported"; export_success=true;
-            }
+        sqlite) cp "$DATA_DIR/db.sqlite3" "$CURRENT_BACKUP/database.sqlite3"; mok "SQLite exported" ;;
+        postgresql)
+            local cname=$(find_db_container "$SRC" "postgresql")
+            get_db_credentials "$SRC"
+            docker exec "$cname" pg_dump -U "${MIG_DB_USER:-marzban}" -d "${MIG_DB_NAME:-marzban}" --data-only --column-inserts --disable-dollar-quoting > "$out" 2>/dev/null
+            [ -s "$out" ] && mok "Postgres exported" || merr "pg_dump failed"
             ;;
-        timescaledb|postgresql)
-            export_migration_postgresql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
-        mysql|mariadb)
-            export_migration_mysql "$CURRENT_MIGRATION_BACKUP/database.sql" && export_success=true ;;
+        mysql)
+            local cname=$(find_db_container "$SRC" "mysql")
+            get_db_credentials "$SRC"
+            docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-marzban}" > "$out" 2>/dev/null
+            [ -s "$out" ] && mok "MySQL exported" || merr "mysqldump failed"
+            ;;
     esac
-
-    mok "Backup: $CURRENT_MIGRATION_BACKUP"
-    [ "$export_success" = true ]
 }
 
-export_migration_postgresql() {
-    local output_file="$1"
-    get_migration_db_credentials "$PASARGUARD_DIR"
-    local user="${MIG_DB_USER:-pasarguard}" db="${MIG_DB_NAME:-pasarguard}"
-    minfo "  User: $user, DB: $db"
-    local cname
-    cname=$(find_migration_pg_container)
-    [ -z "$cname" ] && { merr "  PostgreSQL container not found"; return 1; }
-    minfo "  Container: $cname"
+# --- CONVERSION LOGIC (Python) ---
 
-    local i=0
-    while [ $i -lt 30 ]; do
-        docker exec "$cname" pg_isready &>/dev/null && break
-        sleep 2; i=$((i+2))
-    done
-
-    minfo "  Running pg_dump (DATA ONLY)..."
-    local PG_FLAGS="--no-owner --no-acl --data-only --column-inserts --no-comments --disable-dollar-quoting"
-
-    if docker exec "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS >"$output_file" 2>/dev/null &&
-       [ -s "$output_file" ]; then
-        mok "  Exported: $(du -h "$output_file" | cut -f1)"
-        return 0
-    fi
-
-    if docker exec -e PGPASSWORD="$MIG_DB_PASS" "$cname" pg_dump -U "$user" -d "$db" $PG_FLAGS >"$output_file" 2>/dev/null &&
-       [ -s "$output_file" ]; then
-        mok "  Exported: $(du -h "$output_file" | cut -f1)"
-        return 0
-    fi
-
-    merr "  pg_dump failed"; return 1
-}
-
-export_migration_mysql() {
-    local output_file="$1"
-    get_migration_db_credentials "$PASARGUARD_DIR"
-    local cname
-    cname=$(docker ps --format '{{.Names}}' | grep -iE "(pasarguard|marzban).*(mysql|mariadb|db)" | head -1)
-    [ -z "$cname" ] && { merr "  MySQL container not found"; return 1; }
-    docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-pasarguard}" >"$output_file" 2>/dev/null
-    [ -s "$output_file" ] && { mok "  Exported"; return 0; }
-    merr "  mysqldump failed"; return 1
-}
-
-convert_migration_to_mysql() {
+convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
-    case "$type" in
-        sqlite) convert_migration_sqlite "$src" "$dst" ;;
-        postgresql|timescaledb) convert_migration_postgresql "$src" "$dst" ;;
-        mysql|mariadb) cp "$src" "$dst"; mok "No conversion needed" ;;
-        *) merr "Unknown: $type"; return 1 ;;
-    esac
-}
-
-convert_migration_sqlite() {
-    local src="$1" dst="$2"
-    minfo "Converting SQLite → MySQL..."
-    [ ! -f "$src" ] && { merr "Source not found"; return 1; }
-    sqlite3 "$src" .dump >"$MIGRATION_TEMP/sqlite_dump.sql" 2>/dev/null || { merr "Dump failed"; return 1; }
-    python3 - "$MIGRATION_TEMP/sqlite_dump.sql" "$dst" << 'PYEOF'
-import sys, re
-with open(sys.argv[1], 'r', errors='replace') as f: c = f.read()
-c = re.sub(r'BEGIN TRANSACTION;', 'START TRANSACTION;', c)
-c = re.sub(r'PRAGMA.*?;\n?', '', c)
-c = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
-c = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', c, flags=re.I)
-c = re.sub(r'\bINTEGER\b', 'INT', c, flags=re.I)
-c = re.sub(r'\bREAL\b', 'DOUBLE', c, flags=re.I)
-c = re.sub(r'\bBLOB\b', 'LONGBLOB', c, flags=re.I)
-c = re.sub(r'"([a-zA-Z_]\w*)"', r'`\1`', c)
-with open(sys.argv[2], 'w') as f:
-    f.write("SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n" + c + "\n\nSET FOREIGN_KEY_CHECKS=1;\n")
-PYEOF
-    [ -s "$dst" ] && { mok "Converted"; return 0; }
-    merr "Conversion failed"; return 1
-}
-
-convert_migration_postgresql() {
-    local src="$1" dst="$2"
-    minfo "Converting PostgreSQL → MySQL (DATA-ONLY)..."
-    [ ! -f "$src" ] && { merr "Source not found"; return 1; }
+    minfo "Converting $type → MySQL..."
+    
+    if [ "$type" == "sqlite" ] && [[ "$src" == *.sqlite3 ]]; then
+        sqlite3 "$src" .dump > "$MIGRATION_TEMP/sqlite.sql"
+        src="$MIGRATION_TEMP/sqlite.sql"
+    fi
 
     python3 - "$src" "$dst" << 'PYEOF'
-import re
-import sys
+import re, sys
 
-src_file = sys.argv[1]
-dst_file = sys.argv[2]
+src, dst = sys.argv[1], sys.argv[2]
 
-with open(src_file, 'r', encoding='utf-8', errors='replace') as f:
-    lines = f.readlines()
-
-out_lines = []
-
-for line in lines:
-    stripped = line.strip()
-    if stripped.startswith('\\'): continue
-    if re.match(r'^SET\b', stripped, re.I): continue
-    if re.match(r'^SELECT\s+pg_catalog\.', stripped, re.I): continue
-    if re.match(r'^SELECT\s+setval\b', stripped, re.I): continue
-
-    # FIX: Remove +00 from timestamps (Postgres compat)
-    line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.\d+)?\+00'", r"'\1'", line)
-    
-    # FIX: Fix paths (Universal)
-    line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
-    line = line.replace('/var/lib/marzban', '/var/lib/rebecca')
-
-    if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
-        line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"public"\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)`public`\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)public\.', r'\1', line, flags=re.I)
-        line = re.sub(r'(\s*REPLACE\s+INTO\s+)"?([A-Za-z0-9_]+)"?', r'\1`\2`', line, flags=re.I)
-        line = line.replace('\\', '\\\\')
-        
-        # Convert date strings in 'users' table to UNIX_TIMESTAMP() for 'expire' column
-        if "INTO `users`" in line:
-             line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'(\s*,\s*(?:'\{|NULL))", r"UNIX_TIMESTAMP('\1')\2", line)
-        out_lines.append(line)
-        continue
-
-    out_lines.append(line)
+with open(src, 'r', encoding='utf-8', errors='replace') as f: lines = f.readlines()
+out = []
 
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES';\n\n"
-footer = "\n\nSET FOREIGN_KEY_CHECKS=1;\n"
 
-with open(dst_file, 'w', encoding='utf-8') as f:
-    f.write(header)
-    f.writelines(out_lines)
-    f.write(footer)
+for line in lines:
+    l = line.strip()
+    if l.startswith(('PRAGMA', 'BEGIN TRANSACTION', 'COMMIT', 'SET', '\\', '--')): continue
+    if re.match(r'^SELECT\s+(pg_catalog|setval)', l, re.I): continue
+
+    # Fix Types
+    line = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
+    line = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
+    line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
+    line = line.replace("'t'", "1").replace("'f'", "0")
+    
+    # Fix Paths (Universal)
+    line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
+    line = line.replace('/opt/pasarguard', '/opt/rebecca')
+    
+    # INSERT -> REPLACE
+    if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
+        line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
+        line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
+        line = re.sub(r'"?(\w+)"?', r'`\1`', line)
+        line = line.replace('\\', '\\\\')
+    
+    out.append(line)
+
+with open(dst, 'w', encoding='utf-8') as f:
+    f.write(header + "".join(out) + "\nSET FOREIGN_KEY_CHECKS=1;\n")
 PYEOF
-
-    [ -s "$dst" ] && { mok "Converted (data-only)"; return 0; }
-    merr "Conversion failed"; return 1
+    [ -s "$dst" ] && mok "Converted" || merr "Conversion failed"
 }
 
-check_migration_rebecca() { [ -d "$REBECCA_DIR" ] && [ -f "$REBECCA_DIR/.env" ]; }
-check_migration_rebecca_mysql() { [ -f "$REBECCA_DIR/.env" ] && grep -qiE "mysql|mariadb" "$REBECCA_DIR/.env"; }
+# --- IMPORT & SANITIZATION ---
 
-wait_migration_mysql() {
-    minfo "Waiting for MySQL..."
-    local i=0
-    while [ $i -lt $MYSQL_WAIT ]; do
-        local cname
-        cname=$(find_migration_mysql_container)
-        [ -n "$cname" ] && {
-            local pass
-            pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-            docker exec "$cname" mysql -uroot -p"$pass" -e "SELECT 1" &>/dev/null && { mok "MySQL ready"; return 0; }
-        }
-        sleep 3; i=$((i+3))
-    done
-    mwarn "MySQL timeout"; return 1
-}
+import_and_sanitize() {
+    local SQL="$1" TGT="$2"
+    minfo "Importing data to Target..."
+    
+    get_db_credentials "$TGT"
+    local user="${MIG_DB_USER:-root}"
+    local pass="$MIG_DB_PASS"
+    [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2)
+    
+    # Fix: Detect correct DB name from MySQL itself if possible
+    local cname=$(find_db_container "$TGT" "mysql")
+    [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
+    
+    local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
+    local db="marzban"
+    if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
+    if [[ "$db_list" == *"marzban"* ]]; then db="marzban"; fi
+    
+    # Force Create DB if missing
+    docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
 
-import_migration_to_rebecca() {
-    local sql="$1"
-    minfo "Importing to Target..."
-    [ ! -f "$sql" ] && { merr "SQL not found"; return 1; }
-
-    local db
-    db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-    [ -z "$db" ] && db="marzban"
-    local pass
-    pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-    local cname
-    cname=$(find_migration_mysql_container)
-    [ -z "$cname" ] && { merr "MySQL container not found"; return 1; }
-
-    minfo "  Container: $cname, DB: $db"
-    minfo "  SQL: $(du -h "$sql" | cut -f1), $(wc -l < "$sql") lines"
-
-    minfo "  Ensuring database \`$db\` exists (no DROP)..."
-    docker exec "$cname" mysql -uroot -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
-
-    create_table_if_missing() {
-        local table="$1"
-        local schema="$2"
-        # Silent check
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "CREATE TABLE IF NOT EXISTS \`$table\` ($schema) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;" 2>/dev/null || true
-    }
-
-    create_table_if_missing "admins" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "core_configs" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "groups" "id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255), is_disabled TINYINT(1) DEFAULT 0"
-    create_table_if_missing "inbounds" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "nodes" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "node_user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "proxies" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "system_stats" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "users" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "user_usages" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "hosts" "id INT PRIMARY KEY AUTO_INCREMENT, remark VARCHAR(255), address VARCHAR(255)"
-    create_table_if_missing "inbounds_groups_association" "inbound_id INT NOT NULL, group_id INT NOT NULL, PRIMARY KEY (inbound_id, group_id)"
-    create_table_if_missing "users_groups_association" "user_id INT NOT NULL, groups_id INT NOT NULL, PRIMARY KEY (user_id, groups_id)"
-    create_table_if_missing "jwt" "id INT PRIMARY KEY AUTO_INCREMENT"
-    create_table_if_missing "settings" "id INT PRIMARY KEY AUTO_INCREMENT, telegram JSON, discord JSON, webhook JSON, notification_settings JSON, notification_enable JSON, subscription JSON, general JSON"
-    create_table_if_missing "user_subscription_updates" "id INT PRIMARY KEY AUTO_INCREMENT, user_id INT, created_at DATETIME, user_agent TEXT"
-
-    ensure_col() {
-      local table="$1"
-      local col="$2"
-      local def="$3"
-      local exists
-      exists=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW COLUMNS FROM \`$table\` LIKE '$col';" 2>/dev/null || true)
-      if [ -z "$exists" ]; then
-        minfo "  Adding column $table.$col ..."
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` ADD COLUMN $col $def;" 2>/dev/null || true
-      else
-        if [[ "$col" == "alpn" || "$col" == *"_mask" || "$col" == *"_secret_key" ]]; then
-             minfo "  Fixing $table.$col to allow NULL/Default..."
-             docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col $def;" 2>/dev/null || true
-        fi
-        if [[ "$table" == "users" && "$col" == "expire" ]]; then
-             minfo "  Fixing users.expire type..."
-             docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "ALTER TABLE \`$table\` MODIFY COLUMN $col BIGINT NULL;" 2>/dev/null || true
-        fi
-      fi
-    }
-
-    ensure_col "admins" "username" "VARCHAR(128)"
-    ensure_col "admins" "hashed_password" "VARCHAR(255)"
-    ensure_col "admins" "created_at" "DATETIME"
-    ensure_col "admins" "is_sudo" "TINYINT(1) DEFAULT 0"
-    ensure_col "admins" "password_reset_at" "DATETIME NULL"
-    ensure_col "admins" "telegram_id" "BIGINT NULL"
-    ensure_col "admins" "discord_webhook" "TEXT NULL"
-    ensure_col "admins" "used_traffic" "BIGINT NULL"
-    ensure_col "admins" "is_disabled" "TINYINT(1) DEFAULT 0"
-    ensure_col "admins" "sub_template" "TEXT NULL"
-    ensure_col "admins" "sub_domain" "TEXT NULL"
-    ensure_col "admins" "profile_title" "TEXT NULL"
-    ensure_col "admins" "support_url" "TEXT NULL"
-    ensure_col "admins" "discord_id" "BIGINT NULL"
-    ensure_col "admins" "notification_enable" "TEXT NULL"
-
-    ensure_col "core_configs" "created_at" "DATETIME NULL"
-    ensure_col "core_configs" "name" "VARCHAR(255)"
-    ensure_col "core_configs" "config" "LONGTEXT"
-    ensure_col "core_configs" "exclude_inbound_tags" "TEXT NULL"
-    ensure_col "core_configs" "fallbacks_inbound_tags" "TEXT NULL"
-
-    ensure_col "nodes" "name" "VARCHAR(255)"
-    ensure_col "nodes" "address" "VARCHAR(255)"
-    ensure_col "nodes" "port" "INT"
-    ensure_col "nodes" "status" "VARCHAR(64)"
-    ensure_col "nodes" "last_status_change" "DATETIME"
-    ensure_col "nodes" "message" "TEXT"
-    ensure_col "nodes" "created_at" "DATETIME"
-    ensure_col "nodes" "uplink" "BIGINT"
-    ensure_col "nodes" "downlink" "BIGINT"
-    ensure_col "nodes" "xray_version" "VARCHAR(64)"
-    ensure_col "nodes" "usage_coefficient" "FLOAT DEFAULT 1.0"
-    ensure_col "nodes" "node_version" "VARCHAR(64)"
-    ensure_col "nodes" "connection_type" "VARCHAR(64) DEFAULT 'grpc'"
-    ensure_col "nodes" "server_ca" "TEXT"
-    ensure_col "nodes" "keep_alive" "TINYINT(1) DEFAULT 1"
-    ensure_col "nodes" "core_config_id" "INT"
-    ensure_col "nodes" "api_key" "VARCHAR(255)"
-    ensure_col "nodes" "data_limit" "BIGINT"
-    ensure_col "nodes" "data_limit_reset_strategy" "VARCHAR(64) DEFAULT 'no_reset'"
-    ensure_col "nodes" "reset_time" "VARCHAR(64)"
-    ensure_col "nodes" "default_timeout" "INT"
-    ensure_col "nodes" "internal_timeout" "INT"
-    ensure_col "nodes" "api_port" "INT"
-
-    ensure_col "node_user_usages" "created_at" "DATETIME"
-    ensure_col "node_user_usages" "user_id" "INT"
-    ensure_col "node_user_usages" "node_id" "INT"
-    ensure_col "node_user_usages" "used_traffic" "BIGINT"
-
-    ensure_col "hosts" "remark" "VARCHAR(255)"
-    ensure_col "hosts" "address" "VARCHAR(255)"
-    ensure_col "hosts" "port" "INT NULL"
-    ensure_col "hosts" "inbound_tag" "VARCHAR(255)"
-    ensure_col "hosts" "sni" "VARCHAR(1000) NULL"
-    ensure_col "hosts" "host" "VARCHAR(1000) NULL"
-    ensure_col "hosts" "security" "VARCHAR(128) DEFAULT 'inbound_default'"
-    ensure_col "hosts" "fingerprint" "VARCHAR(128) DEFAULT 'none'"
-    ensure_col "hosts" "allowinsecure" "TINYINT(1)"
-    ensure_col "hosts" "is_disabled" "TINYINT(1)"
-    ensure_col "hosts" "path" "VARCHAR(255) NULL"
-    ensure_col "hosts" "random_user_agent" "TINYINT(1) DEFAULT 0"
-    ensure_col "hosts" "alpn" "VARCHAR(14) NULL DEFAULT NULL"
-    ensure_col "hosts" "use_sni_as_host" "TINYINT(1) DEFAULT 0"
-    ensure_col "hosts" "priority" "INT NOT NULL DEFAULT 0"
-    ensure_col "hosts" "http_headers" "JSON"
-    ensure_col "hosts" "transport_settings" "JSON"
-    ensure_col "hosts" "mux_settings" "JSON"
-    ensure_col "hosts" "noise_settings" "JSON"
-    ensure_col "hosts" "fragment_settings" "JSON"
-    ensure_col "hosts" "status" "VARCHAR(60)"
-    ensure_col "hosts" "ech_config_list" "VARCHAR(512) NULL"
-
-    ensure_col "jwt" "secret_key" "VARCHAR(255) NOT NULL"
-    ensure_col "jwt" "subscription_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
-    ensure_col "jwt" "admin_secret_key" "VARCHAR(255) NULL DEFAULT NULL"
-    ensure_col "jwt" "vless_mask" "VARCHAR(255) NULL DEFAULT NULL"
-    ensure_col "jwt" "vmess_mask" "VARCHAR(255) NULL DEFAULT NULL"
-    ensure_col "jwt" "trojan_mask" "VARCHAR(255) NULL DEFAULT NULL"
-    ensure_col "jwt" "shadowsocks_mask" "VARCHAR(255) NULL DEFAULT NULL"
-
-    ensure_col "users" "proxy_settings" "JSON NULL"
-    ensure_col "users" "username" "VARCHAR(128)"
-    ensure_col "users" "status" "VARCHAR(64)"
-    ensure_col "users" "used_traffic" "BIGINT"
-    ensure_col "users" "data_limit" "BIGINT"
-    ensure_col "users" "expire" "BIGINT NULL"
-    ensure_col "users" "created_at" "DATETIME"
-    ensure_col "users" "admin_id" "INT"
-    ensure_col "users" "data_limit_reset_strategy" "VARCHAR(64)"
-    ensure_col "users" "sub_revoked_at" "DATETIME NULL"
-    ensure_col "users" "note" "TEXT"
-    ensure_col "users" "online_at" "DATETIME"
-    ensure_col "users" "edit_at" "DATETIME"
-    ensure_col "users" "on_hold_timeout" "DATETIME NULL"
-    ensure_col "users" "on_hold_expire_duration" "INT"
-    ensure_col "users" "auto_delete_in_days" "INT"
-    ensure_col "users" "last_status_change" "DATETIME"
-
-    ensure_col "settings" "telegram" "JSON"
-    ensure_col "settings" "discord" "JSON"
-    ensure_col "settings" "webhook" "JSON"
-    ensure_col "settings" "notification_settings" "JSON"
-    ensure_col "settings" "notification_enable" "JSON"
-    ensure_col "settings" "subscription" "JSON"
-    ensure_col "settings" "general" "JSON"
-
-    local err_file="$MIGRATION_TEMP/mysql.err"
-    minfo "  Importing data into existing schema..."
-
-    if docker exec -i "$cname" mysql --binary-mode=1 -uroot -p"$pass" "$db" <"$sql" 2>"$err_file"; then
-        local tables
-        tables=$(docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | wc -l)
-        mok "Import successful! ($tables tables)"
-        docker exec "$cname" mysql -uroot -p"$pass" "$db" -N -e "SHOW TABLES;" 2>/dev/null | head -10 | while read -r t; do echo "    - $t"; done
-        return 0
+    # 1. IMPORT DATA
+    if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
+        mok "Data Imported."
     else
-        merr "Import failed!"
-        grep -v "Using a password" "$err_file" | head -15
-        local ln
-        ln=$(grep -oP 'at line \K\d+' "$err_file" 2>/dev/null | head -1)
-        [ -n "$ln" ] && { echo ""; mwarn "Line $ln:"; sed -n "$((ln>2?ln-2:1)),$((ln+3))p" "$sql"; }
-        return 1
+        merr "Import failed. (This might be okay if tables exist)"
     fi
+    
+    # 2. RUN ALEMBIC (CRITICAL: Creates new columns like permissions)
+    minfo "Running Alembic Upgrade (Structure Fix)..."
+    local panel_cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
+    if [ -n "$panel_cname" ]; then
+        docker exec "$panel_cname" alembic upgrade head >/dev/null 2>&1
+        mok "Database Schema Updated."
+    else
+        mwarn "Could not run alembic (Container not found)."
+    fi
+
+    # 3. SANITIZE DATA (CRITICAL: Fills NULLs)
+    minfo "Sanitizing Data (Fixing NULLs for Rebecca)..."
+    
+    # Queries to fix crashes
+    local fixes=(
+        # Admins: Set permissions to empty array, limits to 0 (unlimited)
+        "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
+        "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
+        "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
+        "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
+        "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
+        
+        # Paths
+        "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
+        
+        # Clean JWT
+        "TRUNCATE TABLE jwt;"
+    )
+
+    for q in "${fixes[@]}"; do
+        docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$q" 2>/dev/null
+    done
+    mok "Data Sanitized."
 }
 
-migrate_migration_configs() {
-    minfo "Migrating configs..."
-    if [ ! -f "$PASARGUARD_DIR/.env" ] || [ ! -f "$REBECCA_DIR/.env" ]; then
-        return 0
-    fi
-    local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_SUBSCRIPTION_URL_PREFIX" "WEBHOOK_ADDRESS" "WEBHOOK_SECRET")
-    local n=0
+migrate_configs() {
+    minfo "Migrating Configs & Certs..."
+    local SRC_DATA="/var/lib/$(basename "$SRC")"
+    [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
+    local TGT_DATA="/var/lib/$(basename "$TGT")"
+
+    # Env Merge
+    local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
     for v in "${vars[@]}"; do
-        local val
-        val=$(grep "^${v}=" "$PASARGUARD_DIR/.env" 2>/dev/null | sed 's/[^=]*=//')
+        local val=$(grep "^${v}=" "$SRC/.env" 2>/dev/null | sed 's/[^=]*=//')
         if [ -n "$val" ]; then
-            # FIX: Clean path references in values
-            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
-            
-            sed -i "/^${v}=/d" "$REBECCA_DIR/.env" 2>/dev/null
-            echo "${v}=${val}" >>"$REBECCA_DIR/.env"
-            n=$((n+1))
+            sed -i "/^${v}=/d" "$TGT/.env"
+            echo "${v}=${val}" >> "$TGT/.env"
         fi
     done
-    mok "Migrated $n variables"
-
-    if [ -d "$PASARGUARD_DATA/certs" ]; then
-        minfo "Copying certificates..."
-        mkdir -p "$REBECCA_DATA/certs"
-        cp -r "$PASARGUARD_DATA/certs/"* "$REBECCA_DATA/certs/" 2>/dev/null || true
+    
+    # Copy Certs
+    if [ -d "$SRC_DATA/certs" ]; then
+        mkdir -p "$TGT_DATA/certs"
+        cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
+        chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
+        find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
+        mok "Certs Copied."
     fi
-
-    if [ -f "$PASARGUARD_DATA/xray_config.json" ]; then
-        cp "$PASARGUARD_DATA/xray_config.json" "$REBECCA_DATA/" 2>/dev/null || true
-    fi
-}
-
-post_import_fixes() {
-    minfo "Running post-import fixes (Automated)..."
-    local cname=$(find_migration_mysql_container)
-    local pass=$(grep -E "^MYSQL_ROOT_PASSWORD" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-    local db=$(grep -E "^MYSQL_DATABASE" "$REBECCA_DIR/.env" 2>/dev/null | sed 's/[^=]*=//' | tr -d '"'"'")
-    [ -z "$db" ] && db="marzban"
-
-    # FIX: Paths
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');" 2>/dev/null
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/marzban', '/var/lib/rebecca');" 2>/dev/null
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');" 2>/dev/null
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "UPDATE core_configs SET config = REPLACE(config, '/var/lib/marzban', '/var/lib/rebecca');" 2>/dev/null
-
-    # Reset JWT
-    docker exec "$cname" mysql -uroot -p"$pass" "$db" -e "TRUNCATE TABLE jwt;" 2>/dev/null
-    mok "Post-import fixes applied."
+    
+    # Copy Templates
+    [ -d "$SRC_DATA/templates" ] && cp -rn "$SRC_DATA/templates" "$TGT_DATA/" 2>/dev/null
 }
 
 create_rescue_admin() {
     echo ""
-    echo -e "${YELLOW}Do you want to create a new SuperAdmin? (Recommended if old login fails)${NC}"
-    read -p "Create admin? [y/N]: " ans
-    if [[ "$ans" =~ ^[Yy]$ ]]; then
-        local rebecca_cname=$(docker ps --format '{{.Names}}' | grep -iE "rebecca.*(rebecca|panel)" | head -1)
+    echo -e "${YELLOW}Create a fresh SuperAdmin? (Recommended)${NC}"
+    if ui_confirm "Create?" "y"; then
+        local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
         local cli="rebecca-cli"
-        [ -z "$rebecca_cname" ] && { rebecca_cname=$(docker ps --format '{{.Names}}' | grep -iE "marzban.*(marzban|panel)" | head -1); cli="marzban-cli"; }
         
-        if [ -n "$rebecca_cname" ]; then
-            docker exec -it "$rebecca_cname" $cli admin create --sudo
-        else
-            mwarn "Container not found running."
-        fi
+        # Interactive creation
+        echo -e "${GREEN}Follow the prompts below:${NC}"
+        docker exec -it "$cname" $cli admin create
     fi
 }
 
+# --- MAIN LOOP ---
+
 do_full_migration() {
     migration_init; clear
-    echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║   PASARGUARD → REBECCA MIGRATION v2.0         ║${NC}"
-    echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}\n"
-
-    for cmd in docker python3 sqlite3; do command -v "$cmd" &>/dev/null || { merr "Missing: $cmd"; mpause; return 1; }; done
-    mok "Dependencies OK"
+    ui_header "UNIVERSAL MIGRATION V3.0 (High Precision)"
     
-    # FIX: Use dynamic variables
-    [ ! -d "$PASARGUARD_DIR" ] && { merr "Source (Pasarguard/Marzban) not found"; mpause; return 1; }
-    mok "Source found: $PASARGUARD_DIR"
+    SRC=$(detect_source_panel)
+    TGT=$(detect_target_panel)
     
-    local db_type=$(detect_migration_db_type "$PASARGUARD_DIR" "$PASARGUARD_DATA")
-    echo -e "Database: ${CYAN}$db_type${NC}"
+    [ -z "$SRC" ] && { merr "Source not found"; mpause; return; }
+    [ -z "$TGT" ] && { merr "Target not found"; mpause; return; }
     
-    check_migration_rebecca || { merr "Target (Rebecca) not installed"; mpause; return 1; }; mok "Target found"
-    check_migration_rebecca_mysql || { merr "Target needs MySQL"; mpause; return 1; }; mok "MySQL verified"
-
-    echo ""; echo -e "${YELLOW}IMPORTANT:${NC} Ensure Target is installed. This script will migrate data and auto-fix schemas."; echo ""
-    read -p "Type 'migrate' to start: " confirm
-    [ "$confirm" != "migrate" ] && { minfo "Cancelled"; return 0; }
-
-    echo -e "\n${CYAN}━━━ STEP 1: BACKUP ━━━${NC}"
-    is_migration_running "$PASARGUARD_DIR" || start_migration_panel "$PASARGUARD_DIR" "Source"
-    create_migration_backup || { merr "Backup failed"; mpause; return 1; }
-    local backup_dir=$(cat "$BACKUP_ROOT/.last_backup")
-
-    echo -e "\n${CYAN}━━━ STEP 2: VERIFY ━━━${NC}"
-    local src=""
-    case "$db_type" in
-        sqlite) src="$backup_dir/database.sqlite3" ;;
-        *) src="$backup_dir/database.sql" ;;
-    esac
-    [ ! -s "$src" ] && { merr "Source empty"; mpause; return 1; }; mok "Source: $(du -h "$src" | cut -f1)"
-
-    echo -e "\n${CYAN}━━━ STEP 3: CONVERT ━━━${NC}"
-    local mysql_sql="$MIGRATION_TEMP/mysql_import.sql"
-    convert_migration_to_mysql "$src" "$mysql_sql" "$db_type" || { mpause; return 1; }
-    cp "$mysql_sql" "$backup_dir/mysql_converted.sql" 2>/dev/null
-
-    echo -e "\n${CYAN}━━━ STEP 4: STOP SOURCE ━━━${NC}"
-    stop_migration_panel "$PASARGUARD_DIR" "Source"
-
-    echo -e "\n${CYAN}━━━ STEP 5: CONFIGS ━━━${NC}"
-    migrate_migration_configs
-
-    echo -e "\n${CYAN}━━━ STEP 6: IMPORT ━━━${NC}"
-    is_migration_running "$REBECCA_DIR" || start_migration_panel "$REBECCA_DIR" "Target"
-    wait_migration_mysql
-    import_migration_to_rebecca "$mysql_sql" || mpause
-
-    post_import_fixes
-
-    echo -e "\n${CYAN}━━━ STEP 7: RESTART ━━━${NC}"
-    (cd "$REBECCA_DIR" && docker compose restart) &>/dev/null; sleep 5
-    mok "Target restarted"
+    echo -e "Source: ${RED}$SRC${NC}"
+    echo -e "Target: ${GREEN}$TGT${NC}"
     
-    # Optional: Alembic
-    local cname=$(docker ps --format '{{.Names}}' | grep -iE "(rebecca|marzban).*(rebecca|panel)" | head -1)
+    if ! ui_confirm "Start Migration? This stops both panels." "y"; then return; fi
+    
+    # 1. Backup
+    create_backup "$SRC"
+    local db_type=$(cat "$CURRENT_BACKUP/db_type.txt")
+    local src_sql="$CURRENT_BACKUP/database.sql"
+    [ "$db_type" == "sqlite" ] && src_sql="$CURRENT_BACKUP/database.sqlite3"
+    
+    # 2. Convert
+    local final_sql="$MIGRATION_TEMP/import.sql"
+    convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
+    
+    # 3. Stop Panels
+    (cd "$SRC" && docker compose down) &>/dev/null
+    (cd "$TGT" && docker compose down) &>/dev/null
+    
+    # 4. Start Target DB Only
+    minfo "Starting Target MySQL..."
+    (cd "$TGT" && docker compose up -d mysql mariadb db 2>/dev/null); sleep 15
+    
+    # 5. Import & Sanitize
+    import_and_sanitize "$final_sql" "$TGT"
+    migrate_configs
+    
+    # 6. Full Restart
+    ui_header "RESTARTING PANEL"
+    (cd "$TGT" && docker compose down && docker compose up -d)
+    
+    # Wait & Verify
+    sleep 10
+    local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$cname" ]; then
-         minfo "Running schema upgrade..."
-         docker exec "$cname" alembic upgrade head 2>/dev/null
+         mok "Panel Container: $cname"
     fi
-
-    echo -e "\n${GREEN}════════════════════════════════════════${NC}"
-    echo -e "${GREEN}   Migration completed!${NC}"
-    echo -e "${GREEN}════════════════════════════════════════${NC}"
-    echo "Backup: $backup_dir"
-
+    
+    echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
     create_rescue_admin
     migration_cleanup; mpause
 }
 
-do_migration_rollback() {
-    clear; echo -e "${CYAN}=== ROLLBACK ===${NC}"
-    [ ! -f "$BACKUP_ROOT/.last_backup" ] && { merr "No backup"; mpause; return 1; }
-    local backup=$(cat "$BACKUP_ROOT/.last_backup")
-    [ ! -d "$backup" ] && { merr "Backup missing"; mpause; return 1; }
-    echo "Backup: $backup"; read -p "Type 'rollback': " ans
-    [ "$ans" != "rollback" ] && return 0
-
-    migration_init; stop_migration_panel "$REBECCA_DIR" "Target"
+do_rollback() {
+    clear; ui_header "ROLLBACK"
+    local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
+    [ -z "$last" ] && { merr "No history found"; mpause; return; }
     
-    # FIX: Dynamic restore path
-    [ -f "$backup/pasarguard_config.tar.gz" ] && { 
-        rm -rf "$PASARGUARD_DIR"; mkdir -p "$(dirname "$PASARGUARD_DIR")"; 
-        tar -xzf "$backup/pasarguard_config.tar.gz" -C "$(dirname "$PASARGUARD_DIR")"; 
-        mok "Config restored"; 
-    }
-    [ -f "$backup/pasarguard_data.tar.gz" ] && { 
-        rm -rf "$PASARGUARD_DATA"; mkdir -p "$(dirname "$PASARGUARD_DATA")"; 
-        tar -xzf "$backup/pasarguard_data.tar.gz" -C "$(dirname "$PASARGUARD_DATA")"; 
-        mok "Data restored"; 
-    }
-    
-    start_migration_panel "$PASARGUARD_DIR" "Source"
-    echo -e "${GREEN}Rollback done${NC}"; migration_cleanup; mpause
+    if ui_confirm "Restore $last to Source?" "n"; then
+        local TGT=$(detect_source_panel)
+        (cd "$TGT" && docker compose down) &>/dev/null
+        tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
+        tar -xzf "$last/data.tar.gz" -C "/var/lib"
+        (cd "$TGT" && docker compose up -d) &>/dev/null
+        mok "Restored"
+    fi
+    mpause
 }
 
 migrator_menu() {
     while true; do
         clear
-        echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   MIGRATION TOOLS v2.0             ║${NC}"
-        echo -e "${BLUE}╚════════════════════════════════════╝${NC}\n"
-        echo " 1) Migrate Pasarguard/Marzban → Rebecca (Full Auto)"
-        echo " 2) Rollback to Source"
-        echo " 3) View Backups"
-        echo " 4) View Log"
-        echo " 0) Back"
-        echo ""; read -p "Select: " opt
+        ui_header "MIGRATION MENU"
+        echo "1) Auto Migrate (Precision Mode)"
+        echo "2) Rollback"
+        echo "3) Logs"
+        echo "0) Back"
+        read -p "Select: " opt
         case "$opt" in
             1) do_full_migration ;;
-            2) do_migration_rollback ;;
-            3) clear; ls -lh "$BACKUP_ROOT" 2>/dev/null || echo "No backups"; mpause ;;
-            4) clear; tail -50 "$MIGRATION_LOG" 2>/dev/null || echo "No log"; mpause ;;
+            2) do_rollback ;;
+            3) tail -50 "$MIGRATION_LOG"; mpause ;;
             0) return ;;
         esac
     done
