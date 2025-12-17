@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V7.4 (Complete Env Transfer)
+# MRM Migration Tool - V7.5 (Syntax Error Fix)
 #==============================================================================
 
 # Load Utils & UI
@@ -308,7 +308,6 @@ migrate_configs() {
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # --- COMPLETE LIST OF VARIABLES TO MIGRATE ---
     local vars=(
         "SUDO_USERNAME"
         "SUDO_PASSWORD"
@@ -321,7 +320,6 @@ migrate_configs() {
         "JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
         "JWT_ACCESS_TOKEN_SECRET"
         "JWT_REFRESH_TOKEN_SECRET"
-        # New additions for full completeness:
         "TELEGRAM_WEBHOOK_URL"
         "TELEGRAM_WEBHOOK_TOKEN"
         "SUBSCRIPTION_PAGE_TEMPLATE"
@@ -341,18 +339,36 @@ migrate_configs() {
     fi
 
     for v in "${vars[@]}"; do
-        local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
-        if [ -n "$val" ]; then
-            # Path Replacement logic (Critical for SSL and templates)
+        # --- FIXED EXTRACTION LOGIC ---
+        # 1. Capture the full line
+        local raw_line=$(grep -E "^${v}\s*=" "$SRC/.env" | head -1)
+        
+        if [ -n "$raw_line" ]; then
+            # 2. Extract value after the first '='
+            local val="${raw_line#*=}"
+
+            # 3. Trim leading and trailing whitespace
+            val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+            # 4. Remove surrounding quotes (Double or Single)
+            val=${val#\"} # Remove leading double quote
+            val=${val%\"} # Remove trailing double quote
+            val=${val#\'} # Remove leading single quote
+            val=${val%\'} # Remove trailing single quote
+
+            # 5. Path Replacement
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
 
-            sed -i "/^${v}=/d" "$TGT/.env"
+            # 6. Clean removal of old key from target
+            sed -i "/^${v}\s*=/d" "$TGT/.env"
+
+            # 7. Write cleanly to target
             echo "${v}=\"$val\"" >> "$TGT/.env"
         fi
     done
 
-    # Generate JWT keys if missing (Safety Net)
+    # Generate JWT keys if missing
     if ! grep -q "JWT_ACCESS_TOKEN_SECRET" "$TGT/.env"; then
         echo -e "${YELLOW}JWT Secret missing in source. Generating new one...${NC}"
         local GEN_KEY=$(openssl rand -hex 32)
@@ -387,7 +403,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.4 (FULL ENV FIX)"
+    ui_header "UNIVERSAL MIGRATION V7.5 (SYNTAX FIX)"
 
     SRC=$(detect_source_panel)
 
