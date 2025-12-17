@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V7.6 (Strict Env Generator)
+# MRM Migration Tool - V7.7 (Null Protection)
 #==============================================================================
 
 # Load Utils & UI
@@ -32,16 +32,16 @@ mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
 
-# --- CORE ENV FUNCTION (THE FIX) ---
+# --- SAFE ENV SETTER ---
 set_env_var() {
     local key="$1"
     local val="$2"
     local file="$3"
-
-    # 1. Remove ANY existing occurrence of this key (with or without spaces)
+    
+    # 1. Delete existing key
     sed -i "/^\s*${key}\s*=/d" "$file"
-
-    # 2. Append the clean key=value
+    
+    # 2. Append new key with quotes to ensure it's never treated as Null
     echo "${key}=\"${val}\"" >> "$file"
 }
 
@@ -301,37 +301,30 @@ migrate_configs() {
         minfo "Migrated Backup Bot."
     fi
 
-    # 1. MIGRATE EXISTING VARS
     for v in "${vars[@]}"; do
-        # Robust grep: finds keys with spaces e.g., 'KEY = "val"'
         local raw_line=$(grep -E "^\s*${v}\s*=" "$SRC/.env" | head -1)
-        
         if [ -n "$raw_line" ]; then
-            # Extract value: removes everything before first '='
             local val="${raw_line#*=}"
-            # Trim whitespace
             val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-            # Remove quotes
             val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
             
-            # Path Replacement
+            # CRITICAL FIX: If value is empty, DO NOT COPY. Let generator handle it.
+            if [ -z "$val" ]; then continue; fi
+
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-
-            # Write clean var using helper
             set_env_var "$v" "$val" "$TGT/.env"
         fi
     done
 
-    # 2. ENSURE JWT EXISTS (CRITICAL)
-    # Check if we successfully migrated it. If not, generate it.
-    # We verify by checking the FILE content in TGT, not SRC.
-    if ! grep -q "^JWT_ACCESS_TOKEN_SECRET=" "$TGT/.env"; then
-        echo -e "${YELLOW}JWT Secret missing in target. Generating new ones...${NC}"
+    # FORCE GENERATE IF MISSING OR EMPTY
+    # We check the FILE itself to be 100% sure the key exists and has content.
+    local check_secret=$(grep "^JWT_ACCESS_TOKEN_SECRET=" "$TGT/.env" | cut -d'=' -f2 | tr -d '"')
+    
+    if [ -z "$check_secret" ]; then
+        echo -e "${YELLOW}Generating FRESH JWT Secrets (Prevents Null Error)...${NC}"
         set_env_var "JWT_ACCESS_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
         set_env_var "JWT_REFRESH_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
-    else
-        mok "JWT Secrets verified."
     fi
 
     # Copy Certs
@@ -359,7 +352,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.6 (STRICT ENV)"
+    ui_header "UNIVERSAL MIGRATION V7.7 (NULL PROTECT)"
 
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
