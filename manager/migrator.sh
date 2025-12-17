@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V8.3 (Clean Env & Hard Stop)
+# MRM Migration Tool - V9.0 (Smart Parser & Env Builder)
 #==============================================================================
 
 # Load Utils & UI
@@ -169,69 +169,111 @@ PYEOF
     [ -s "$dst" ] && mok "Converted" || merr "Conversion failed"
 }
 
-# --- THE FIX: CLEAN ENV GENERATION WITHOUT QUOTES ---
+# --- SMART ENV READER ---
+# Reads variable handling spaces: KEY = "VALUE"
+read_var() {
+    local key="$1"
+    local file="$2"
+    # Find line starting with key, ignore leading spaces, allow spaces around =
+    # Remove key, =, quotes, and whitespace
+    grep -E "^\s*${key}\s*=" "$file" | head -1 | sed -E "s/^\s*${key}\s*=\s*//g" | sed -E 's/^"//;s/"$//;s/^\x27//;s/\x27$//'
+}
+
+# --- THE FIX: CLEAN ENV CONSTRUCTION ---
 generate_clean_env() {
     local src="$1"
     local tgt="$2"
     local tgt_env="$tgt/.env"
+    local src_env="$src/.env"
     
-    minfo "Re-generating .env from scratch..."
+    minfo "Re-generating .env (Smart Builder)..."
     
-    local DB_PASS=$(grep "MYSQL_ROOT_PASSWORD" "$tgt_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    # 1. Database Password (from existing target or generate)
+    local DB_PASS=$(read_var "MYSQL_ROOT_PASSWORD" "$tgt_env")
     if [ -z "$DB_PASS" ]; then DB_PASS="password"; fi
 
-    # Use PRINTF instead of CAT for better control
-    # NO QUOTES around values to avoid parsing issues in some setups
+    # 2. Extract Values from Source (Pasarguard)
+    local UV_PORT=$(read_var "UVICORN_PORT" "$src_env")
+    [ -z "$UV_PORT" ] && UV_PORT="7431"
+
+    local SUDO_USER=$(read_var "SUDO_USERNAME" "$src_env")
+    local SUDO_PASS=$(read_var "SUDO_PASSWORD" "$src_env")
+    # Fallback if commented out in source
+    [ -z "$SUDO_USER" ] && SUDO_USER="admin"
+    [ -z "$SUDO_PASS" ] && SUDO_PASS="admin"
+
+    local TG_TOKEN=$(read_var "BACKUP_TELEGRAM_BOT_KEY" "$src_env")
+    [ -z "$TG_TOKEN" ] && TG_TOKEN=$(read_var "TELEGRAM_API_TOKEN" "$src_env")
+
+    local TG_ADMIN=$(read_var "BACKUP_TELEGRAM_CHAT_ID" "$src_env")
+    [ -z "$TG_ADMIN" ] && TG_ADMIN=$(read_var "TELEGRAM_ADMIN_ID" "$src_env")
+
+    # SSL Paths - Correct them
+    local SSL_CERT=$(read_var "UVICORN_SSL_CERTFILE" "$src_env")
+    local SSL_KEY=$(read_var "UVICORN_SSL_KEYFILE" "$src_env")
+    SSL_CERT="${SSL_CERT/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+    SSL_KEY="${SSL_KEY/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+    SSL_CERT="${SSL_CERT/\/opt\/pasarguard/\/opt\/rebecca}"
+    SSL_KEY="${SSL_KEY/\/opt\/pasarguard/\/opt\/rebecca}"
+
+    local TPL_DIR=$(read_var "CUSTOM_TEMPLATES_DIRECTORY" "$src_env")
+    TPL_DIR="${TPL_DIR/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+    
+    local TPL_PAGE=$(read_var "SUBSCRIPTION_PAGE_TEMPLATE" "$src_env")
+    local XRAY_JSON=$(read_var "XRAY_JSON" "$src_env")
+    local SUB_URL=$(read_var "SUB_CONF_URL" "$src_env")
+
+    # 3. Write NEW Clean File
     cat > "$tgt_env" <<EOF
-SQLALCHEMY_DATABASE_URL=mysql+pymysql://root:$DB_PASS@127.0.0.1:3306/rebecca
-MYSQL_ROOT_PASSWORD=$DB_PASS
-UVICORN_HOST=0.0.0.0
-UVICORN_PORT=7431
-XRAY_SUBSCRIPTION_URL_PREFIX=
-XRAY_EXECUTABLE_PATH=/var/lib/rebecca/xray
-XRAY_ASSETS_PATH=/var/lib/rebecca/assets
+SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:${DB_PASS}@127.0.0.1:3306/rebecca"
+MYSQL_ROOT_PASSWORD="${DB_PASS}"
+MYSQL_DATABASE="rebecca"
+MYSQL_USER="rebecca"
+MYSQL_PASSWORD="${DB_PASS}"
+
+UVICORN_HOST="0.0.0.0"
+UVICORN_PORT="${UV_PORT}"
+UVICORN_SSL_CERTFILE="${SSL_CERT}"
+UVICORN_SSL_KEYFILE="${SSL_KEY}"
+
+SUDO_USERNAME="${SUDO_USER}"
+SUDO_PASSWORD="${SUDO_PASS}"
+
+TELEGRAM_API_TOKEN="${TG_TOKEN}"
+TELEGRAM_ADMIN_ID="${TG_ADMIN}"
+
+XRAY_JSON="${XRAY_JSON}"
+XRAY_SUBSCRIPTION_URL_PREFIX=""
+XRAY_EXECUTABLE_PATH="/var/lib/rebecca/xray"
+XRAY_ASSETS_PATH="/var/lib/rebecca/assets"
+
+CUSTOM_TEMPLATES_DIRECTORY="${TPL_DIR}"
+SUBSCRIPTION_PAGE_TEMPLATE="${TPL_PAGE}"
+SUB_CONF_URL="${SUB_URL}"
+
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
+SECRET_KEY="$(openssl rand -hex 32)"
+JWT_ACCESS_TOKEN_SECRET="$(openssl rand -hex 32)"
+JWT_REFRESH_TOKEN_SECRET="$(openssl rand -hex 32)"
 EOF
 
-    local vars=(
-        "SUDO_USERNAME" "SUDO_PASSWORD" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" 
-        "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "SUBSCRIPTION_PAGE_TEMPLATE" 
-        "CUSTOM_TEMPLATES_DIRECTORY" "SUB_CONF_URL" "UVICORN_SSL_CERTFILE" "UVICORN_SSL_KEYFILE"
-    )
-
-    for v in "${vars[@]}"; do
-        local raw_line=$(grep -E "^\s*${v}\s*=" "$src/.env" | head -1)
-        if [ -n "$raw_line" ]; then
-            local val="${raw_line#*=}"
-            val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-            val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
-            
-            if [ -z "$val" ]; then continue; fi
-
-            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
-            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-            
-            echo "${v}=${val}" >> "$tgt_env"
-        fi
-    done
-
-    # APPEND NEW SECRETS (NO QUOTES)
-    echo "" >> "$tgt_env"
-    echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$tgt_env"
-    echo "JWT_ACCESS_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$tgt_env"
-    echo "JWT_REFRESH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$tgt_env"
-
-    mok "Env file rewritten."
+    mok "Env file built successfully."
     
+    # Copy Assets
     local SRC_DATA="/var/lib/$(basename "$src")"
     [ "$src" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$tgt")"
+    
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
         cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
         chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
         find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
     fi
-    [ -d "$SRC_DATA/templates" ] && cp -rn "$SRC_DATA/templates" "$TGT_DATA/" 2>/dev/null
+    if [ -d "$SRC_DATA/templates" ]; then
+        mkdir -p "$TGT_DATA/templates"
+        cp -rn "$SRC_DATA/templates/"* "$TGT_DATA/templates/" 2>/dev/null
+    fi
 }
 
 import_and_sanitize() {
@@ -282,7 +324,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V8.3 (CLEAN ENV)"
+    ui_header "UNIVERSAL MIGRATION V9.0 (SMART PARSER)"
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
@@ -305,7 +347,6 @@ do_full_migration() {
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
 
     minfo "Stopping panels..."
-    # Force stop Pasarguard/Marzban containers aggressively to free ports
     docker ps -q --filter "name=pasarguard" | xargs -r docker stop
     docker ps -q --filter "name=marzban" | xargs -r docker stop
     (cd "$SRC" && docker compose down) &>/dev/null
@@ -314,13 +355,12 @@ do_full_migration() {
     generate_clean_env "$SRC" "$TGT"
 
     minfo "Starting Target Panel..."
-    # Force recreate to ensure new env is picked up
     (cd "$TGT" && docker compose up -d --force-recreate); sleep 20
 
     import_and_sanitize "$final_sql" "$TGT"
 
     ui_header "FINAL RESTART"
-    (cd "$TGT" && docker compose down && docker compose up -d)
+    (cd "$TGT" && docker compose down && docker compose up -d --force-recreate)
 
     sleep 10
     local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
