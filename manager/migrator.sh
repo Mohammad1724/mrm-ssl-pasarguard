@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V7.5 (Syntax Error Fix)
+# MRM Migration Tool - V7.6 (Strict Env Generator)
 #==============================================================================
 
 # Load Utils & UI
@@ -32,6 +32,19 @@ mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
 
+# --- CORE ENV FUNCTION (THE FIX) ---
+set_env_var() {
+    local key="$1"
+    local val="$2"
+    local file="$3"
+
+    # 1. Remove ANY existing occurrence of this key (with or without spaces)
+    sed -i "/^\s*${key}\s*=/d" "$file"
+
+    # 2. Append the clean key=value
+    echo "${key}=\"${val}\"" >> "$file"
+}
+
 # --- DETECTION ---
 
 detect_source_panel() {
@@ -53,16 +66,11 @@ fix_rebecca_env() {
     local env_file="$target/.env"
 
     minfo "Applying fixes to .env for Host Network..."
-
-    # 1. Change Driver to pymysql
     sed -i 's/mysql+asyncmy/mysql+pymysql/g' "$env_file"
     sed -i 's/mysql+aiomysql/mysql+pymysql/g' "$env_file"
-
-    # 2. Change Host to 127.0.0.1
     sed -i 's/@mysql/@127.0.0.1:3306/g' "$env_file"
     sed -i 's/@mariadb/@127.0.0.1:3306/g' "$env_file"
 
-    # Ensure it is set if sed failed
     if ! grep -q "pymysql" "$env_file"; then
         local pass=$(grep "MYSQL_ROOT_PASSWORD" "$env_file" | cut -d'=' -f2)
         echo "" >> "$env_file"
@@ -76,22 +84,14 @@ install_rebecca_wizard() {
     ui_header "INSTALLING REBECCA"
     echo -e "${YELLOW}Target panel not found.${NC}"
     echo -e "${BLUE}Starting official installer (MySQL)...${NC}"
-    echo ""
-    echo -e "${YELLOW}NOTE: When installation finishes and logs appear, press Ctrl+C once to continue.${NC}"
-    echo ""
-
     if ! ui_confirm "Proceed?" "y"; then return 1; fi
-
     eval "$REBECCA_INSTALL_CMD"
-
-    if [ -d "/opt/rebecca" ] && [ -f "/opt/rebecca/docker-compose.yml" ]; then
-        echo ""
+    if [ -d "/opt/rebecca" ]; then
         mok "Rebecca Installation Verified."
         fix_rebecca_env "/opt/rebecca"
         return 0
     else
-        echo ""
-        merr "Installation failed or directory /opt/rebecca missing."
+        merr "Installation failed."
         return 1
     fi
 }
@@ -120,7 +120,6 @@ find_db_container() {
     local keywords=""
     [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
     [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
-
     local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
     [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
     echo "$cname"
@@ -130,9 +129,7 @@ get_db_credentials() {
     local panel_dir="$1"
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
-
     local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -200,33 +197,24 @@ convert_to_mysql() {
 
     python3 - "$src" "$dst" << 'PYEOF'
 import re, sys
-
 src, dst = sys.argv[1], sys.argv[2]
-
 with open(src, 'r', encoding='utf-8', errors='replace') as f: lines = f.readlines()
 out = []
-
 header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES';\n\n"
-
 for line in lines:
     l = line.strip()
     if l.startswith(('PRAGMA', 'BEGIN TRANSACTION', 'COMMIT', 'SET', '\\', '--')): continue
     if re.match(r'^SELECT\s+(pg_catalog|setval)', l, re.I): continue
 
-    # Fix Types
     line = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
     line = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
     line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
     line = line.replace("'t'", "1").replace("'f'", "0")
-    
-    # Fix Timestamp +00 (Postgres)
     line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(\.\d+)?\+00'", r"'\1'", line)
     
-    # Fix Paths (Universal)
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
     
-    # INSERT -> REPLACE
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
@@ -255,12 +243,10 @@ import_and_sanitize() {
     local cname=$(find_db_container "$TGT" "mysql")
     [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
 
-    # Auto-detect DB name
     local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
     local db="marzban"
     if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
 
-    # 1. Create & Import
     docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
     if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
         mok "Data Imported."
@@ -268,21 +254,14 @@ import_and_sanitize() {
         mwarn "Import had warnings."
     fi
 
-    # 2. SCHEMA FIX (MANUAL)
-    minfo "Patching Schema (Manual)..."
+    run_sql() { docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null; }
 
-    run_sql() {
-        docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null
-    }
-
-    # Admins
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;"
 
-    # 3. SANITIZE DATA
     minfo "Sanitizing Data..."
     local fixes=(
         "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
@@ -290,15 +269,12 @@ import_and_sanitize() {
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-        
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
         "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
         "TRUNCATE TABLE jwt;"
     )
 
-    for q in "${fixes[@]}"; do
-        run_sql "$q"
-    done
+    for q in "${fixes[@]}"; do run_sql "$q"; done
     mok "Data Sanitized & Fixed."
 }
 
@@ -309,72 +285,53 @@ migrate_configs() {
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
     local vars=(
-        "SUDO_USERNAME"
-        "SUDO_PASSWORD"
-        "UVICORN_PORT"
-        "UVICORN_SSL_CERTFILE"
-        "UVICORN_SSL_KEYFILE"
-        "TELEGRAM_API_TOKEN"
-        "TELEGRAM_ADMIN_ID"
-        "XRAY_JSON"
-        "JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
-        "JWT_ACCESS_TOKEN_SECRET"
-        "JWT_REFRESH_TOKEN_SECRET"
-        "TELEGRAM_WEBHOOK_URL"
-        "TELEGRAM_WEBHOOK_TOKEN"
-        "SUBSCRIPTION_PAGE_TEMPLATE"
-        "CUSTOM_TEMPLATES_DIRECTORY"
-        "XRAY_SUBSCRIPTION_URL_PREFIX"
-        "SUB_CONF_URL"
-        "DISCORD_WEBHOOK_URL"
+        "SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "UVICORN_SSL_CERTFILE" "UVICORN_SSL_KEYFILE"
+        "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON"
+        "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "JWT_ACCESS_TOKEN_SECRET" "JWT_REFRESH_TOKEN_SECRET"
+        "TELEGRAM_WEBHOOK_URL" "TELEGRAM_WEBHOOK_TOKEN" "SUBSCRIPTION_PAGE_TEMPLATE"
+        "CUSTOM_TEMPLATES_DIRECTORY" "XRAY_SUBSCRIPTION_URL_PREFIX" "SUB_CONF_URL" "DISCORD_WEBHOOK_URL"
     )
 
     local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
     local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
 
-    if [ -n "$backup_key" ] && ! grep -q "^TELEGRAM_API_TOKEN" "$TGT/.env"; then
-        echo "TELEGRAM_API_TOKEN=$backup_key" >> "$TGT/.env"
-        echo "TELEGRAM_ADMIN_ID=$backup_chat" >> "$TGT/.env"
+    if [ -n "$backup_key" ]; then
+        set_env_var "TELEGRAM_API_TOKEN" "$backup_key" "$TGT/.env"
+        set_env_var "TELEGRAM_ADMIN_ID" "$backup_chat" "$TGT/.env"
         minfo "Migrated Backup Bot."
     fi
 
+    # 1. MIGRATE EXISTING VARS
     for v in "${vars[@]}"; do
-        # --- FIXED EXTRACTION LOGIC ---
-        # 1. Capture the full line
-        local raw_line=$(grep -E "^${v}\s*=" "$SRC/.env" | head -1)
+        # Robust grep: finds keys with spaces e.g., 'KEY = "val"'
+        local raw_line=$(grep -E "^\s*${v}\s*=" "$SRC/.env" | head -1)
         
         if [ -n "$raw_line" ]; then
-            # 2. Extract value after the first '='
+            # Extract value: removes everything before first '='
             local val="${raw_line#*=}"
-
-            # 3. Trim leading and trailing whitespace
+            # Trim whitespace
             val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-
-            # 4. Remove surrounding quotes (Double or Single)
-            val=${val#\"} # Remove leading double quote
-            val=${val%\"} # Remove trailing double quote
-            val=${val#\'} # Remove leading single quote
-            val=${val%\'} # Remove trailing single quote
-
-            # 5. Path Replacement
+            # Remove quotes
+            val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
+            
+            # Path Replacement
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
 
-            # 6. Clean removal of old key from target
-            sed -i "/^${v}\s*=/d" "$TGT/.env"
-
-            # 7. Write cleanly to target
-            echo "${v}=\"$val\"" >> "$TGT/.env"
+            # Write clean var using helper
+            set_env_var "$v" "$val" "$TGT/.env"
         fi
     done
 
-    # Generate JWT keys if missing
-    if ! grep -q "JWT_ACCESS_TOKEN_SECRET" "$TGT/.env"; then
-        echo -e "${YELLOW}JWT Secret missing in source. Generating new one...${NC}"
-        local GEN_KEY=$(openssl rand -hex 32)
-        local GEN_REF=$(openssl rand -hex 32)
-        echo "JWT_ACCESS_TOKEN_SECRET=\"$GEN_KEY\"" >> "$TGT/.env"
-        echo "JWT_REFRESH_TOKEN_SECRET=\"$GEN_REF\"" >> "$TGT/.env"
+    # 2. ENSURE JWT EXISTS (CRITICAL)
+    # Check if we successfully migrated it. If not, generate it.
+    # We verify by checking the FILE content in TGT, not SRC.
+    if ! grep -q "^JWT_ACCESS_TOKEN_SECRET=" "$TGT/.env"; then
+        echo -e "${YELLOW}JWT Secret missing in target. Generating new ones...${NC}"
+        set_env_var "JWT_ACCESS_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
+        set_env_var "JWT_REFRESH_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
+    else
+        mok "JWT Secrets verified."
     fi
 
     # Copy Certs
@@ -393,7 +350,6 @@ create_rescue_admin() {
         local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
         local cli="rebecca-cli"
         [ -f "$TGT/marzban-cli" ] && cli="marzban-cli"
-
         echo -e "${GREEN}Running interactive creation...${NC}"
         docker exec -it "$cname" $cli admin create
     fi
@@ -403,10 +359,9 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.5 (SYNTAX FIX)"
+    ui_header "UNIVERSAL MIGRATION V7.6 (STRICT ENV)"
 
     SRC=$(detect_source_panel)
-
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
         fix_rebecca_env "$TGT"
@@ -418,11 +373,9 @@ do_full_migration() {
     fi
 
     [ -z "$SRC" ] && { merr "Source not found"; mpause; return; }
-
     echo -e "Source: ${RED}$SRC${NC}"
     echo -e "Target: ${GREEN}$TGT${NC}"
-
-    if ! ui_confirm "Start Migration? This stops both panels." "y"; then return; fi
+    if ! ui_confirm "Start Migration?" "y"; then return; fi
 
     # 1. Backup
     create_backup "$SRC"
@@ -434,30 +387,28 @@ do_full_migration() {
     local final_sql="$MIGRATION_TEMP/import.sql"
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
 
-    # 3. Stop Panels
-    minfo "Stopping all panels..."
+    # 3. Stop
+    minfo "Stopping panels..."
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    # 4. PREPARE ENV (KEY STEP)
+    # 4. MIGRATE CONFIGS (BEFORE START)
     migrate_configs 
 
-    # 5. Start Target
-    minfo "Starting Target Panel (Full stack)..."
+    # 5. Start
+    minfo "Starting Target Panel..."
     (cd "$TGT" && docker compose up -d); sleep 20
 
-    # 6. Import & Sanitize
+    # 6. Import
     import_and_sanitize "$final_sql" "$TGT"
     
-    # 7. Restart
+    # 7. Final Restart
     ui_header "FINAL RESTART"
     (cd "$TGT" && docker compose down && docker compose up -d)
 
     sleep 10
     local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
-    if [ -n "$cname" ]; then
-         mok "Panel Running: $cname"
-    fi
+    if [ -n "$cname" ]; then mok "Panel Running: $cname"; fi
 
     echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
     create_rescue_admin
@@ -469,26 +420,22 @@ do_rollback() {
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     local src_path=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
     [ -z "$src_path" ] && src_path="/opt/pasarguard"
-
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
 
     if ui_confirm "Restore $last to $src_path?" "n"; then
-        echo -e "${YELLOW}Stopping and removing current panel (Fixes Port Conflict)...${NC}"
-        
+        echo -e "${YELLOW}Stopping current panel...${NC}"
         if [ -d "/opt/rebecca" ]; then (cd /opt/rebecca && docker compose down) &>/dev/null; fi
-        
         local PID=$(lsof -t -i:7431 2>/dev/null)
         if [ ! -z "$PID" ]; then kill -9 $PID; fi
         
         echo -e "${BLUE}Restoring files...${NC}"
         local TGT=$(detect_source_panel)
         [ -z "$TGT" ] && TGT="$src_path"
-
         mkdir -p "$(dirname "$TGT")"
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
         (cd "$TGT" && docker compose up -d) &>/dev/null
-        mok "Rollback Complete. Source panel started."
+        mok "Rollback Complete."
     fi
     mpause
 }
