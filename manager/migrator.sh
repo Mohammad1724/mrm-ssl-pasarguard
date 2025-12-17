@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Fixed Edition (JWT & Rollback Fix)
+# MRM Migration Tool - Fixed Order (Env Fix BEFORE Start)
 #==============================================================================
 
 # Load Utils & UI
@@ -163,7 +163,7 @@ create_backup() {
     CURRENT_BACKUP="$BACKUP_ROOT/backup_$ts"
     mkdir -p "$CURRENT_BACKUP"
     echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
-    echo "$SRC" > "$BACKUP_ROOT/.last_source" # Added: Save Source Path for Rollback
+    echo "$SRC" > "$BACKUP_ROOT/.last_source" 
 
     tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
     tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
@@ -298,7 +298,7 @@ import_and_sanitize() {
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
         "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
 
-        # Clean JWT (To be safe with new keys)
+        # Clean JWT (This is safe, just logs out users)
         "TRUNCATE TABLE jwt;"
     )
 
@@ -309,36 +309,32 @@ import_and_sanitize() {
 }
 
 migrate_configs() {
-    minfo "Migrating Configs..."
+    minfo "Migrating Configs (.env)..."
     local SRC_DATA="/var/lib/$(basename "$SRC")"
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # Env Merge
-    # FIX: ADDED JWT KEYS TO PREVENT 'cannot be null' ERROR
+    # Variables to migrate
     local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "JWT_ACCESS_TOKEN_SECRET" "JWT_REFRESH_TOKEN_SECRET")
 
-    # Special migration: Map BACKUP_TELEGRAM_BOT_KEY to TELEGRAM_API_TOKEN if needed
+    # Map Backup Bot to Main Bot
     local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
     local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
 
-    if [ -n "$backup_key" ]; then
-        if ! grep -q "^TELEGRAM_API_TOKEN" "$TGT/.env"; then
-            echo "TELEGRAM_API_TOKEN=$backup_key" >> "$TGT/.env"
-            echo "TELEGRAM_ADMIN_ID=$backup_chat" >> "$TGT/.env"
-            minfo "Migrated Backup Bot to Main Bot."
-        fi
+    if [ -n "$backup_key" ] && ! grep -q "^TELEGRAM_API_TOKEN" "$TGT/.env"; then
+        echo "TELEGRAM_API_TOKEN=$backup_key" >> "$TGT/.env"
+        echo "TELEGRAM_ADMIN_ID=$backup_chat" >> "$TGT/.env"
+        minfo "Migrated Backup Bot."
     fi
 
+    # Migrate standard vars
     for v in "${vars[@]}"; do
         local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
         if [ -n "$val" ]; then
-            # Path Replacement
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-
             sed -i "/^${v}=/d" "$TGT/.env"
-            echo "${v}=${val}" >> "$TGT/.env"
+            echo "${v}=\"$val\"" >> "$TGT/.env"
         fi
     done
 
@@ -347,15 +343,15 @@ migrate_configs() {
     if ! grep -q "JWT_ACCESS_TOKEN_SECRET" "$TGT/.env"; then
         echo -e "${YELLOW}JWT Secret missing in source. Generating new one...${NC}"
         local GEN_KEY=$(openssl rand -hex 32)
+        local GEN_REF=$(openssl rand -hex 32)
         echo "JWT_ACCESS_TOKEN_SECRET=\"$GEN_KEY\"" >> "$TGT/.env"
-        echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
+        echo "JWT_REFRESH_TOKEN_SECRET=\"$GEN_REF\"" >> "$TGT/.env"
     fi
 
-    # Copy Certs (Recursive)
+    # Copy Certs
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
         cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
-        # Fix permissions
         chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
         find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
     fi
@@ -378,25 +374,21 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.0"
+    ui_header "UNIVERSAL MIGRATION V7.2 (CRASH FIX)"
 
     SRC=$(detect_source_panel)
 
-    # --- AUTO INSTALL TRIGGER ---
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
         fix_rebecca_env "$TGT"
     elif [ -d "/opt/marzban" ]; then
         TGT="/opt/marzban"
     else
-        # Install
-        if ! install_rebecca_wizard; then
-             mpause; return;
-        fi
+        if ! install_rebecca_wizard; then mpause; return; fi
         TGT="/opt/rebecca"
     fi
 
-    [ -z "$SRC" ] && { merr "Source (Pasarguard/Marzban) not found"; mpause; return; }
+    [ -z "$SRC" ] && { merr "Source not found"; mpause; return; }
 
     echo -e "Source: ${RED}$SRC${NC}"
     echo -e "Target: ${GREEN}$TGT${NC}"
@@ -414,19 +406,25 @@ do_full_migration() {
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
 
     # 3. Stop Panels
+    minfo "Stopping all panels..."
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    # 4. Start Target (FULL STARTUP TO ENSURE DB IS UP)
+    # === CRITICAL FIX: PREPARE ENV BEFORE START ===
+    # We must run migrate_configs HERE so the JWT secrets are present 
+    # when the container starts for the first time.
+    migrate_configs 
+    # ===============================================
+
+    # 4. Start Target
     minfo "Starting Target Panel (Full stack)..."
     (cd "$TGT" && docker compose up -d); sleep 20
 
     # 5. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
-    migrate_configs
-
-    # 6. Restart to apply configs
-    ui_header "RESTARTING PANEL"
+    
+    # 6. Restart one last time to ensure everything is clean
+    ui_header "FINAL RESTART"
     (cd "$TGT" && docker compose down && docker compose up -d)
 
     sleep 10
@@ -444,36 +442,34 @@ do_rollback() {
     clear; ui_header "ROLLBACK"
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     local src_path=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    # Default if missing
     [ -z "$src_path" ] && src_path="/opt/pasarguard"
 
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
 
     if ui_confirm "Restore $last to $src_path?" "n"; then
         
-        # FIX: Ensure Rebecca/New Panel is FULLY stopped and removed before rollback
-        # This fixes the port conflict issue.
-        echo -e "${YELLOW}Stopping current panel containers...${NC}"
+        # FIX: FULL CLEANUP BEFORE ROLLBACK
+        echo -e "${YELLOW}Stopping and removing current panel (Fixes Port Conflict)...${NC}"
         
         if [ -d "/opt/rebecca" ]; then
             (cd /opt/rebecca && docker compose down) &>/dev/null
         fi
         
-        # Also force kill any stuck process on port 7431/8000 just in case
+        # Kill stuck ports
         local PID=$(lsof -t -i:7431 2>/dev/null)
         if [ ! -z "$PID" ]; then kill -9 $PID; fi
         
         echo -e "${BLUE}Restoring files...${NC}"
-        # Original Logic
         local TGT=$(detect_source_panel)
         [ -z "$TGT" ] && TGT="$src_path"
 
-        (cd "$TGT" && docker compose down) &>/dev/null
-        
+        # Ensure target dir exists
+        mkdir -p "$(dirname "$TGT")"
+
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
         (cd "$TGT" && docker compose up -d) &>/dev/null
-        mok "Restored"
+        mok "Rollback Complete. Source panel started."
     fi
     mpause
 }
