@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V7.8 (Force JWT Regeneration)
+# MRM Migration Tool - V8.0 (Nuclear JWT Fix)
 #==============================================================================
 
 # Load Utils & UI
@@ -38,18 +38,15 @@ set_env_var() {
     local val="$2"
     local file="$3"
     
-    # Ensure file exists
-    touch "$file"
+    [ ! -f "$file" ] && touch "$file"
     
-    # Ensure file ends with newline to prevent appending to same line
-    if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then
-        echo "" >> "$file"
-    fi
+    # Force new line at end if missing
+    if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then echo "" >> "$file"; fi
 
-    # 1. Delete ALL existing occurrences of this key (fuzzy match)
-    sed -i "/^\s*${key}\s*=/d" "$file"
+    # Delete ANY existing occurrence (commented or not)
+    sed -i "/${key}/d" "$file"
     
-    # 2. Append fresh key
+    # Append clean value
     echo "${key}=\"${val}\"" >> "$file"
 }
 
@@ -292,7 +289,7 @@ migrate_configs() {
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # NOTE: REMOVED JWT FROM THIS LIST TO AVOID COPYING NULLS
+    # --- REMOVED JWT FROM HERE TO AVOID COPYING BROKEN/EMPTY KEYS ---
     local vars=(
         "SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "UVICORN_SSL_CERTFILE" "UVICORN_SSL_KEYFILE"
         "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON"
@@ -317,6 +314,7 @@ migrate_configs() {
             val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
             
+            # Skip empty values
             if [ -z "$val" ]; then continue; fi
 
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
@@ -325,12 +323,16 @@ migrate_configs() {
         fi
     done
 
-    # --- FORCE GENERATE JWT SECRETS (THE FIX) ---
-    # We DO NOT copy these from source anymore to prevent copying NULL/Empty values.
-    # We ALWAYS overwrite/generate them fresh for the migration.
-    echo -e "${YELLOW}Generating FRESH JWT Secrets...${NC}"
-    set_env_var "JWT_ACCESS_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
-    set_env_var "JWT_REFRESH_TOKEN_SECRET" "$(openssl rand -hex 32)" "$TGT/.env"
+    # --- THE NUCLEAR FIX: DELETE OLD JWT AND FORCE WRITE NEW ONE ---
+    echo -e "${YELLOW}Forcing fresh JWT Secrets to prevent NULL error...${NC}"
+    
+    # 1. Brutally delete any existing JWT key (even if empty or broken)
+    sed -i '/JWT_ACCESS_TOKEN_SECRET/d' "$TGT/.env"
+    sed -i '/JWT_REFRESH_TOKEN_SECRET/d' "$TGT/.env"
+    
+    # 2. Append new keys
+    echo "JWT_ACCESS_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
+    echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
 
     # Copy Certs
     if [ -d "$SRC_DATA/certs" ]; then
@@ -357,7 +359,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.8 (FORCE JWT)"
+    ui_header "UNIVERSAL MIGRATION V8.0 (NUCLEAR JWT)"
 
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
