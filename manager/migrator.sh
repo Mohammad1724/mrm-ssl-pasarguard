@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V8.1 (Correct SECRET_KEY Fix)
+# MRM Migration Tool - V8.2 (ENV REWRITE)
 #==============================================================================
 
 # Load Utils & UI
@@ -31,68 +31,13 @@ mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
 
-set_env_var() {
-    local key="$1"
-    local val="$2"
-    local file="$3"
-    [ ! -f "$file" ] && touch "$file"
-    if [ -s "$file" ] && [ -n "$(tail -c 1 "$file")" ]; then echo "" >> "$file"; fi
-    sed -i "/${key}/d" "$file"
-    echo "${key}=\"${val}\"" >> "$file"
-}
-
 detect_source_panel() {
     if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
     if [ -d "/opt/marzban" ] && [ -f "/opt/marzban/.env" ]; then echo "/opt/marzban"; return 0; fi
     return 1
 }
 
-fix_rebecca_env() {
-    local target="$1"
-    local env_file="$target/.env"
-    minfo "Applying fixes to .env..."
-    sed -i 's/mysql+asyncmy/mysql+pymysql/g' "$env_file"
-    sed -i 's/mysql+aiomysql/mysql+pymysql/g' "$env_file"
-    sed -i 's/@mysql/@127.0.0.1:3306/g' "$env_file"
-    sed -i 's/@mariadb/@127.0.0.1:3306/g' "$env_file"
-    if ! grep -q "pymysql" "$env_file"; then
-        local pass=$(grep "MYSQL_ROOT_PASSWORD" "$env_file" | cut -d'=' -f2)
-        echo "SQLALCHEMY_DATABASE_URL=\"mysql+pymysql://root:$pass@127.0.0.1:3306/rebecca\"" >> "$env_file"
-    fi
-    mok "Env Fixed."
-}
-
-install_rebecca_wizard() {
-    clear; ui_header "INSTALLING REBECCA"
-    if ! ui_confirm "Proceed?" "y"; then return 1; fi
-    eval "$REBECCA_INSTALL_CMD"
-    if [ -d "/opt/rebecca" ]; then
-        mok "Rebecca Installation Verified."
-        fix_rebecca_env "/opt/rebecca"
-        return 0
-    else
-        merr "Installation failed."
-        return 1
-    fi
-}
-
-detect_db_type() {
-    local panel_dir="$1"
-    local env_file="$panel_dir/.env"
-    local data_dir="/var/lib/$(basename "$panel_dir")"
-    [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
-    if [ -f "$env_file" ]; then
-        local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-        case "$db_url" in
-            *postgresql*) echo "postgresql" ;;
-            *mysql*) echo "mysql" ;;
-            *sqlite*) echo "sqlite" ;;
-            *) if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi ;;
-        esac
-    else
-        if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi
-    fi
-}
+# --- DATABASE HELPERS ---
 
 find_db_container() {
     local panel_dir="$1" type="$2"
@@ -123,6 +68,37 @@ if '://' in url:
     except: pass
 PYEOF
 )"
+}
+
+detect_db_type() {
+    local panel_dir="$1"
+    local env_file="$panel_dir/.env"
+    local data_dir="/var/lib/$(basename "$panel_dir")"
+    [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
+    if [ -f "$env_file" ]; then
+        local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        case "$db_url" in
+            *postgresql*) echo "postgresql" ;;
+            *mysql*) echo "mysql" ;;
+            *sqlite*) echo "sqlite" ;;
+            *) if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi ;;
+        esac
+    else
+        if [ -f "$data_dir/db.sqlite3" ]; then echo "sqlite"; else echo "unknown"; fi
+    fi
+}
+
+install_rebecca_wizard() {
+    clear; ui_header "INSTALLING REBECCA"
+    if ! ui_confirm "Proceed?" "y"; then return 1; fi
+    eval "$REBECCA_INSTALL_CMD"
+    if [ -d "/opt/rebecca" ]; then
+        mok "Rebecca Installation Verified."
+        return 0
+    else
+        merr "Installation failed."
+        return 1
+    fi
 }
 
 create_backup() {
@@ -193,26 +169,101 @@ PYEOF
     [ -s "$dst" ] && mok "Converted" || merr "Conversion failed"
 }
 
+# --- THE FIX: COMPLETE ENV REWRITE ---
+generate_clean_env() {
+    local src="$1"
+    local tgt="$2"
+    local tgt_env="$tgt/.env"
+    
+    minfo "Re-generating .env from scratch..."
+    
+    # 1. READ MYSQL PASSWORD FROM EXISTING REBECCA ENV
+    local DB_PASS=$(grep "MYSQL_ROOT_PASSWORD" "$tgt_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    if [ -z "$DB_PASS" ]; then DB_PASS="password"; fi
+
+    # 2. START A NEW ENV FILE CONTENT
+    cat > "$tgt_env" <<EOF
+SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:$DB_PASS@127.0.0.1:3306/rebecca"
+MYSQL_ROOT_PASSWORD="$DB_PASS"
+UVICORN_HOST="0.0.0.0"
+UVICORN_PORT="7431"
+XRAY_SUBSCRIPTION_URL_PREFIX=""
+XRAY_EXECUTABLE_PATH="/var/lib/rebecca/xray"
+XRAY_ASSETS_PATH="/var/lib/rebecca/assets"
+EOF
+
+    # 3. MIGRATE VARS FROM SOURCE (IF VALID)
+    local vars=(
+        "SUDO_USERNAME" "SUDO_PASSWORD" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" 
+        "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "SUBSCRIPTION_PAGE_TEMPLATE" 
+        "CUSTOM_TEMPLATES_DIRECTORY" "SUB_CONF_URL" "UVICORN_SSL_CERTFILE" "UVICORN_SSL_KEYFILE"
+    )
+
+    for v in "${vars[@]}"; do
+        local raw_line=$(grep -E "^\s*${v}\s*=" "$src/.env" | head -1)
+        if [ -n "$raw_line" ]; then
+            local val="${raw_line#*=}"
+            val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+            val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
+            
+            # Skip empty
+            if [ -z "$val" ]; then continue; fi
+
+            # Path fix
+            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
+            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
+            
+            echo "${v}=\"${val}\"" >> "$tgt_env"
+        fi
+    done
+
+    # 4. APPEND NEW MANDATORY SECRETS
+    echo "" >> "$tgt_env"
+    echo "SECRET_KEY=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
+    echo "JWT_ACCESS_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
+    echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
+
+    mok "Env file completely rewritten and secured."
+    
+    # Copy Certs
+    local SRC_DATA="/var/lib/$(basename "$src")"
+    [ "$src" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
+    local TGT_DATA="/var/lib/$(basename "$tgt")"
+    if [ -d "$SRC_DATA/certs" ]; then
+        mkdir -p "$TGT_DATA/certs"
+        cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
+        chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
+        find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
+    fi
+    [ -d "$SRC_DATA/templates" ] && cp -rn "$SRC_DATA/templates" "$TGT_DATA/" 2>/dev/null
+}
+
 import_and_sanitize() {
     local SQL="$1" TGT="$2"
-    minfo "Importing & Fixing Data..."
+    minfo "Importing Data..."
     get_db_credentials "$TGT"
     local user="${MIG_DB_USER:-root}"
     local pass="$MIG_DB_PASS"
-    [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2)
+    [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2 | tr -d '"')
+    
     local cname=$(find_db_container "$TGT" "mysql")
     [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
+    
     local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
     local db="marzban"
     if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
+    
     docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
     docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null
+    
     run_sql() { docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null; }
+    
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;"
+    
     minfo "Sanitizing Data..."
     run_sql "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
     run_sql "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
@@ -225,64 +276,6 @@ import_and_sanitize() {
     mok "Data Sanitized."
 }
 
-migrate_configs() {
-    minfo "Migrating Configs (.env)..."
-    local SRC_DATA="/var/lib/$(basename "$SRC")"
-    [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
-    local TGT_DATA="/var/lib/$(basename "$TGT")"
-    
-    local vars=(
-        "SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "UVICORN_SSL_CERTFILE" "UVICORN_SSL_KEYFILE"
-        "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
-        "SUBSCRIPTION_PAGE_TEMPLATE" "CUSTOM_TEMPLATES_DIRECTORY" "XRAY_SUBSCRIPTION_URL_PREFIX"
-    )
-    
-    local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
-    local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
-    if [ -n "$backup_key" ]; then
-        set_env_var "TELEGRAM_API_TOKEN" "$backup_key" "$TGT/.env"
-        set_env_var "TELEGRAM_ADMIN_ID" "$backup_chat" "$TGT/.env"
-    fi
-    
-    for v in "${vars[@]}"; do
-        local raw_line=$(grep -E "^\s*${v}\s*=" "$SRC/.env" | head -1)
-        if [ -n "$raw_line" ]; then
-            local val="${raw_line#*=}"
-            val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-            val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
-            if [ -z "$val" ]; then continue; fi
-            val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
-            val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-            set_env_var "$v" "$val" "$TGT/.env"
-        fi
-    done
-
-    # --- THE REAL FIX: ADD SECRET_KEY ---
-    echo -e "${YELLOW}Generating ALL required secrets...${NC}"
-    
-    # Delete any existing secret keys to avoid duplicates
-    sed -i '/SECRET_KEY/d' "$TGT/.env"
-    sed -i '/JWT_ACCESS_TOKEN_SECRET/d' "$TGT/.env"
-    sed -i '/JWT_REFRESH_TOKEN_SECRET/d' "$TGT/.env"
-    
-    # Generate and append ALL required keys
-    local MAIN_SECRET=$(openssl rand -hex 32)
-    echo "SECRET_KEY=\"${MAIN_SECRET}\"" >> "$TGT/.env"
-    echo "JWT_ACCESS_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
-    echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
-    
-    mok "All secrets generated."
-
-    # Copy Certs
-    if [ -d "$SRC_DATA/certs" ]; then
-        mkdir -p "$TGT_DATA/certs"
-        cp -rn "$SRC_DATA/certs/"* "$TGT_DATA/certs/" 2>/dev/null
-        chmod -R 644 "$TGT_DATA/certs"/* 2>/dev/null
-        find "$TGT_DATA/certs" -type d -exec chmod 755 {} + 2>/dev/null
-    fi
-    [ -d "$SRC_DATA/templates" ] && cp -rn "$SRC_DATA/templates" "$TGT_DATA/" 2>/dev/null
-}
-
 create_rescue_admin() {
     echo ""; echo -e "${YELLOW}Create new SuperAdmin? (Recommended)${NC}"
     if ui_confirm "Create?" "y"; then
@@ -293,11 +286,10 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V8.1 (SECRET_KEY FIX)"
+    ui_header "UNIVERSAL MIGRATION V8.2 (ENV REWRITE)"
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
-        fix_rebecca_env "$TGT"
     elif [ -d "/opt/marzban" ]; then
         TGT="/opt/marzban"
     else
@@ -320,7 +312,8 @@ do_full_migration() {
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    migrate_configs
+    # === CRITICAL STEP: GENERATE CLEAN ENV ===
+    generate_clean_env "$SRC" "$TGT"
 
     minfo "Starting Target Panel..."
     (cd "$TGT" && docker compose up -d); sleep 20
