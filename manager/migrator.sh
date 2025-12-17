@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - Fixed Order (Env Fix BEFORE Start)
+# MRM Migration Tool - V7.4 (Complete Env Transfer)
 #==============================================================================
 
 # Load Utils & UI
@@ -103,7 +103,6 @@ detect_db_type() {
     [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
 
     if [ -f "$env_file" ]; then
-        # FIX: Only read non-commented lines
         local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
         case "$db_url" in
             *timescale*|*postgresql*) echo "postgresql" ;;
@@ -132,7 +131,6 @@ get_db_credentials() {
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
 
-    # FIX: Get only active config
     local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 
     eval "$(python3 << PYEOF
@@ -177,7 +175,6 @@ create_backup() {
         postgresql)
             local cname=$(find_db_container "$SRC" "postgresql")
             get_db_credentials "$SRC"
-            # Using credentials from .env
             docker exec "$cname" pg_dump -U "${MIG_DB_USER:-pasarguard}" -d "${MIG_DB_NAME:-pasarguard}" --data-only --column-inserts --disable-dollar-quoting > "$out" 2>/dev/null
             [ -s "$out" ] && mok "Postgres exported" || merr "pg_dump failed"
             ;;
@@ -293,12 +290,9 @@ import_and_sanitize() {
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-
-        # Path Correction (Hardcoded for Pasarguard -> Rebecca)
+        
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
         "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
-
-        # Clean JWT (This is safe, just logs out users)
         "TRUNCATE TABLE jwt;"
     )
 
@@ -314,10 +308,29 @@ migrate_configs() {
     [ "$SRC" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
-    # Variables to migrate
-    local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "JWT_ACCESS_TOKEN_SECRET" "JWT_REFRESH_TOKEN_SECRET")
+    # --- COMPLETE LIST OF VARIABLES TO MIGRATE ---
+    local vars=(
+        "SUDO_USERNAME"
+        "SUDO_PASSWORD"
+        "UVICORN_PORT"
+        "UVICORN_SSL_CERTFILE"
+        "UVICORN_SSL_KEYFILE"
+        "TELEGRAM_API_TOKEN"
+        "TELEGRAM_ADMIN_ID"
+        "XRAY_JSON"
+        "JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
+        "JWT_ACCESS_TOKEN_SECRET"
+        "JWT_REFRESH_TOKEN_SECRET"
+        # New additions for full completeness:
+        "TELEGRAM_WEBHOOK_URL"
+        "TELEGRAM_WEBHOOK_TOKEN"
+        "SUBSCRIPTION_PAGE_TEMPLATE"
+        "CUSTOM_TEMPLATES_DIRECTORY"
+        "XRAY_SUBSCRIPTION_URL_PREFIX"
+        "SUB_CONF_URL"
+        "DISCORD_WEBHOOK_URL"
+    )
 
-    # Map Backup Bot to Main Bot
     local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
     local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
 
@@ -327,19 +340,19 @@ migrate_configs() {
         minfo "Migrated Backup Bot."
     fi
 
-    # Migrate standard vars
     for v in "${vars[@]}"; do
         local val=$(grep -E "^${v}\s*=" "$SRC/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^"//;s/"$//;s/^\x27//;s/\x27$//')
         if [ -n "$val" ]; then
+            # Path Replacement logic (Critical for SSL and templates)
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
+
             sed -i "/^${v}=/d" "$TGT/.env"
             echo "${v}=\"$val\"" >> "$TGT/.env"
         fi
     done
 
-    # FIX: FORCE GENERATE JWT SECRET IF MISSING
-    # This specifically solves: "Column 'secret_key' cannot be null"
+    # Generate JWT keys if missing (Safety Net)
     if ! grep -q "JWT_ACCESS_TOKEN_SECRET" "$TGT/.env"; then
         echo -e "${YELLOW}JWT Secret missing in source. Generating new one...${NC}"
         local GEN_KEY=$(openssl rand -hex 32)
@@ -374,7 +387,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V7.2 (CRASH FIX)"
+    ui_header "UNIVERSAL MIGRATION V7.4 (FULL ENV FIX)"
 
     SRC=$(detect_source_panel)
 
@@ -410,20 +423,17 @@ do_full_migration() {
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    # === CRITICAL FIX: PREPARE ENV BEFORE START ===
-    # We must run migrate_configs HERE so the JWT secrets are present 
-    # when the container starts for the first time.
+    # 4. PREPARE ENV (KEY STEP)
     migrate_configs 
-    # ===============================================
 
-    # 4. Start Target
+    # 5. Start Target
     minfo "Starting Target Panel (Full stack)..."
     (cd "$TGT" && docker compose up -d); sleep 20
 
-    # 5. Import & Sanitize
+    # 6. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
     
-    # 6. Restart one last time to ensure everything is clean
+    # 7. Restart
     ui_header "FINAL RESTART"
     (cd "$TGT" && docker compose down && docker compose up -d)
 
@@ -447,15 +457,10 @@ do_rollback() {
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
 
     if ui_confirm "Restore $last to $src_path?" "n"; then
-        
-        # FIX: FULL CLEANUP BEFORE ROLLBACK
         echo -e "${YELLOW}Stopping and removing current panel (Fixes Port Conflict)...${NC}"
         
-        if [ -d "/opt/rebecca" ]; then
-            (cd /opt/rebecca && docker compose down) &>/dev/null
-        fi
+        if [ -d "/opt/rebecca" ]; then (cd /opt/rebecca && docker compose down) &>/dev/null; fi
         
-        # Kill stuck ports
         local PID=$(lsof -t -i:7431 2>/dev/null)
         if [ ! -z "$PID" ]; then kill -9 $PID; fi
         
@@ -463,9 +468,7 @@ do_rollback() {
         local TGT=$(detect_source_panel)
         [ -z "$TGT" ] && TGT="$src_path"
 
-        # Ensure target dir exists
         mkdir -p "$(dirname "$TGT")"
-
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
         (cd "$TGT" && docker compose up -d) &>/dev/null
