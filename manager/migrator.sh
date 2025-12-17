@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - High Precision Edition (v7.0)
-# Fixes: PostgreSQL Port 6432, Commented Env Lines, SSL Paths, Bot Token
+# MRM Migration Tool - Fixed Edition (JWT & Rollback Fix)
 #==============================================================================
 
 # Load Utils & UI
@@ -12,7 +11,6 @@ source /opt/mrm-manager/ui.sh
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
 MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
-MYSQL_WAIT=60
 
 # Official Rebecca Install Script
 REBECCA_INSTALL_CMD="bash -c \"\$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)\" @ install --database mysql"
@@ -42,22 +40,28 @@ detect_source_panel() {
     return 1
 }
 
+detect_target_panel() {
+    if [ -d "/opt/rebecca" ]; then echo "/opt/rebecca"; return 0; fi
+    if [ -d "/opt/marzban" ]; then echo "/opt/marzban"; return 0; fi
+    return 1
+}
+
 # --- INSTALLATION & FIXES ---
 
 fix_rebecca_env() {
     local target="$1"
     local env_file="$target/.env"
-    
+
     minfo "Applying fixes to .env for Host Network..."
-    
+
     # 1. Change Driver to pymysql
     sed -i 's/mysql+asyncmy/mysql+pymysql/g' "$env_file"
     sed -i 's/mysql+aiomysql/mysql+pymysql/g' "$env_file"
-    
+
     # 2. Change Host to 127.0.0.1
     sed -i 's/@mysql/@127.0.0.1:3306/g' "$env_file"
     sed -i 's/@mariadb/@127.0.0.1:3306/g' "$env_file"
-    
+
     # Ensure it is set if sed failed
     if ! grep -q "pymysql" "$env_file"; then
         local pass=$(grep "MYSQL_ROOT_PASSWORD" "$env_file" | cut -d'=' -f2)
@@ -75,11 +79,11 @@ install_rebecca_wizard() {
     echo ""
     echo -e "${YELLOW}NOTE: When installation finishes and logs appear, press Ctrl+C once to continue.${NC}"
     echo ""
-    
+
     if ! ui_confirm "Proceed?" "y"; then return 1; fi
-    
+
     eval "$REBECCA_INSTALL_CMD"
-    
+
     if [ -d "/opt/rebecca" ] && [ -f "/opt/rebecca/docker-compose.yml" ]; then
         echo ""
         mok "Rebecca Installation Verified."
@@ -117,7 +121,7 @@ find_db_container() {
     local keywords=""
     [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
     [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
-    
+
     local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
     [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
     echo "$cname"
@@ -127,10 +131,10 @@ get_db_credentials() {
     local panel_dir="$1"
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
-    
+
     # FIX: Get only active config
     local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-    
+
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -153,20 +157,21 @@ create_backup() {
     local SRC="$1"
     local DATA_DIR="/var/lib/$(basename "$SRC")"
     [ "$SRC" == "/opt/pasarguard" ] && DATA_DIR="/var/lib/pasarguard"
-    
+
     minfo "Creating backup..."
     local ts=$(date +%Y%m%d_%H%M%S)
     CURRENT_BACKUP="$BACKUP_ROOT/backup_$ts"
     mkdir -p "$CURRENT_BACKUP"
     echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
+    echo "$SRC" > "$BACKUP_ROOT/.last_source" # Added: Save Source Path for Rollback
 
     tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
     tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
-    
+
     local db_type=$(detect_db_type "$SRC")
     echo "$db_type" > "$CURRENT_BACKUP/db_type.txt"
     local out="$CURRENT_BACKUP/database.sql"
-    
+
     case "$db_type" in
         sqlite) cp "$DATA_DIR/db.sqlite3" "$CURRENT_BACKUP/database.sqlite3"; mok "SQLite exported" ;;
         postgresql)
@@ -190,7 +195,7 @@ create_backup() {
 convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
     minfo "Converting $type → MySQL..."
-    
+
     if [ "$type" == "sqlite" ] && [[ "$src" == *.sqlite3 ]]; then
         sqlite3 "$src" .dump > "$MIGRATION_TEMP/sqlite.sql"
         src="$MIGRATION_TEMP/sqlite.sql"
@@ -244,20 +249,20 @@ PYEOF
 import_and_sanitize() {
     local SQL="$1" TGT="$2"
     minfo "Importing & Fixing Data..."
-    
+
     get_db_credentials "$TGT"
     local user="${MIG_DB_USER:-root}"
     local pass="$MIG_DB_PASS"
     [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2)
-    
+
     local cname=$(find_db_container "$TGT" "mysql")
     [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
-    
+
     # Auto-detect DB name
     local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
     local db="marzban"
     if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
-    
+
     # 1. Create & Import
     docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
     if docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>/dev/null; then
@@ -265,21 +270,21 @@ import_and_sanitize() {
     else
         mwarn "Import had warnings."
     fi
-    
+
     # 2. SCHEMA FIX (MANUAL)
     minfo "Patching Schema (Manual)..."
-    
+
     run_sql() {
         docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null
     }
-    
+
     # Admins
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;"
     run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;"
-    
+
     # 3. SANITIZE DATA
     minfo "Sanitizing Data..."
     local fixes=(
@@ -288,12 +293,12 @@ import_and_sanitize() {
         "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
         "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
         "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-        
+
         # Path Correction (Hardcoded for Pasarguard -> Rebecca)
         "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
         "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
-        
-        # Clean JWT
+
+        # Clean JWT (To be safe with new keys)
         "TRUNCATE TABLE jwt;"
     )
 
@@ -310,12 +315,13 @@ migrate_configs() {
     local TGT_DATA="/var/lib/$(basename "$TGT")"
 
     # Env Merge
-    local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
-    
+    # FIX: ADDED JWT KEYS TO PREVENT 'cannot be null' ERROR
+    local vars=("SUDO_USERNAME" "SUDO_PASSWORD" "UVICORN_PORT" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "JWT_ACCESS_TOKEN_SECRET" "JWT_REFRESH_TOKEN_SECRET")
+
     # Special migration: Map BACKUP_TELEGRAM_BOT_KEY to TELEGRAM_API_TOKEN if needed
     local backup_key=$(grep "^BACKUP_TELEGRAM_BOT_KEY" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
     local backup_chat=$(grep "^BACKUP_TELEGRAM_CHAT_ID" "$SRC/.env" 2>/dev/null | cut -d'=' -f2)
-    
+
     if [ -n "$backup_key" ]; then
         if ! grep -q "^TELEGRAM_API_TOKEN" "$TGT/.env"; then
             echo "TELEGRAM_API_TOKEN=$backup_key" >> "$TGT/.env"
@@ -330,12 +336,21 @@ migrate_configs() {
             # Path Replacement
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
-            
+
             sed -i "/^${v}=/d" "$TGT/.env"
             echo "${v}=${val}" >> "$TGT/.env"
         fi
     done
-    
+
+    # FIX: FORCE GENERATE JWT SECRET IF MISSING
+    # This specifically solves: "Column 'secret_key' cannot be null"
+    if ! grep -q "JWT_ACCESS_TOKEN_SECRET" "$TGT/.env"; then
+        echo -e "${YELLOW}JWT Secret missing in source. Generating new one...${NC}"
+        local GEN_KEY=$(openssl rand -hex 32)
+        echo "JWT_ACCESS_TOKEN_SECRET=\"$GEN_KEY\"" >> "$TGT/.env"
+        echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$TGT/.env"
+    fi
+
     # Copy Certs (Recursive)
     if [ -d "$SRC_DATA/certs" ]; then
         mkdir -p "$TGT_DATA/certs"
@@ -353,7 +368,7 @@ create_rescue_admin() {
         local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
         local cli="rebecca-cli"
         [ -f "$TGT/marzban-cli" ] && cli="marzban-cli"
-        
+
         echo -e "${GREEN}Running interactive creation...${NC}"
         docker exec -it "$cname" $cli admin create
     fi
@@ -364,9 +379,9 @@ create_rescue_admin() {
 do_full_migration() {
     migration_init; clear
     ui_header "UNIVERSAL MIGRATION V7.0"
-    
+
     SRC=$(detect_source_panel)
-    
+
     # --- AUTO INSTALL TRIGGER ---
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
@@ -380,46 +395,46 @@ do_full_migration() {
         fi
         TGT="/opt/rebecca"
     fi
-    
+
     [ -z "$SRC" ] && { merr "Source (Pasarguard/Marzban) not found"; mpause; return; }
-    
+
     echo -e "Source: ${RED}$SRC${NC}"
     echo -e "Target: ${GREEN}$TGT${NC}"
-    
+
     if ! ui_confirm "Start Migration? This stops both panels." "y"; then return; fi
-    
+
     # 1. Backup
     create_backup "$SRC"
     local db_type=$(cat "$CURRENT_BACKUP/db_type.txt")
     local src_sql="$CURRENT_BACKUP/database.sql"
     [ "$db_type" == "sqlite" ] && src_sql="$CURRENT_BACKUP/database.sqlite3"
-    
+
     # 2. Convert
     local final_sql="$MIGRATION_TEMP/import.sql"
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
-    
+
     # 3. Stop Panels
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
-    
+
     # 4. Start Target (FULL STARTUP TO ENSURE DB IS UP)
     minfo "Starting Target Panel (Full stack)..."
     (cd "$TGT" && docker compose up -d); sleep 20
-    
+
     # 5. Import & Sanitize
     import_and_sanitize "$final_sql" "$TGT"
     migrate_configs
-    
+
     # 6. Restart to apply configs
     ui_header "RESTARTING PANEL"
     (cd "$TGT" && docker compose down && docker compose up -d)
-    
+
     sleep 10
     local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
     if [ -n "$cname" ]; then
          mok "Panel Running: $cname"
     fi
-    
+
     echo -e "\n${GREEN}MIGRATION COMPLETED!${NC}"
     create_rescue_admin
     migration_cleanup; mpause
@@ -428,15 +443,32 @@ do_full_migration() {
 do_rollback() {
     clear; ui_header "ROLLBACK"
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
+    local src_path=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
+    # Default if missing
+    [ -z "$src_path" ] && src_path="/opt/pasarguard"
+
     [ -z "$last" ] && { merr "No history found"; mpause; return; }
-    
-    if ui_confirm "Restore $last to Source?" "n"; then
-        local TGT=$(detect_source_panel)
-        [ -z "$TGT" ] && TGT="/opt/pasarguard"
+
+    if ui_confirm "Restore $last to $src_path?" "n"; then
         
+        # FIX: Ensure Rebecca/New Panel is FULLY stopped and removed before rollback
+        # This fixes the port conflict issue.
+        echo -e "${YELLOW}Stopping current panel containers...${NC}"
+        
+        if [ -d "/opt/rebecca" ]; then
+            (cd /opt/rebecca && docker compose down) &>/dev/null
+        fi
+        
+        # Also force kill any stuck process on port 7431/8000 just in case
+        local PID=$(lsof -t -i:7431 2>/dev/null)
+        if [ ! -z "$PID" ]; then kill -9 $PID; fi
+        
+        echo -e "${BLUE}Restoring files...${NC}"
+        # Original Logic
+        local TGT=$(detect_source_panel)
+        [ -z "$TGT" ] && TGT="$src_path"
+
         (cd "$TGT" && docker compose down) &>/dev/null
-        local NEW_PANEL=$(detect_target_panel)
-        [ -n "$NEW_PANEL" ] && (cd "$NEW_PANEL" && docker compose down) &>/dev/null
         
         tar -xzf "$last/config.tar.gz" -C "$(dirname "$TGT")"
         tar -xzf "$last/data.tar.gz" -C "/var/lib"
