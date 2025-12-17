@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V8.2 (ENV REWRITE)
+# MRM Migration Tool - V8.3 (Clean Env & Hard Stop)
 #==============================================================================
 
 # Load Utils & UI
@@ -169,7 +169,7 @@ PYEOF
     [ -s "$dst" ] && mok "Converted" || merr "Conversion failed"
 }
 
-# --- THE FIX: COMPLETE ENV REWRITE ---
+# --- THE FIX: CLEAN ENV GENERATION WITHOUT QUOTES ---
 generate_clean_env() {
     local src="$1"
     local tgt="$2"
@@ -177,22 +177,21 @@ generate_clean_env() {
     
     minfo "Re-generating .env from scratch..."
     
-    # 1. READ MYSQL PASSWORD FROM EXISTING REBECCA ENV
     local DB_PASS=$(grep "MYSQL_ROOT_PASSWORD" "$tgt_env" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
     if [ -z "$DB_PASS" ]; then DB_PASS="password"; fi
 
-    # 2. START A NEW ENV FILE CONTENT
+    # Use PRINTF instead of CAT for better control
+    # NO QUOTES around values to avoid parsing issues in some setups
     cat > "$tgt_env" <<EOF
-SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:$DB_PASS@127.0.0.1:3306/rebecca"
-MYSQL_ROOT_PASSWORD="$DB_PASS"
-UVICORN_HOST="0.0.0.0"
-UVICORN_PORT="7431"
-XRAY_SUBSCRIPTION_URL_PREFIX=""
-XRAY_EXECUTABLE_PATH="/var/lib/rebecca/xray"
-XRAY_ASSETS_PATH="/var/lib/rebecca/assets"
+SQLALCHEMY_DATABASE_URL=mysql+pymysql://root:$DB_PASS@127.0.0.1:3306/rebecca
+MYSQL_ROOT_PASSWORD=$DB_PASS
+UVICORN_HOST=0.0.0.0
+UVICORN_PORT=7431
+XRAY_SUBSCRIPTION_URL_PREFIX=
+XRAY_EXECUTABLE_PATH=/var/lib/rebecca/xray
+XRAY_ASSETS_PATH=/var/lib/rebecca/assets
 EOF
 
-    # 3. MIGRATE VARS FROM SOURCE (IF VALID)
     local vars=(
         "SUDO_USERNAME" "SUDO_PASSWORD" "TELEGRAM_API_TOKEN" "TELEGRAM_ADMIN_ID" 
         "XRAY_JSON" "JWT_ACCESS_TOKEN_EXPIRE_MINUTES" "SUBSCRIPTION_PAGE_TEMPLATE" 
@@ -206,26 +205,23 @@ EOF
             val=$(echo "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
             val=${val#\"}; val=${val%\"}; val=${val#\'}; val=${val%\'}
             
-            # Skip empty
             if [ -z "$val" ]; then continue; fi
 
-            # Path fix
             val="${val/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
             val="${val/\/opt\/pasarguard/\/opt\/rebecca}"
             
-            echo "${v}=\"${val}\"" >> "$tgt_env"
+            echo "${v}=${val}" >> "$tgt_env"
         fi
     done
 
-    # 4. APPEND NEW MANDATORY SECRETS
+    # APPEND NEW SECRETS (NO QUOTES)
     echo "" >> "$tgt_env"
-    echo "SECRET_KEY=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
-    echo "JWT_ACCESS_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
-    echo "JWT_REFRESH_TOKEN_SECRET=\"$(openssl rand -hex 32)\"" >> "$tgt_env"
+    echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$tgt_env"
+    echo "JWT_ACCESS_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$tgt_env"
+    echo "JWT_REFRESH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$tgt_env"
 
-    mok "Env file completely rewritten and secured."
+    mok "Env file rewritten."
     
-    # Copy Certs
     local SRC_DATA="/var/lib/$(basename "$src")"
     [ "$src" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$tgt")"
@@ -286,7 +282,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V8.2 (ENV REWRITE)"
+    ui_header "UNIVERSAL MIGRATION V8.3 (CLEAN ENV)"
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
@@ -309,14 +305,17 @@ do_full_migration() {
     convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
 
     minfo "Stopping panels..."
+    # Force stop Pasarguard/Marzban containers aggressively to free ports
+    docker ps -q --filter "name=pasarguard" | xargs -r docker stop
+    docker ps -q --filter "name=marzban" | xargs -r docker stop
     (cd "$SRC" && docker compose down) &>/dev/null
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    # === CRITICAL STEP: GENERATE CLEAN ENV ===
     generate_clean_env "$SRC" "$TGT"
 
     minfo "Starting Target Panel..."
-    (cd "$TGT" && docker compose up -d); sleep 20
+    # Force recreate to ensure new env is picked up
+    (cd "$TGT" && docker compose up -d --force-recreate); sleep 20
 
     import_and_sanitize "$final_sql" "$TGT"
 
