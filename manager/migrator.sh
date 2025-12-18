@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V9.0 (Smart Parser & Env Builder)
+# MRM Migration Tool - V9.1 (Final: JWT DB Patch)
 #==============================================================================
 
 # Load Utils & UI
@@ -170,12 +170,9 @@ PYEOF
 }
 
 # --- SMART ENV READER ---
-# Reads variable handling spaces: KEY = "VALUE"
 read_var() {
     local key="$1"
     local file="$2"
-    # Find line starting with key, ignore leading spaces, allow spaces around =
-    # Remove key, =, quotes, and whitespace
     grep -E "^\s*${key}\s*=" "$file" | head -1 | sed -E "s/^\s*${key}\s*=\s*//g" | sed -E 's/^"//;s/"$//;s/^\x27//;s/\x27$//'
 }
 
@@ -188,17 +185,14 @@ generate_clean_env() {
     
     minfo "Re-generating .env (Smart Builder)..."
     
-    # 1. Database Password (from existing target or generate)
     local DB_PASS=$(read_var "MYSQL_ROOT_PASSWORD" "$tgt_env")
     if [ -z "$DB_PASS" ]; then DB_PASS="password"; fi
 
-    # 2. Extract Values from Source (Pasarguard)
     local UV_PORT=$(read_var "UVICORN_PORT" "$src_env")
     [ -z "$UV_PORT" ] && UV_PORT="7431"
 
     local SUDO_USER=$(read_var "SUDO_USERNAME" "$src_env")
     local SUDO_PASS=$(read_var "SUDO_PASSWORD" "$src_env")
-    # Fallback if commented out in source
     [ -z "$SUDO_USER" ] && SUDO_USER="admin"
     [ -z "$SUDO_PASS" ] && SUDO_PASS="admin"
 
@@ -208,7 +202,6 @@ generate_clean_env() {
     local TG_ADMIN=$(read_var "BACKUP_TELEGRAM_CHAT_ID" "$src_env")
     [ -z "$TG_ADMIN" ] && TG_ADMIN=$(read_var "TELEGRAM_ADMIN_ID" "$src_env")
 
-    # SSL Paths - Correct them
     local SSL_CERT=$(read_var "UVICORN_SSL_CERTFILE" "$src_env")
     local SSL_KEY=$(read_var "UVICORN_SSL_KEYFILE" "$src_env")
     SSL_CERT="${SSL_CERT/\/var\/lib\/pasarguard/\/var\/lib\/rebecca}"
@@ -223,7 +216,6 @@ generate_clean_env() {
     local XRAY_JSON=$(read_var "XRAY_JSON" "$src_env")
     local SUB_URL=$(read_var "SUB_CONF_URL" "$src_env")
 
-    # 3. Write NEW Clean File
     cat > "$tgt_env" <<EOF
 SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:${DB_PASS}@127.0.0.1:3306/rebecca"
 MYSQL_ROOT_PASSWORD="${DB_PASS}"
@@ -259,7 +251,6 @@ EOF
 
     mok "Env file built successfully."
     
-    # Copy Assets
     local SRC_DATA="/var/lib/$(basename "$src")"
     [ "$src" == "/opt/pasarguard" ] && SRC_DATA="/var/lib/pasarguard"
     local TGT_DATA="/var/lib/$(basename "$tgt")"
@@ -310,8 +301,22 @@ import_and_sanitize() {
     run_sql "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
     run_sql "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
     run_sql "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
-    run_sql "TRUNCATE TABLE jwt;"
-    mok "Data Sanitized."
+    
+    # --- JWT FIX: PATCH DB INSTEAD OF TRUNCATE ---
+    minfo "Patching JWT table (Fixing Null Secrets)..."
+    local JWT_SECRET="$(openssl rand -hex 64)"
+    local SUB_SECRET="$(openssl rand -hex 64)"
+    local ADMIN_SECRET="$(openssl rand -hex 64)"
+    local VMESS_MASK="$(openssl rand -hex 16)"
+    local VLESS_MASK="$(openssl rand -hex 16)"
+
+    # Fill NULL secrets
+    run_sql "UPDATE jwt SET secret_key='${JWT_SECRET}' WHERE secret_key IS NULL;"
+    
+    # Insert fresh row if empty
+    run_sql "INSERT INTO jwt (secret_key, subscription_secret_key, admin_secret_key, vmess_mask, vless_mask) SELECT '${JWT_SECRET}', '${SUB_SECRET}', '${ADMIN_SECRET}', '${VMESS_MASK}', '${VLESS_MASK}' WHERE NOT EXISTS (SELECT 1 FROM jwt);"
+
+    mok "Data Sanitized & Fixed."
 }
 
 create_rescue_admin() {
@@ -324,7 +329,7 @@ create_rescue_admin() {
 
 do_full_migration() {
     migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V9.0 (SMART PARSER)"
+    ui_header "UNIVERSAL MIGRATION V9.1 (FINAL)"
     SRC=$(detect_source_panel)
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
