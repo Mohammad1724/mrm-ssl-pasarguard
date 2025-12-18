@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V9.2 (Fixed: JWT NULL Secret Key Issue)
+# MRM Migration Tool - V9.3 (Production Ready - All Fixes Applied)
 #==============================================================================
 
 # Load Utils & UI
-if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
-source /opt/mrm-manager/ui.sh
+if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh 2>/dev/null; fi
+source /opt/mrm-manager/ui.sh 2>/dev/null
+
+# Fallback colors if ui.sh not loaded
+RED="${RED:-\033[0;31m}"
+GREEN="${GREEN:-\033[0;32m}"
+YELLOW="${YELLOW:-\033[0;33m}"
+BLUE="${BLUE:-\033[0;34m}"
+NC="${NC:-\033[0m}"
 
 # --- CONFIGURATION ---
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/mrm-migration}"
 MIGRATION_LOG="${MIGRATION_LOG:-/var/log/mrm_migration.log}"
 MIGRATION_TEMP=""
+
+# Global variables for cross-function access
+SRC=""
+TGT=""
+CURRENT_BACKUP=""
 
 REBECCA_INSTALL_CMD="bash -c \"\$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)\" @ install --database mysql"
 
@@ -20,16 +32,42 @@ migration_init() {
     MIGRATION_TEMP=$(mktemp -d /tmp/mrm-migration-XXXXXX 2>/dev/null) || MIGRATION_TEMP="/tmp/mrm-migration-$$"
     mkdir -p "$MIGRATION_TEMP" "$BACKUP_ROOT"
     mkdir -p "$(dirname "$MIGRATION_LOG")" 2>/dev/null
+    touch "$MIGRATION_LOG" 2>/dev/null
     echo "=== Migration Started: $(date) ===" >> "$MIGRATION_LOG"
 }
 
-migration_cleanup() { [[ "$MIGRATION_TEMP" == /tmp/* ]] && rm -rf "$MIGRATION_TEMP" 2>/dev/null; }
-mlog()   { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG"; }
+migration_cleanup() { 
+    [[ "$MIGRATION_TEMP" == /tmp/* ]] && rm -rf "$MIGRATION_TEMP" 2>/dev/null
+}
+
+mlog()   { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG" 2>/dev/null; }
 minfo()  { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
 mok()    { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
 mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
 merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 mpause() { echo ""; echo -e "${YELLOW}Press any key to continue...${NC}"; read -n 1 -s -r; echo ""; }
+
+# Fallback ui_confirm if not defined
+if ! type ui_confirm &>/dev/null; then
+    ui_confirm() {
+        local prompt="$1"
+        local default="${2:-y}"
+        read -p "$prompt [y/n] ($default): " answer
+        answer="${answer:-$default}"
+        [[ "$answer" =~ ^[Yy] ]]
+    }
+fi
+
+# Fallback ui_header if not defined
+if ! type ui_header &>/dev/null; then
+    ui_header() {
+        echo ""
+        echo -e "${GREEN}═══════════════════════════════════════${NC}"
+        echo -e "${GREEN}  $1${NC}"
+        echo -e "${GREEN}═══════════════════════════════════════${NC}"
+        echo ""
+    }
+fi
 
 detect_source_panel() {
     if [ -d "/opt/pasarguard" ] && [ -f "/opt/pasarguard/.env" ]; then echo "/opt/pasarguard"; return 0; fi
@@ -45,7 +83,7 @@ find_db_container() {
     [ "$type" == "postgresql" ] && keywords="timescale|postgres|db"
     [ "$type" == "mysql" ] && keywords="mysql|mariadb|db"
     local cname=$(cd "$panel_dir" && docker compose ps --format '{{.Names}}' 2>/dev/null | grep -iE "$keywords" | head -1)
-    [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $panel_dir).*($keywords)" | head -1)
+    [ -z "$cname" ] && cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename "$panel_dir").*($keywords)" | head -1)
     echo "$cname"
 }
 
@@ -53,7 +91,11 @@ get_db_credentials() {
     local panel_dir="$1"
     local env_file="$panel_dir/.env"
     MIG_DB_USER=""; MIG_DB_PASS=""; MIG_DB_NAME=""
-    local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    
+    [ ! -f "$env_file" ] && return 1
+    
+    local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    
     eval "$(python3 << PYEOF
 from urllib.parse import urlparse, unquote
 url = "$db_url"
@@ -62,10 +104,16 @@ if '://' in url:
         scheme, rest = url.split('://', 1)
         if '+' in scheme: scheme = scheme.split('+', 1)[0]
         p = urlparse(scheme + '://' + rest)
-        print(f'MIG_DB_USER="{p.username or ""}"')
-        print(f'MIG_DB_PASS="{unquote(p.password or "")}"')
-        print(f'MIG_DB_NAME="{(p.path or "").lstrip("/")}"')
-    except: pass
+        user = p.username or ""
+        passwd = unquote(p.password or "")
+        # Escape special characters for bash
+        passwd = passwd.replace("'", "'\\''")
+        dbname = (p.path or "").lstrip("/")
+        print(f"MIG_DB_USER='{user}'")
+        print(f"MIG_DB_PASS='{passwd}'")
+        print(f"MIG_DB_NAME='{dbname}'")
+    except Exception as e:
+        print(f"# Error: {e}")
 PYEOF
 )"
 }
@@ -76,7 +124,7 @@ detect_db_type() {
     local data_dir="/var/lib/$(basename "$panel_dir")"
     [ "$panel_dir" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
     if [ -f "$env_file" ]; then
-        local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+        local db_url=$(grep "^SQLALCHEMY_DATABASE_URL" "$env_file" | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
         case "$db_url" in
             *postgresql*) echo "postgresql" ;;
             *mysql*) echo "mysql" ;;
@@ -89,7 +137,8 @@ detect_db_type() {
 }
 
 install_rebecca_wizard() {
-    clear; ui_header "INSTALLING REBECCA"
+    clear
+    ui_header "INSTALLING REBECCA"
     if ! ui_confirm "Proceed?" "y"; then return 1; fi
     eval "$REBECCA_INSTALL_CMD"
     if [ -d "/opt/rebecca" ]; then
@@ -102,32 +151,39 @@ install_rebecca_wizard() {
 }
 
 create_backup() {
-    local SRC="$1"
-    local DATA_DIR="/var/lib/$(basename "$SRC")"
-    [ "$SRC" == "/opt/pasarguard" ] && DATA_DIR="/var/lib/pasarguard"
+    local SRC_DIR="$1"
+    local DATA_DIR="/var/lib/$(basename "$SRC_DIR")"
+    [ "$SRC_DIR" == "/opt/pasarguard" ] && DATA_DIR="/var/lib/pasarguard"
     minfo "Creating backup..."
     local ts=$(date +%Y%m%d_%H%M%S)
     CURRENT_BACKUP="$BACKUP_ROOT/backup_$ts"
     mkdir -p "$CURRENT_BACKUP"
     echo "$CURRENT_BACKUP" > "$BACKUP_ROOT/.last_backup"
-    echo "$SRC" > "$BACKUP_ROOT/.last_source"
-    tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC")" 2>/dev/null
+    echo "$SRC_DIR" > "$BACKUP_ROOT/.last_source"
+    tar --exclude='*/node_modules' --exclude='mysql' --exclude='postgres' -C "$(dirname "$SRC_DIR")" -czf "$CURRENT_BACKUP/config.tar.gz" "$(basename "$SRC_DIR")" 2>/dev/null
     tar --exclude='mysql' --exclude='postgres' -C "$(dirname "$DATA_DIR")" -czf "$CURRENT_BACKUP/data.tar.gz" "$(basename "$DATA_DIR")" 2>/dev/null
-    local db_type=$(detect_db_type "$SRC")
+    local db_type=$(detect_db_type "$SRC_DIR")
     echo "$db_type" > "$CURRENT_BACKUP/db_type.txt"
     local out="$CURRENT_BACKUP/database.sql"
     case "$db_type" in
-        sqlite) cp "$DATA_DIR/db.sqlite3" "$CURRENT_BACKUP/database.sqlite3"; mok "SQLite exported" ;;
+        sqlite) 
+            if [ -f "$DATA_DIR/db.sqlite3" ]; then
+                cp "$DATA_DIR/db.sqlite3" "$CURRENT_BACKUP/database.sqlite3"
+                mok "SQLite exported"
+            else
+                merr "SQLite file not found"
+            fi
+            ;;
         postgresql)
-            local cname=$(find_db_container "$SRC" "postgresql")
-            get_db_credentials "$SRC"
+            local cname=$(find_db_container "$SRC_DIR" "postgresql")
+            get_db_credentials "$SRC_DIR"
             docker exec "$cname" pg_dump -U "${MIG_DB_USER:-pasarguard}" -d "${MIG_DB_NAME:-pasarguard}" --data-only --column-inserts --disable-dollar-quoting > "$out" 2>/dev/null
             [ -s "$out" ] && mok "Postgres exported" || merr "pg_dump failed"
             ;;
         mysql)
-            local cname=$(find_db_container "$SRC" "mysql")
-            get_db_credentials "$SRC"
-            docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"$MIG_DB_PASS" --single-transaction "${MIG_DB_NAME:-marzban}" > "$out" 2>/dev/null
+            local cname=$(find_db_container "$SRC_DIR" "mysql")
+            get_db_credentials "$SRC_DIR"
+            docker exec "$cname" mysqldump -u"${MIG_DB_USER:-root}" -p"${MIG_DB_PASS}" --single-transaction "${MIG_DB_NAME:-marzban}" > "$out" 2>/dev/null
             [ -s "$out" ] && mok "MySQL exported" || merr "mysqldump failed"
             ;;
     esac
@@ -137,19 +193,36 @@ convert_to_mysql() {
     local src="$1" dst="$2" type="$3"
     minfo "Converting $type → MySQL..."
     if [ "$type" == "sqlite" ] && [[ "$src" == *.sqlite3 ]]; then
+        if ! command -v sqlite3 &>/dev/null; then
+            merr "sqlite3 not installed. Installing..."
+            apt-get update && apt-get install -y sqlite3
+        fi
         sqlite3 "$src" .dump > "$MIGRATION_TEMP/sqlite.sql"
         src="$MIGRATION_TEMP/sqlite.sql"
     fi
+    
     python3 - "$src" "$dst" << 'PYEOF'
 import re, sys
+
 src, dst = sys.argv[1], sys.argv[2]
-with open(src, 'r', encoding='utf-8', errors='replace') as f: lines = f.readlines()
+
+try:
+    with open(src, 'r', encoding='utf-8', errors='replace') as f:
+        lines = f.readlines()
+except Exception as e:
+    print(f"Error reading file: {e}")
+    sys.exit(1)
+
 out = []
-header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO,NO_BACKSLASH_ESCAPES';\n\n"
+header = "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\nSET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n\n"
+
 for line in lines:
     l = line.strip()
-    if l.startswith(('PRAGMA', 'BEGIN TRANSACTION', 'COMMIT', 'SET', '\\', '--')): continue
-    if re.match(r'^SELECT\s+(pg_catalog|setval)', l, re.I): continue
+    if l.startswith(('PRAGMA', 'BEGIN TRANSACTION', 'COMMIT', 'SET', '\\', '--')): 
+        continue
+    if re.match(r'^SELECT\s+(pg_catalog|setval)', l, re.I): 
+        continue
+    
     line = re.sub(r'\bINTEGER PRIMARY KEY AUTOINCREMENT\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
     line = re.sub(r'\bINTEGER PRIMARY KEY\b', 'INT AUTO_INCREMENT PRIMARY KEY', line, flags=re.I)
     line = re.sub(r'\bBOOLEAN\b', 'TINYINT(1)', line, flags=re.I)
@@ -157,26 +230,36 @@ for line in lines:
     line = re.sub(r"'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(\.\d+)?\+00'", r"'\1'", line)
     line = line.replace('/var/lib/pasarguard', '/var/lib/rebecca')
     line = line.replace('/opt/pasarguard', '/opt/rebecca')
+    
     if re.match(r'^\s*INSERT\s+INTO\b', line, re.I):
         line = re.sub(r'^\s*INSERT\s+INTO', 'REPLACE INTO', line, flags=re.I)
+        # Fix table name quoting
         line = re.sub(r'public\."?(\w+)"?', r'`\1`', line)
-        line = re.sub(r'"?(\w+)"?', r'`\1`', line)
-        line = line.replace('\\', '\\\\')
+        # Don't double-escape backslashes
+    
     out.append(line)
-with open(dst, 'w', encoding='utf-8') as f:
-    f.write(header + "".join(out) + "\nSET FOREIGN_KEY_CHECKS=1;\n")
+
+try:
+    with open(dst, 'w', encoding='utf-8') as f:
+        f.write(header + "".join(out) + "\nSET FOREIGN_KEY_CHECKS=1;\n")
+    print("Conversion successful")
+except Exception as e:
+    print(f"Error writing file: {e}")
+    sys.exit(1)
 PYEOF
-    [ -s "$dst" ] && mok "Converted" || merr "Conversion failed"
+
+    [ -s "$dst" ] && mok "Converted" || { merr "Conversion failed"; return 1; }
 }
 
 # --- SMART ENV READER ---
 read_var() {
     local key="$1"
     local file="$2"
+    [ ! -f "$file" ] && return
     grep -E "^\s*${key}\s*=" "$file" | head -1 | sed -E "s/^\s*${key}\s*=\s*//g" | sed -E 's/^"//;s/"$//;s/^\x27//;s/\x27$//'
 }
 
-# --- THE FIX: CLEAN ENV CONSTRUCTION ---
+# --- CLEAN ENV CONSTRUCTION ---
 generate_clean_env() {
     local src="$1"
     local tgt="$2"
@@ -277,11 +360,15 @@ preprocess_sql_fix_jwt() {
     local vmess_mask="$6"
     local vless_mask="$7"
 
-    minfo "Pre-processing SQL (Fixing JWT null values)..."
+    minfo "Pre-processing SQL (Removing problematic JWT inserts)..."
 
     python3 - "$input_sql" "$output_sql" "$jwt_secret" "$sub_secret" "$admin_secret" "$vmess_mask" "$vless_mask" << 'PYEOF'
 import re
 import sys
+
+if len(sys.argv) < 8:
+    print("Error: Not enough arguments")
+    sys.exit(1)
 
 sql_file = sys.argv[1]
 output_file = sys.argv[2]
@@ -291,145 +378,198 @@ admin_secret = sys.argv[5]
 vmess_mask = sys.argv[6]
 vless_mask = sys.argv[7]
 
-with open(sql_file, 'r', encoding='utf-8', errors='replace') as f:
-    content = f.read()
+try:
+    with open(sql_file, 'r', encoding='utf-8', errors='replace') as f:
+        content = f.read()
+except Exception as e:
+    print(f"Error reading SQL file: {e}")
+    sys.exit(1)
 
-# Method 1: Remove all INSERT/REPLACE INTO jwt statements using regex
-content = re.sub(
-    r'(INSERT|REPLACE)\s+INTO\s+[`"\']?jwt[`"\']?\s*\([^;]+;',
-    '-- JWT INSERT REMOVED BY MIGRATION TOOL',
-    content,
-    flags=re.IGNORECASE | re.DOTALL
-)
-
-# Method 2: Line-by-line processing for multi-line statements
+# Split into lines for processing
 lines = content.split('\n')
 new_lines = []
-skip_until_semicolon = False
-in_jwt_insert = False
+in_jwt_statement = False
+brace_count = 0
 
-for line in lines:
+for i, line in enumerate(lines):
     line_lower = line.lower().strip()
     
-    # Check if this line starts a jwt insert/replace
-    if re.match(r'^\s*(insert|replace)\s+into\s+[`"\']?jwt[`"\']?', line_lower):
-        in_jwt_insert = True
-        if ';' in line:
-            # Single line statement
-            new_lines.append('-- JWT INSERT REMOVED BY MIGRATION TOOL')
-            in_jwt_insert = False
-        else:
-            # Multi-line statement starts
-            new_lines.append('-- JWT INSERT REMOVED BY MIGRATION TOOL (multi-line)')
+    # Detect start of JWT insert/replace (various formats)
+    if re.search(r'(insert|replace)\s+(into\s+)?[`"\']?jwt[`"\']?\s*[\(]', line_lower):
+        in_jwt_statement = True
+        brace_count = line.count('(') - line.count(')')
+        new_lines.append('-- [MRM-FIX] JWT INSERT REMOVED (had NULL values)')
+        if ';' in line and brace_count <= 0:
+            in_jwt_statement = False
         continue
     
-    if in_jwt_insert:
-        # Skip lines until we find semicolon
+    # If we're inside a multi-line JWT statement
+    if in_jwt_statement:
+        brace_count += line.count('(') - line.count(')')
         if ';' in line:
-            in_jwt_insert = False
+            in_jwt_statement = False
+            brace_count = 0
         continue
     
     new_lines.append(line)
 
 content = '\n'.join(new_lines)
 
-# Add fresh JWT insert at the end with valid values
-jwt_insert = f"""
+# Add fresh JWT handling at the end
+jwt_section = f"""
 
 -- ============================================
--- Fresh JWT Record (Auto-generated by MRM Migration Tool V9.2)
+-- [MRM Migration Tool V9.3] Fresh JWT Record
 -- ============================================
-DELETE FROM jwt WHERE 1=1;
-INSERT INTO jwt (secret_key, subscription_secret_key, admin_secret_key, vmess_mask, vless_mask) 
+
+-- Create jwt table if not exists (safety)
+CREATE TABLE IF NOT EXISTS `jwt` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `secret_key` VARCHAR(255) NOT NULL,
+    `subscription_secret_key` VARCHAR(255),
+    `admin_secret_key` VARCHAR(255),
+    `vmess_mask` VARCHAR(64),
+    `vless_mask` VARCHAR(64)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Clear any existing (potentially corrupt) JWT data
+DELETE FROM `jwt`;
+
+-- Insert fresh valid JWT record
+INSERT INTO `jwt` (`secret_key`, `subscription_secret_key`, `admin_secret_key`, `vmess_mask`, `vless_mask`) 
 VALUES ('{jwt_secret}', '{sub_secret}', '{admin_secret}', '{vmess_mask}', '{vless_mask}');
+
 -- ============================================
 
 """
 
-content = content + jwt_insert
+content = content + jwt_section
 
-with open(output_file, 'w', encoding='utf-8') as f:
-    f.write(content)
-
-print("OK: SQL file pre-processed successfully")
+try:
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+    print("OK")
+except Exception as e:
+    print(f"Error writing output file: {e}")
+    sys.exit(1)
 PYEOF
 
-    if [ -f "$output_sql" ] && [ -s "$output_sql" ]; then
+    local result=$?
+    if [ $result -eq 0 ] && [ -f "$output_sql" ] && [ -s "$output_sql" ]; then
         mok "SQL pre-processed successfully"
         return 0
     else
-        mwarn "Could not pre-process SQL"
+        mwarn "Could not pre-process SQL (exit code: $result)"
         return 1
     fi
 }
 
-# --- MAIN IMPORT FUNCTION (FIXED) ---
+# --- MAIN IMPORT FUNCTION (FULLY FIXED) ---
 import_and_sanitize() {
-    local SQL="$1" TGT="$2"
-    minfo "Importing Data..."
-    get_db_credentials "$TGT"
-    local user="${MIG_DB_USER:-root}"
-    local pass="$MIG_DB_PASS"
-    [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT/.env" | cut -d'=' -f2 | tr -d '"')
-
-    local cname=$(find_db_container "$TGT" "mysql")
-    [ -z "$cname" ] && { merr "Target MySQL not found"; return 1; }
-
-    local db_list=$(docker exec "$cname" mysql -u"$user" -p"$pass" -e "SHOW DATABASES;" 2>/dev/null)
-    local db="marzban"
-    if [[ "$db_list" == *"rebecca"* ]]; then db="rebecca"; fi
-
-    docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4;" 2>/dev/null
-
-    # ============== FIX: Generate secrets and pre-process SQL ==============
-    local JWT_SECRET="$(openssl rand -hex 64)"
-    local SUB_SECRET="$(openssl rand -hex 64)"
-    local ADMIN_SECRET="$(openssl rand -hex 64)"
-    local VMESS_MASK="$(openssl rand -hex 16)"
-    local VLESS_MASK="$(openssl rand -hex 16)"
-
-    local FIXED_SQL="${SQL}.fixed"
+    local SQL="$1" 
+    local TGT_DIR="$2"
     
+    minfo "Starting data import..."
+    
+    # Get credentials
+    get_db_credentials "$TGT_DIR"
+    local user="${MIG_DB_USER:-root}"
+    local pass="${MIG_DB_PASS}"
+    [ -z "$pass" ] && pass=$(grep "MYSQL_ROOT_PASSWORD" "$TGT_DIR/.env" | cut -d'=' -f2- | tr -d '"')
+
+    # Find MySQL container
+    local cname=$(find_db_container "$TGT_DIR" "mysql")
+    if [ -z "$cname" ]; then
+        merr "Target MySQL container not found"
+        return 1
+    fi
+    minfo "Using MySQL container: $cname"
+
+    # Wait for MySQL to be ready
+    minfo "Waiting for MySQL to be ready..."
+    local max_wait=30
+    local waited=0
+    while ! docker exec "$cname" mysqladmin ping -u"$user" -p"$pass" --silent 2>/dev/null; do
+        sleep 2
+        waited=$((waited + 2))
+        if [ $waited -ge $max_wait ]; then
+            merr "MySQL not ready after ${max_wait}s"
+            return 1
+        fi
+    done
+    mok "MySQL is ready"
+
+    # Determine database name
+    local db="rebecca"
+    local db_exists=$(docker exec "$cname" mysql -u"$user" -p"$pass" -N -e "SHOW DATABASES LIKE 'rebecca';" 2>/dev/null)
+    if [ -z "$db_exists" ]; then
+        db_exists=$(docker exec "$cname" mysql -u"$user" -p"$pass" -N -e "SHOW DATABASES LIKE 'marzban';" 2>/dev/null)
+        [ -n "$db_exists" ] && db="marzban"
+    fi
+
+    # Create database if needed
+    docker exec "$cname" mysql -u"$user" -p"$pass" -e "CREATE DATABASE IF NOT EXISTS \`$db\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>/dev/null
+    minfo "Using database: $db"
+
+    # Generate fresh secrets
+    local JWT_SECRET=$(openssl rand -hex 64)
+    local SUB_SECRET=$(openssl rand -hex 64)
+    local ADMIN_SECRET=$(openssl rand -hex 64)
+    local VMESS_MASK=$(openssl rand -hex 16)
+    local VLESS_MASK=$(openssl rand -hex 16)
+
+    # Pre-process SQL to fix JWT issues
+    local FIXED_SQL="${SQL}.fixed"
     if preprocess_sql_fix_jwt "$SQL" "$FIXED_SQL" "$JWT_SECRET" "$SUB_SECRET" "$ADMIN_SECRET" "$VMESS_MASK" "$VLESS_MASK"; then
         SQL="$FIXED_SQL"
     else
-        mwarn "Using original SQL file (JWT fix may fail)..."
+        mwarn "Continuing with original SQL file..."
     fi
-    # ============== END FIX ==============
 
-    minfo "Importing to MySQL..."
-    docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>&1 | while read line; do
-        if [[ "$line" == *"ERROR"* ]]; then
-            mwarn "MySQL: $line"
-        fi
-    done
+    # Import SQL
+    minfo "Importing SQL to database..."
+    local import_error=""
+    import_error=$(docker exec -i "$cname" mysql --binary-mode=1 -u"$user" -p"$pass" "$db" < "$SQL" 2>&1)
+    local import_result=$?
+    
+    if [ $import_result -ne 0 ]; then
+        merr "SQL import had errors:"
+        echo "$import_error" | head -20
+        mwarn "Attempting to continue..."
+    else
+        mok "SQL imported successfully"
+    fi
 
-    run_sql() { docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -e "$1" 2>/dev/null; }
+    # Helper function for running SQL
+    run_sql() { 
+        docker exec "$cname" mysql -u"$user" -p"$pass" "$db" -N -e "$1" 2>/dev/null
+    }
 
-    minfo "Adding missing columns..."
-    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;"
-    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;"
-    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;"
-    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;"
-    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;"
+    # Add missing columns
+    minfo "Adding missing columns to admins table..."
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_sudo TINYINT(1) DEFAULT 0;" 2>/dev/null
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS is_disabled TINYINT(1) DEFAULT 0;" 2>/dev/null
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions JSON;" 2>/dev/null
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS data_limit BIGINT DEFAULT 0;" 2>/dev/null
+    run_sql "ALTER TABLE admins ADD COLUMN IF NOT EXISTS users_limit INT DEFAULT 0;" 2>/dev/null
 
-    minfo "Sanitizing Data..."
+    # Sanitize data
+    minfo "Sanitizing data..."
     run_sql "UPDATE admins SET permissions='[]' WHERE permissions IS NULL;"
     run_sql "UPDATE admins SET data_limit=0 WHERE data_limit IS NULL;"
     run_sql "UPDATE admins SET users_limit=0 WHERE users_limit IS NULL;"
     run_sql "UPDATE admins SET is_sudo=1 WHERE is_sudo IS NULL;"
     run_sql "UPDATE admins SET is_disabled=0 WHERE is_disabled IS NULL;"
-    run_sql "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca');"
-    run_sql "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca');"
+    run_sql "UPDATE nodes SET server_ca = REPLACE(server_ca, '/var/lib/pasarguard', '/var/lib/rebecca') WHERE server_ca IS NOT NULL;"
+    run_sql "UPDATE core_configs SET config = REPLACE(config, '/var/lib/pasarguard', '/var/lib/rebecca') WHERE config IS NOT NULL;"
 
-    # --- BACKUP JWT FIX: Ensure JWT table has valid data ---
-    minfo "Verifying JWT table integrity..."
+    # Final JWT verification
+    minfo "Verifying JWT table..."
+    local jwt_count=$(run_sql "SELECT COUNT(*) FROM jwt;" 2>/dev/null | tr -d '[:space:]')
     
-    # Check if jwt table exists and has data
-    local jwt_count=$(run_sql "SELECT COUNT(*) FROM jwt;" 2>/dev/null | tail -1)
-    
-    if [ -z "$jwt_count" ] || [ "$jwt_count" == "0" ]; then
-        minfo "JWT table empty, inserting fresh record..."
+    if [ -z "$jwt_count" ] || [ "$jwt_count" == "0" ] || [ "$jwt_count" == "NULL" ]; then
+        mwarn "JWT table empty or missing, creating fresh record..."
+        run_sql "CREATE TABLE IF NOT EXISTS jwt (id INT AUTO_INCREMENT PRIMARY KEY, secret_key VARCHAR(255) NOT NULL, subscription_secret_key VARCHAR(255), admin_secret_key VARCHAR(255), vmess_mask VARCHAR(64), vless_mask VARCHAR(64)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
         run_sql "INSERT INTO jwt (secret_key, subscription_secret_key, admin_secret_key, vmess_mask, vless_mask) VALUES ('${JWT_SECRET}', '${SUB_SECRET}', '${ADMIN_SECRET}', '${VMESS_MASK}', '${VLESS_MASK}');"
     else
         minfo "JWT table has $jwt_count record(s), checking for NULL values..."
@@ -439,106 +579,246 @@ import_and_sanitize() {
         run_sql "UPDATE jwt SET vmess_mask='${VMESS_MASK}' WHERE vmess_mask IS NULL OR vmess_mask='';"
         run_sql "UPDATE jwt SET vless_mask='${VLESS_MASK}' WHERE vless_mask IS NULL OR vless_mask='';"
     fi
+    
+    # Verify JWT is valid now
+    local jwt_check=$(run_sql "SELECT secret_key FROM jwt LIMIT 1;" 2>/dev/null | tr -d '[:space:]')
+    if [ -n "$jwt_check" ] && [ "$jwt_check" != "NULL" ]; then
+        mok "JWT table verified successfully"
+    else
+        merr "JWT table still has issues!"
+        return 1
+    fi
 
-    mok "Data Sanitized & JWT Fixed."
+    mok "Data import and sanitization complete"
+    return 0
 }
 
 create_rescue_admin() {
-    echo ""; echo -e "${YELLOW}Create new SuperAdmin? (Recommended)${NC}"
+    echo ""
+    echo -e "${YELLOW}Create new SuperAdmin? (Recommended)${NC}"
     if ui_confirm "Create?" "y"; then
-        local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
-        docker exec -it "$cname" rebecca-cli admin create
+        # Use global TGT variable
+        local panel_name=$(basename "$TGT")
+        local cname=$(docker ps --format '{{.Names}}' | grep -iE "${panel_name}.*(panel|rebecca|marzban)" | grep -v mysql | grep -v db | head -1)
+        
+        if [ -z "$cname" ]; then
+            cname=$(docker ps --format '{{.Names}}' | grep -iE "rebecca" | grep -v mysql | grep -v db | head -1)
+        fi
+        
+        if [ -n "$cname" ]; then
+            minfo "Using container: $cname"
+            docker exec -it "$cname" rebecca-cli admin create 2>/dev/null || \
+            docker exec -it "$cname" marzban-cli admin create 2>/dev/null || \
+            mwarn "Could not create admin via CLI. Please create manually."
+        else
+            mwarn "Panel container not found. Please create admin manually."
+        fi
     fi
 }
 
 do_full_migration() {
-    migration_init; clear
-    ui_header "UNIVERSAL MIGRATION V9.2 (JWT FIX)"
+    migration_init
+    clear
+    ui_header "UNIVERSAL MIGRATION V9.3"
+    
+    echo -e "${YELLOW}This tool will migrate from Pasarguard/Marzban to Rebecca${NC}"
+    echo ""
+    
+    # Detect source
     SRC=$(detect_source_panel)
+    if [ -z "$SRC" ]; then
+        merr "No source panel found (Pasarguard/Marzban)"
+        mpause
+        return 1
+    fi
+    
+    # Detect/install target
     if [ -d "/opt/rebecca" ]; then
         TGT="/opt/rebecca"
-    elif [ -d "/opt/marzban" ]; then
+    elif [ -d "/opt/marzban" ] && [ "$SRC" != "/opt/marzban" ]; then
         TGT="/opt/marzban"
     else
-        if ! install_rebecca_wizard; then mpause; return; fi
+        minfo "Rebecca not installed. Installing..."
+        if ! install_rebecca_wizard; then
+            mpause
+            return 1
+        fi
         TGT="/opt/rebecca"
     fi
-    [ -z "$SRC" ] && { merr "Source not found"; mpause; return; }
-    echo -e "Source: ${RED}$SRC${NC}"
-    echo -e "Target: ${GREEN}$TGT${NC}"
-    if ! ui_confirm "Start Migration?" "y"; then return; fi
+    
+    echo -e "Source: ${RED}$(basename "$SRC")${NC} → ${GREEN}$(basename "$TGT")${NC}"
+    echo ""
+    
+    if ! ui_confirm "Start Migration?" "y"; then
+        return 0
+    fi
 
+    # Step 1: Backup
+    minfo "Step 1/6: Creating backup..."
     create_backup "$SRC"
-    local db_type=$(cat "$CURRENT_BACKUP/db_type.txt")
+    
+    if [ -z "$CURRENT_BACKUP" ]; then
+        merr "Backup failed"
+        mpause
+        return 1
+    fi
+    mok "Backup created: $CURRENT_BACKUP"
+
+    # Step 2: Convert SQL
+    minfo "Step 2/6: Converting database..."
+    local db_type=$(cat "$CURRENT_BACKUP/db_type.txt" 2>/dev/null)
     local src_sql="$CURRENT_BACKUP/database.sql"
     [ "$db_type" == "sqlite" ] && src_sql="$CURRENT_BACKUP/database.sqlite3"
+    
     local final_sql="$MIGRATION_TEMP/import.sql"
-    convert_to_mysql "$src_sql" "$final_sql" "$db_type" || return
+    if ! convert_to_mysql "$src_sql" "$final_sql" "$db_type"; then
+        merr "Database conversion failed"
+        mpause
+        return 1
+    fi
 
-    minfo "Stopping panels..."
-    docker ps -q --filter "name=pasarguard" | xargs -r docker stop
-    docker ps -q --filter "name=marzban" | xargs -r docker stop
-    (cd "$SRC" && docker compose down) &>/dev/null
-    (cd "$TGT" && docker compose down) &>/dev/null
+    # Step 3: Stop services
+    minfo "Step 3/6: Stopping services..."
+    docker ps -q --filter "name=pasarguard" 2>/dev/null | xargs -r docker stop 2>/dev/null
+    docker ps -q --filter "name=marzban" 2>/dev/null | xargs -r docker stop 2>/dev/null
+    (cd "$SRC" && docker compose down 2>/dev/null) &>/dev/null
+    (cd "$TGT" && docker compose down 2>/dev/null) &>/dev/null
+    sleep 3
+    mok "Services stopped"
 
+    # Step 4: Generate env
+    minfo "Step 4/6: Configuring target..."
     generate_clean_env "$SRC" "$TGT"
 
-    minfo "Starting Target Panel..."
-    (cd "$TGT" && docker compose up -d --force-recreate); sleep 20
+    # Step 5: Start target and import
+    minfo "Step 5/6: Starting target panel..."
+    (cd "$TGT" && docker compose up -d --force-recreate) 
+    
+    minfo "Waiting for services to start..."
+    sleep 25
 
-    import_and_sanitize "$final_sql" "$TGT"
+    if ! import_and_sanitize "$final_sql" "$TGT"; then
+        merr "Data import failed"
+        mwarn "You may need to run rollback"
+        mpause
+        return 1
+    fi
 
-    ui_header "FINAL RESTART"
-    (cd "$TGT" && docker compose down && docker compose up -d --force-recreate)
+    # Step 6: Final restart
+    minfo "Step 6/6: Final restart..."
+    (cd "$TGT" && docker compose down && sleep 5 && docker compose up -d --force-recreate)
+    sleep 15
 
-    sleep 10
-    local cname=$(docker ps --format '{{.Names}}' | grep -iE "$(basename $TGT).*(panel|rebecca|marzban)" | head -1)
-    if [ -n "$cname" ]; then mok "Panel Running: $cname"; fi
+    # Verify
+    local panel_container=$(docker ps --format '{{.Names}}' | grep -iE "rebecca|marzban" | grep -v mysql | grep -v db | head -1)
+    if [ -n "$panel_container" ]; then
+        mok "Panel running: $panel_container"
+    else
+        mwarn "Panel container not detected"
+    fi
 
-    echo -e "\n${GREEN}══════════════════════════════════════${NC}"
-    echo -e "${GREEN}   MIGRATION COMPLETED SUCCESSFULLY!  ${NC}"
-    echo -e "${GREEN}══════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${GREEN}══════════════════════════════════════════${NC}"
+    echo -e "${GREEN}     MIGRATION COMPLETED SUCCESSFULLY!    ${NC}"
+    echo -e "${GREEN}══════════════════════════════════════════${NC}"
+    echo ""
     
     create_rescue_admin
-    migration_cleanup; mpause
+    migration_cleanup
+    mpause
 }
 
 do_rollback() {
-    clear; ui_header "ROLLBACK"
+    clear
+    ui_header "ROLLBACK"
+    
     local last=$(cat "$BACKUP_ROOT/.last_backup" 2>/dev/null)
     local src_path=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
     [ -z "$src_path" ] && src_path="/opt/pasarguard"
-    [ -z "$last" ] && { merr "No history found"; mpause; return; }
-    if ui_confirm "Restore $last to $src_path?" "n"; then
-        if [ -d "/opt/rebecca" ]; then (cd /opt/rebecca && docker compose down) &>/dev/null; fi
-        local PID=$(lsof -t -i:7431 2>/dev/null); [ ! -z "$PID" ] && kill -9 $PID
+    
+    if [ -z "$last" ] || [ ! -d "$last" ]; then
+        merr "No backup found to restore"
+        mpause
+        return 1
+    fi
+    
+    echo "Backup: $last"
+    echo "Target: $src_path"
+    echo ""
+    
+    if ui_confirm "Restore this backup?" "n"; then
+        minfo "Stopping services..."
+        if [ -d "/opt/rebecca" ]; then 
+            (cd /opt/rebecca && docker compose down 2>/dev/null) &>/dev/null
+        fi
+        
+        local PID=$(lsof -t -i:7431 2>/dev/null)
+        [ -n "$PID" ] && kill -9 $PID 2>/dev/null
+        
+        minfo "Restoring files..."
         mkdir -p "$(dirname "$src_path")"
-        tar -xzf "$last/config.tar.gz" -C "$(dirname "$src_path")"
-        tar -xzf "$last/data.tar.gz" -C "/var/lib"
-        (cd "$src_path" && docker compose up -d) &>/dev/null
-        mok "Rollback Complete."
+        tar -xzf "$last/config.tar.gz" -C "$(dirname "$src_path")" 2>/dev/null
+        tar -xzf "$last/data.tar.gz" -C "/var/lib" 2>/dev/null
+        
+        minfo "Starting original panel..."
+        (cd "$src_path" && docker compose up -d 2>/dev/null) &>/dev/null
+        
+        mok "Rollback Complete"
+    fi
+    mpause
+}
+
+view_logs() {
+    clear
+    ui_header "MIGRATION LOGS"
+    if [ -f "$MIGRATION_LOG" ]; then
+        tail -100 "$MIGRATION_LOG"
+    else
+        echo "No logs found"
     fi
     mpause
 }
 
 migrator_menu() {
     while true; do
-        clear; ui_header "MIGRATION MENU V9.2"
+        clear
+        ui_header "MRM MIGRATION TOOL V9.3"
         echo ""
-        echo "1) Auto Migrate (Full Fix + JWT Patch)"
-        echo "2) Rollback to Previous State"
-        echo "3) View Migration Logs"
+        echo "  1) Auto Migrate (Pasarguard/Marzban → Rebecca)"
+        echo "  2) Rollback to Previous State"
+        echo "  3) View Migration Logs"
         echo ""
-        echo "0) Back to Main Menu"
+        echo "  0) Exit"
         echo ""
-        read -p "Select: " opt
+        read -p "Select option: " opt
         case "$opt" in
             1) do_full_migration ;;
             2) do_rollback ;;
-            3) tail -50 "$MIGRATION_LOG"; mpause ;;
-            0) return ;;
+            3) view_logs ;;
+            0|q|Q) return 0 ;;
+            *) mwarn "Invalid option" ;;
         esac
     done
 }
 
-[[ "${BASH_SOURCE[0]}" == "${0}" ]] && migrator_menu
+# Entry point
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Check if running as root
+    if [ "$EUID" -ne 0 ]; then
+        echo "Please run as root (sudo)"
+        exit 1
+    fi
+    
+    # Check dependencies
+    if ! command -v docker &>/dev/null; then
+        echo "Docker is required but not installed"
+        exit 1
+    fi
+    
+    if ! command -v python3 &>/dev/null; then
+        echo "Python3 is required but not installed"
+        exit 1
+    fi
+    
+    migrator_menu
+fi
