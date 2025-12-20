@@ -458,12 +458,16 @@ PYENV
 
 install_rebecca() {
     ui_header "INSTALLING REBECCA"
-    ui_confirm "Install Rebecca?" "y" || return 1
     
-    if curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh | bash -s -- install --database mysql; then
-        [ -d "/opt/rebecca" ] && { mok "Rebecca installed"; return 0; }
-    fi
-    merr "Installation failed"
+    echo -e "${YELLOW}Rebecca needs to be installed manually first.${NC}"
+    echo ""
+    echo "Run this command:"
+    echo -e "${CYAN}bash -c \"\$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)\" @ install --database mysql${NC}"
+    echo ""
+    echo "After installation completes, run migration again."
+    echo ""
+    
+    mpause
     return 1
 }
 
