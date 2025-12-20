@@ -120,40 +120,27 @@ read_env_var() {
     local key="$1" file="$2"
     [ -f "$file" ] || return 1
     
-    # Write key and file to temp files to avoid shell escaping
-    local key_file="/tmp/mrm_key_$$"
-    local path_file="/tmp/mrm_path_$$"
-    safe_write "$key" > "$key_file"
-    safe_write "$file" > "$path_file"
+    # Simple and reliable grep-based reading
+    local line
+    line=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
+    [ -z "$line" ] && return 1
     
-    python3 << 'PYREAD'
-import sys
-try:
-    with open("/tmp/mrm_key_" + str(__import__('os').getppid()), 'r') as f:
-        key = f.read()
-    with open("/tmp/mrm_path_" + str(__import__('os').getppid()), 'r') as f:
-        filepath = f.read()
+    # Extract value after first =
+    local value="${line#*=}"
     
-    with open(filepath, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith('#') or '=' not in line:
-                continue
-            k, v = line.split('=', 1)
-            if k.strip() == key:
-                v = v.strip()
-                if len(v) >= 2:
-                    if (v[0] == '"' and v[-1] == '"') or (v[0] == "'" and v[-1] == "'"):
-                        v = v[1:-1]
-                print(v, end='')
-                break
-except Exception:
-    pass
-PYREAD
+    # Remove leading/trailing whitespace
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
     
-    rm -f "$key_file" "$path_file" 2>/dev/null
+    # Remove surrounding quotes
+    if [[ "$value" == \"*\" ]]; then
+        value="${value:1:-1}"
+    elif [[ "$value" == \'*\' ]]; then
+        value="${value:1:-1}"
+    fi
+    
+    printf '%s' "$value"
 }
-
 #==============================================================================
 # DETECTION
 #==============================================================================
