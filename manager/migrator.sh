@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.6 (FIXED EXPORT + TABLES)
+# MRM Migration Tool - V11.7 (FIXED - No Python in container)
 #==============================================================================
 
 set -o pipefail
@@ -136,7 +136,7 @@ read_env_var() {
 }
 
 #==============================================================================
-# PARSE POSTGRESQL URL (NEW)
+# PARSE POSTGRESQL URL
 #==============================================================================
 
 parse_pg_connection() {
@@ -585,7 +585,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Write to file inside container)
+# POSTGRESQL EXPORT (FIXED - Write JSON to file in container, then copy)
 #==============================================================================
 
 export_postgresql() {
@@ -600,151 +600,108 @@ export_postgresql() {
     local sudo_field="is_sudo"
     local check_sudo
     check_sudo=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-        "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_sudo'" 2>/dev/null | tr -d ' \n')
+        "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_sudo'" 2>/dev/null | tr -d ' \n\r')
     if [ -z "$check_sudo" ]; then
         check_sudo=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-            "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_admin'" 2>/dev/null | tr -d ' \n')
+            "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_admin'" 2>/dev/null | tr -d ' \n\r')
         [ -n "$check_sudo" ] && sudo_field="is_admin"
     fi
     minfo "  Sudo field: $sudo_field"
 
-    # Create export script inside container
-    local export_script="/tmp/mrm_export_$$.py"
-    cat > "$export_script" << PYEXPORT
-import json
-import psycopg2
-import psycopg2.extras
+    local tmp_dir="/tmp/mrm_exp_$$"
+    mkdir -p "$tmp_dir"
 
-conn = psycopg2.connect(
-    host="localhost",
-    database="$db_name",
-    user="$db_user"
-)
-cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-data = {}
-
-def safe_fetch(query, name):
-    try:
-        cur.execute(query)
-        rows = cur.fetchall()
-        return [dict(r) for r in rows]
-    except Exception as e:
-        print(f"Error fetching {name}: {e}")
-        return []
-
-# Admins
-data['admins'] = safe_fetch("""
-    SELECT id, username, hashed_password, 
-           COALESCE($sudo_field, false) as is_sudo, 
-           telegram_id, created_at 
-    FROM admins
-""", "admins")
-
-# Inbounds
-data['inbounds'] = safe_fetch("SELECT id, tag FROM inbounds", "inbounds")
-
-# Users
-data['users'] = safe_fetch("""
-    SELECT id, username, COALESCE(key, '') as key, 
-           COALESCE(status, 'active') as status,
-           COALESCE(used_traffic, 0) as used_traffic, 
-           data_limit,
-           EXTRACT(EPOCH FROM expire)::bigint as expire,
-           COALESCE(admin_id, 1) as admin_id,
-           COALESCE(note, '') as note,
-           sub_updated_at, sub_last_user_agent, online_at,
-           on_hold_timeout, on_hold_expire_duration,
-           COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic,
-           created_at, COALESCE(service_id, 1) as service_id,
-           sub_revoked_at, data_limit_reset_strategy, traffic_reset_at
-    FROM users
-""", "users")
-
-# Proxies
-data['proxies'] = safe_fetch("""
-    SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings 
-    FROM proxies
-""", "proxies")
-
-# Hosts
-data['hosts'] = safe_fetch("""
-    SELECT id, COALESCE(remark, '') as remark, 
-           COALESCE(address, '') as address, port,
-           COALESCE(inbound_tag, '') as inbound_tag,
-           COALESCE(sni, '') as sni, COALESCE(host, '') as host,
-           COALESCE(security, 'none') as security,
-           COALESCE(fingerprint::text, 'none') as fingerprint,
-           COALESCE(is_disabled, false) as is_disabled,
-           COALESCE(path, '') as path,
-           COALESCE(alpn, '') as alpn,
-           COALESCE(allowinsecure, false) as allowinsecure,
-           fragment_setting,
-           COALESCE(mux_enable, false) as mux_enable,
-           COALESCE(random_user_agent, false) as random_user_agent
-    FROM hosts
-""", "hosts")
-
-# Services
-data['services'] = safe_fetch("""
-    SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at 
-    FROM services
-""", "services")
-
-# Nodes
-data['nodes'] = safe_fetch("""
-    SELECT id, COALESCE(name, '') as name, 
-           COALESCE(address, '') as address, port, api_port,
-           COALESCE(certificate::text, '') as certificate,
-           COALESCE(usage_coefficient, 1.0) as usage_coefficient,
-           COALESCE(status, 'connected') as status,
-           message, xray_version, created_at
-    FROM nodes
-""", "nodes")
-
-# Core configs
-data['core_configs'] = safe_fetch("""
-    SELECT id, COALESCE(name, 'default') as name, config, created_at 
-    FROM core_configs
-""", "core_configs")
-
-# Relations
-data['service_hosts'] = safe_fetch("SELECT service_id, host_id FROM service_hosts", "service_hosts")
-data['service_inbounds'] = safe_fetch("SELECT service_id, inbound_id FROM service_inbounds", "service_inbounds")
-data['user_inbounds'] = safe_fetch("SELECT user_id, inbound_tag FROM user_inbounds", "user_inbounds")
-data['node_inbounds'] = safe_fetch("SELECT node_id, inbound_tag FROM node_inbounds", "node_inbounds")
-
-try:
-    data['excluded_inbounds'] = safe_fetch("SELECT user_id, inbound_tag FROM excluded_inbounds_association", "excluded_inbounds")
-except:
-    data['excluded_inbounds'] = []
-
-conn.close()
-
-# Convert datetime objects
-def convert(obj):
-    if hasattr(obj, 'isoformat'):
-        return obj.isoformat()
-    return str(obj)
-
-with open('/tmp/export.json', 'w') as f:
-    json.dump(data, f, default=convert, ensure_ascii=False)
-
-print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
-PYEXPORT
-
-    # Copy script to container and run
-    docker cp "$export_script" "$PG_CONTAINER:/tmp/export.py" 2>/dev/null
-    rm -f "$export_script"
+    # Export each table to JSON file inside container, then copy out
+    export_pg_table() {
+        local tname="$1"
+        local query="$2"
+        local out_file="$tmp_dir/${tname}.json"
+        
+        # Run query, write to file inside container
+        docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "$query" > "$out_file" 2>/dev/null
+        
+        # Check if empty or null
+        local content
+        content=$(cat "$out_file" 2>/dev/null | tr -d ' \n\r')
+        if [ -z "$content" ] || [ "$content" = "null" ] || [ "$content" = "" ]; then
+            echo "[]" > "$out_file"
+        fi
+    }
 
     minfo "  Exporting tables..."
-    local result
-    result=$(docker exec "$PG_CONTAINER" python3 /tmp/export.py 2>&1)
-    echo "$result"
 
-    # Copy result back
-    docker cp "$PG_CONTAINER:/tmp/export.json" "$output_file" 2>/dev/null
-    docker exec "$PG_CONTAINER" rm -f /tmp/export.py /tmp/export.json 2>/dev/null
+    export_pg_table "admins" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, username, hashed_password, COALESCE($sudo_field, false) as is_sudo, telegram_id, created_at FROM admins) t"
+
+    export_pg_table "inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, tag FROM inbounds) t"
+
+    export_pg_table "users" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, username, COALESCE(key, '') as key, COALESCE(status, 'active') as status, COALESCE(used_traffic, 0) as used_traffic, data_limit, EXTRACT(EPOCH FROM expire)::bigint as expire, COALESCE(admin_id, 1) as admin_id, COALESCE(note, '') as note, sub_updated_at, sub_last_user_agent, online_at, on_hold_timeout, on_hold_expire_duration, COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic, created_at, COALESCE(service_id, 1) as service_id, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at FROM users) t"
+
+    export_pg_table "proxies" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings FROM proxies) t"
+
+    export_pg_table "hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(remark, '') as remark, COALESCE(address, '') as address, port, COALESCE(inbound_tag, '') as inbound_tag, COALESCE(sni, '') as sni, COALESCE(host, '') as host, COALESCE(security, 'none') as security, COALESCE(fingerprint::text, 'none') as fingerprint, COALESCE(is_disabled, false) as is_disabled, COALESCE(path, '') as path, COALESCE(alpn, '') as alpn, COALESCE(allowinsecure, false) as allowinsecure, fragment_setting, COALESCE(mux_enable, false) as mux_enable, COALESCE(random_user_agent, false) as random_user_agent FROM hosts) t"
+
+    export_pg_table "services" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at FROM services) t"
+
+    export_pg_table "nodes" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, '') as name, COALESCE(address, '') as address, port, api_port, COALESCE(certificate::text, '') as certificate, COALESCE(usage_coefficient, 1.0) as usage_coefficient, COALESCE(status, 'connected') as status, message, xray_version, created_at FROM nodes) t"
+
+    export_pg_table "core_configs" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, 'default') as name, config, created_at FROM core_configs) t"
+
+    export_pg_table "service_hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT service_id, host_id FROM service_hosts) t"
+    export_pg_table "service_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT service_id, inbound_id FROM service_inbounds) t"
+    export_pg_table "user_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT user_id, inbound_tag FROM user_inbounds) t"
+    export_pg_table "node_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT node_id, inbound_tag FROM node_inbounds) t"
+
+    # excluded_inbounds may not exist
+    docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
+        "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT user_id, inbound_tag FROM excluded_inbounds_association) t" \
+        > "$tmp_dir/excluded_inbounds.json" 2>/dev/null || echo "[]" > "$tmp_dir/excluded_inbounds.json"
+
+    # Combine all JSON files using Python on HOST
+    safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
+    safe_write "$output_file" > "/tmp/mrm_outfile_$$"
+
+    python3 << 'PYCOMBINE'
+import json
+import os
+
+ppid = os.getppid()
+with open(f"/tmp/mrm_tmpdir_{ppid}", "r") as f:
+    tmp_dir = f.read().strip()
+with open(f"/tmp/mrm_outfile_{ppid}", "r") as f:
+    output_file = f.read().strip()
+
+data = {}
+tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 
+          'nodes', 'core_configs', 'service_hosts', 'service_inbounds',
+          'user_inbounds', 'node_inbounds', 'excluded_inbounds']
+
+for table in tables:
+    fpath = os.path.join(tmp_dir, f"{table}.json")
+    try:
+        with open(fpath, 'r') as f:
+            content = f.read().strip()
+            # Remove any trailing/leading whitespace and newlines
+            content = content.strip()
+            if content and content.lower() != 'null' and content != '':
+                try:
+                    parsed = json.loads(content)
+                    data[table] = parsed if parsed else []
+                except json.JSONDecodeError:
+                    print(f"JSON parse error for {table}: {content[:100]}")
+                    data[table] = []
+            else:
+                data[table] = []
+    except Exception as e:
+        print(f"Error reading {table}: {e}")
+        data[table] = []
+
+with open(output_file, 'w') as f:
+    json.dump(data, f, ensure_ascii=False, default=str)
+
+print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
+PYCOMBINE
+
+    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
 
     if [ -s "$output_file" ]; then
         mok "Export complete"
@@ -1174,7 +1131,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.6"
+    ui_header "MRM MIGRATION V11.7"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1315,13 +1272,13 @@ do_logs() {
 }
 
 #==============================================================================
-# MAIN MENU (FIXED NAME: migrator_menu)
+# MAIN MENU
 #==============================================================================
 
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.6"
+        ui_header "MRM MIGRATION V11.7"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
