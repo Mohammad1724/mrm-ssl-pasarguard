@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.4 (FIXED)
+# MRM Migration Tool - V11.5 (FIXED DATABASE CONNECTION)
 #==============================================================================
 
 set -o pipefail
@@ -23,6 +23,8 @@ SOURCE_DB_TYPE=""
 PG_CONTAINER=""
 MYSQL_CONTAINER=""
 MYSQL_PASS=""
+PG_DB_NAME=""
+PG_DB_USER=""
 
 XRAY_URL="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
 GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
@@ -131,6 +133,79 @@ read_env_var() {
     fi
 
     printf '%s' "$value"
+}
+
+#==============================================================================
+# PARSE POSTGRESQL URL (NEW)
+#==============================================================================
+
+parse_pg_connection() {
+    local src="$1"
+    local env_file="$src/.env"
+    
+    [ -f "$env_file" ] || return 1
+    
+    local db_url
+    db_url=$(read_env_var "SQLALCHEMY_DATABASE_URL" "$env_file")
+    
+    if [ -z "$db_url" ]; then
+        # Fallback to panel name
+        PG_DB_NAME="${SOURCE_PANEL_TYPE}"
+        PG_DB_USER="${SOURCE_PANEL_TYPE}"
+        return 0
+    fi
+    
+    # Parse URL: postgresql://user:pass@host:port/database
+    # or: postgresql+psycopg2://user:pass@host:port/database
+    
+    safe_write "$db_url" > "/tmp/mrm_dburl_$$"
+    
+    python3 << 'PYPARSE'
+import os
+import re
+
+ppid = os.getppid()
+with open(f"/tmp/mrm_dburl_{ppid}", "r") as f:
+    url = f.read().strip()
+
+# Parse PostgreSQL URL
+# Formats:
+# postgresql://user:pass@host:port/database
+# postgresql+psycopg2://user:pass@host:port/database
+# postgres://user:pass@host:port/database
+
+match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
+
+if match:
+    user = match.group(1)
+    database = match.group(5)
+else:
+    # Try without password
+    match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
+    if match:
+        user = match.group(1)
+        database = match.group(4)
+    else:
+        # Fallback
+        user = "postgres"
+        database = "postgres"
+
+with open(f"/tmp/mrm_pguser_{ppid}", "w") as f:
+    f.write(user)
+with open(f"/tmp/mrm_pgdb_{ppid}", "w") as f:
+    f.write(database)
+PYPARSE
+
+    PG_DB_USER=$(cat "/tmp/mrm_pguser_$$" 2>/dev/null)
+    PG_DB_NAME=$(cat "/tmp/mrm_pgdb_$$" 2>/dev/null)
+    
+    rm -f "/tmp/mrm_dburl_$$" "/tmp/mrm_pguser_$$" "/tmp/mrm_pgdb_$$"
+    
+    # Fallback if parsing failed
+    [ -z "$PG_DB_USER" ] && PG_DB_USER="${SOURCE_PANEL_TYPE}"
+    [ -z "$PG_DB_NAME" ] && PG_DB_NAME="${SOURCE_PANEL_TYPE}"
+    
+    return 0
 }
 
 #==============================================================================
@@ -313,9 +388,12 @@ start_source_panel() {
         done
 
         if [ -n "$PG_CONTAINER" ]; then
+            # Parse connection info from .env
+            parse_pg_connection "$src"
+            minfo "  DB User: $PG_DB_USER, DB Name: $PG_DB_NAME"
+            
             waited=0
-            local db_user="${SOURCE_PANEL_TYPE}"
-            while ! docker exec "$PG_CONTAINER" pg_isready -U "$db_user" &>/dev/null && [ $waited -lt 60 ]; do
+            while ! docker exec "$PG_CONTAINER" pg_isready -U "$PG_DB_USER" &>/dev/null && [ $waited -lt 60 ]; do
                 sleep 2
                 waited=$((waited + 2))
             done
@@ -524,22 +602,53 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Direct connection, not via PgBouncer)
+# POSTGRESQL EXPORT (FIXED - Use parsed connection info)
 #==============================================================================
 
 export_postgresql() {
     local output_file="$1"
-    local db_name="${SOURCE_PANEL_TYPE}"
-    local db_user="${SOURCE_PANEL_TYPE}"
+    local db_name="$PG_DB_NAME"
+    local db_user="$PG_DB_USER"
 
     minfo "Exporting from PostgreSQL..."
+    minfo "  Database: $db_name, User: $db_user"
+
+    # Try to list databases to verify connection
+    local db_list
+    db_list=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d postgres -t -A -c "SELECT datname FROM pg_database WHERE datistemplate = false;" 2>/dev/null)
+    minfo "  Available databases: $(echo "$db_list" | tr '\n' ' ')"
+
+    # If db_name doesn't exist, try common alternatives
+    if ! echo "$db_list" | grep -q "^${db_name}$"; then
+        mwarn "Database '$db_name' not found, trying alternatives..."
+        for alt_db in "marzban" "pasarguard" "postgres"; do
+            if echo "$db_list" | grep -q "^${alt_db}$"; then
+                minfo "  Trying database: $alt_db"
+                db_name="$alt_db"
+                break
+            fi
+        done
+    fi
+
+    # Try different users if needed
+    local test_conn
+    test_conn=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT 1;" 2>&1)
+    if echo "$test_conn" | grep -qi "error\|fatal"; then
+        mwarn "User '$db_user' failed, trying 'postgres'..."
+        db_user="postgres"
+    fi
+
+    minfo "  Final connection: User=$db_user, Database=$db_name"
 
     # Verify data exists
     local user_count
     user_count=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
     if [ -z "$user_count" ] || [ "$user_count" = "0" ]; then
         mwarn "No users found in source database!"
-        # Continue anyway to export other data
+        # Show table list for debugging
+        local tables
+        tables=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public';" 2>/dev/null)
+        minfo "  Tables in database: $(echo "$tables" | tr '\n' ' ')"
     else
         minfo "  Found $user_count users in source"
     fi
@@ -1063,7 +1172,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.4"
+    ui_header "MRM MIGRATION V11.5"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1210,7 +1319,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.4"
+        ui_header "MRM MIGRATION V11.5"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
