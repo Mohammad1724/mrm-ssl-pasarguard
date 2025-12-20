@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.7 (FIXED - No Python in container)
+# MRM Migration Tool - V11.8 (DYNAMIC COLUMN DETECTION)
 #==============================================================================
 
 set -o pipefail
@@ -111,7 +111,7 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING (FIXED)
+# SAFE ENV VAR READING
 #==============================================================================
 
 read_env_var() {
@@ -164,13 +164,13 @@ ppid = os.getppid()
 with open(f"/tmp/mrm_dburl_{ppid}", "r") as f:
     url = f.read().strip()
 
-match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
+match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/(.+?)(?:\?.*)?$', url)
 
 if match:
     user = match.group(1)
     database = match.group(5)
 else:
-    match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
+    match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^@]+)@([^:/]+)(?::(\d+))?/(.+?)(?:\?.*)?$', url)
     if match:
         user = match.group(1)
         database = match.group(4)
@@ -585,7 +585,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Write JSON to file in container, then copy)
+# POSTGRESQL EXPORT (FIXED - Use SELECT * for dynamic schema)
 #==============================================================================
 
 export_postgresql() {
@@ -596,79 +596,87 @@ export_postgresql() {
     minfo "Exporting from PostgreSQL..."
     minfo "  Database: $db_name, User: $db_user"
 
-    # Detect sudo field
-    local sudo_field="is_sudo"
-    local check_sudo
-    check_sudo=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-        "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_sudo'" 2>/dev/null | tr -d ' \n\r')
-    if [ -z "$check_sudo" ]; then
-        check_sudo=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-            "SELECT column_name FROM information_schema.columns WHERE table_name='admins' AND column_name='is_admin'" 2>/dev/null | tr -d ' \n\r')
-        [ -n "$check_sudo" ] && sudo_field="is_admin"
-    fi
-    minfo "  Sudo field: $sudo_field"
+    # Show table counts for debugging
+    minfo "  Checking tables..."
+    for tbl in users admins proxies hosts inbounds services nodes; do
+        local cnt
+        cnt=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT COUNT(*) FROM $tbl;" 2>/dev/null | tr -d ' \n\r')
+        [ -n "$cnt" ] && echo "    $tbl: $cnt"
+    done
 
     local tmp_dir="/tmp/mrm_exp_$$"
     mkdir -p "$tmp_dir"
 
-    # Export each table to JSON file inside container, then copy out
+    # Export function using SELECT * (works with any schema)
     export_pg_table() {
         local tname="$1"
-        local query="$2"
         local out_file="$tmp_dir/${tname}.json"
         
-        # Run query, write to file inside container
-        docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "$query" > "$out_file" 2>/dev/null
+        # Use SELECT * to get all columns dynamically
+        local result
+        result=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
+            "SELECT COALESCE(json_agg(t),'[]'::json) FROM (SELECT * FROM $tname) t;" 2>&1)
         
-        # Check if empty or null
-        local content
-        content=$(cat "$out_file" 2>/dev/null | tr -d ' \n\r')
-        if [ -z "$content" ] || [ "$content" = "null" ] || [ "$content" = "" ]; then
+        # Check for errors
+        if echo "$result" | grep -qiE "error|does not exist"; then
             echo "[]" > "$out_file"
+            return 1
         fi
+        
+        # Clean and save
+        result=$(echo "$result" | tr -d '\r' | head -1)
+        if [ -z "$result" ] || [ "$result" = "null" ]; then
+            echo "[]" > "$out_file"
+        else
+            echo "$result" > "$out_file"
+        fi
+        return 0
     }
 
     minfo "  Exporting tables..."
 
-    export_pg_table "admins" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, username, hashed_password, COALESCE($sudo_field, false) as is_sudo, telegram_id, created_at FROM admins) t"
+    # Export main tables
+    for tbl in admins inbounds users proxies hosts services nodes; do
+        export_pg_table "$tbl"
+    done
 
-    export_pg_table "inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, tag FROM inbounds) t"
-
-    export_pg_table "users" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, username, COALESCE(key, '') as key, COALESCE(status, 'active') as status, COALESCE(used_traffic, 0) as used_traffic, data_limit, EXTRACT(EPOCH FROM expire)::bigint as expire, COALESCE(admin_id, 1) as admin_id, COALESCE(note, '') as note, sub_updated_at, sub_last_user_agent, online_at, on_hold_timeout, on_hold_expire_duration, COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic, created_at, COALESCE(service_id, 1) as service_id, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at FROM users) t"
-
-    export_pg_table "proxies" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings FROM proxies) t"
-
-    export_pg_table "hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(remark, '') as remark, COALESCE(address, '') as address, port, COALESCE(inbound_tag, '') as inbound_tag, COALESCE(sni, '') as sni, COALESCE(host, '') as host, COALESCE(security, 'none') as security, COALESCE(fingerprint::text, 'none') as fingerprint, COALESCE(is_disabled, false) as is_disabled, COALESCE(path, '') as path, COALESCE(alpn, '') as alpn, COALESCE(allowinsecure, false) as allowinsecure, fragment_setting, COALESCE(mux_enable, false) as mux_enable, COALESCE(random_user_agent, false) as random_user_agent FROM hosts) t"
-
-    export_pg_table "services" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at FROM services) t"
-
-    export_pg_table "nodes" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, '') as name, COALESCE(address, '') as address, port, api_port, COALESCE(certificate::text, '') as certificate, COALESCE(usage_coefficient, 1.0) as usage_coefficient, COALESCE(status, 'connected') as status, message, xray_version, created_at FROM nodes) t"
-
-    export_pg_table "core_configs" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT id, COALESCE(name, 'default') as name, config, created_at FROM core_configs) t"
-
-    export_pg_table "service_hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT service_id, host_id FROM service_hosts) t"
-    export_pg_table "service_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT service_id, inbound_id FROM service_inbounds) t"
-    export_pg_table "user_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT user_id, inbound_tag FROM user_inbounds) t"
-    export_pg_table "node_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT node_id, inbound_tag FROM node_inbounds) t"
-
-    # excluded_inbounds may not exist
-    docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-        "SELECT COALESCE(json_agg(row_to_json(t)),'[]'::json) FROM (SELECT user_id, inbound_tag FROM excluded_inbounds_association) t" \
-        > "$tmp_dir/excluded_inbounds.json" 2>/dev/null || echo "[]" > "$tmp_dir/excluded_inbounds.json"
+    # Try optional tables (may not exist)
+    export_pg_table "core_configs" 2>/dev/null || echo "[]" > "$tmp_dir/core_configs.json"
+    export_pg_table "service_hosts" 2>/dev/null || echo "[]" > "$tmp_dir/service_hosts.json"
+    export_pg_table "service_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/service_inbounds.json"
+    export_pg_table "user_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/user_inbounds.json"
+    export_pg_table "node_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/node_inbounds.json"
+    export_pg_table "excluded_inbounds_association" 2>/dev/null || echo "[]" > "$tmp_dir/excluded_inbounds.json"
+    
+    # Rename excluded_inbounds_association if it was exported
+    [ -f "$tmp_dir/excluded_inbounds_association.json" ] && mv "$tmp_dir/excluded_inbounds_association.json" "$tmp_dir/excluded_inbounds.json"
 
     # Combine all JSON files using Python on HOST
     safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
     safe_write "$output_file" > "/tmp/mrm_outfile_$$"
+    safe_write "$PG_CONTAINER" > "/tmp/mrm_pgcont_$$"
+    safe_write "$db_user" > "/tmp/mrm_dbuser_$$"
+    safe_write "$db_name" > "/tmp/mrm_dbname_$$"
 
     python3 << 'PYCOMBINE'
 import json
 import os
+import subprocess
 
 ppid = os.getppid()
-with open(f"/tmp/mrm_tmpdir_{ppid}", "r") as f:
-    tmp_dir = f.read().strip()
-with open(f"/tmp/mrm_outfile_{ppid}", "r") as f:
-    output_file = f.read().strip()
+
+def read_file(name):
+    try:
+        with open(f"/tmp/mrm_{name}_{ppid}", "r") as f:
+            return f.read().strip()
+    except:
+        return ""
+
+tmp_dir = read_file("tmpdir")
+output_file = read_file("outfile")
+pg_container = read_file("pgcont")
+db_user = read_file("dbuser")
+db_name = read_file("dbname")
 
 data = {}
 tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 
@@ -680,20 +688,45 @@ for table in tables:
     try:
         with open(fpath, 'r') as f:
             content = f.read().strip()
-            # Remove any trailing/leading whitespace and newlines
-            content = content.strip()
             if content and content.lower() != 'null' and content != '':
                 try:
                     parsed = json.loads(content)
                     data[table] = parsed if parsed else []
-                except json.JSONDecodeError:
-                    print(f"JSON parse error for {table}: {content[:100]}")
+                except json.JSONDecodeError as e:
+                    print(f"JSON error {table}: {e}")
                     data[table] = []
             else:
                 data[table] = []
     except Exception as e:
-        print(f"Error reading {table}: {e}")
         data[table] = []
+
+# Normalize field names for compatibility
+def normalize_user(u):
+    # Handle different key field names
+    if 'key' not in u and 'uuid' in u:
+        u['key'] = u['uuid']
+    if 'key' not in u and 'subscription_key' in u:
+        u['key'] = u['subscription_key']
+    # Handle expire timestamp
+    if 'expire' in u and u['expire']:
+        try:
+            # If it's a datetime string, convert to timestamp
+            if isinstance(u['expire'], str) and 'T' in u['expire']:
+                from datetime import datetime
+                dt = datetime.fromisoformat(u['expire'].replace('Z', '+00:00'))
+                u['expire'] = int(dt.timestamp())
+        except:
+            pass
+    return u
+
+def normalize_admin(a):
+    # Handle is_sudo vs is_admin
+    if 'is_sudo' not in a:
+        a['is_sudo'] = a.get('is_admin', False)
+    return a
+
+data['users'] = [normalize_user(u) for u in data.get('users', [])]
+data['admins'] = [normalize_admin(a) for a in data.get('admins', [])]
 
 with open(output_file, 'w') as f:
     json.dump(data, f, ensure_ascii=False, default=str)
@@ -701,7 +734,7 @@ with open(output_file, 'w') as f:
 print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
 PYCOMBINE
 
-    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
+    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$" "/tmp/mrm_pgcont_$$" "/tmp/mrm_dbuser_$$" "/tmp/mrm_dbname_$$"
 
     if [ -s "$output_file" ]; then
         mok "Export complete"
@@ -712,7 +745,7 @@ PYCOMBINE
 }
 
 #==============================================================================
-# MYSQL IMPORT (FIXED - Create all missing tables)
+# MYSQL IMPORT (FIXED - Handle dynamic schema)
 #==============================================================================
 
 import_to_mysql() {
@@ -785,6 +818,25 @@ def ts(v):
         return "NULL"
     return esc(str(v))
 
+def get_expire(u):
+    """Get expire as unix timestamp"""
+    exp = u.get('expire')
+    if exp is None or exp == '' or str(exp) == 'None':
+        return "NULL"
+    if isinstance(exp, (int, float)):
+        return str(int(exp))
+    if isinstance(exp, str):
+        try:
+            # Try parsing as datetime
+            from datetime import datetime
+            if 'T' in exp:
+                dt = datetime.fromisoformat(exp.replace('Z', '+00:00'))
+                return str(int(dt.timestamp()))
+            return str(int(float(exp)))
+        except:
+            return "NULL"
+    return "NULL"
+
 with open(json_file, 'r') as f:
     data = json.load(f)
 
@@ -816,13 +868,13 @@ sql.append("DELETE FROM core_configs;")
 
 for a in data.get('admins') or []:
     if not a.get('id'): continue
-    role = 'sudo' if a.get('is_sudo') else 'standard'
+    role = 'sudo' if a.get('is_sudo') or a.get('is_admin') else 'standard'
     created = ts(a.get('created_at')) if ts(a.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a['username'])}, {esc(a['hashed_password'])}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
+    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username',''))}, {esc(a.get('hashed_password',''))}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
 
 for i in data.get('inbounds') or []:
     if not i.get('id'): continue
-    sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i['tag'])}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
+    sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i.get('tag',''))}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
 
 svcs = data.get('services') or []
 for s in svcs:
@@ -835,7 +887,7 @@ if not svcs:
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at) VALUES ({n['id']}, {esc(n['name'])}, {esc(n.get('address', ''))}, {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(n.get('certificate'))}, {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))}, {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    sql.append(f"INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at) VALUES ({n['id']}, {esc(n.get('name',''))}, {esc(n.get('address', ''))}, {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(n.get('certificate'))}, {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))}, {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
@@ -846,17 +898,19 @@ for h in data.get('hosts') or []:
     fp = fp or 'none'
     frag = h.get('fragment_setting')
     frag_sql = esc_json(frag) if frag else "NULL"
-    sql.append(f"INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent) VALUES ({h['id']}, {esc(h.get('remark', ''))}, {esc(addr)}, {nv(h.get('port'))}, {esc(h.get('inbound_tag', ''))}, {esc(h.get('sni', ''))}, {esc(h.get('host', ''))}, {esc(h.get('security', 'none'))}, {esc(fp)}, {1 if h.get('is_disabled') else 0}, {esc(path)}, {esc(h.get('alpn', ''))}, {1 if h.get('allowinsecure') else 0}, {frag_sql}, {1 if h.get('mux_enable') else 0}, {1 if h.get('random_user_agent') else 0}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    sql.append(f"INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent) VALUES ({h['id']}, {esc(h.get('remark', ''))}, {esc(addr)}, {nv(h.get('port'))}, {esc(h.get('inbound_tag') or h.get('tag', ''))}, {esc(h.get('sni', ''))}, {esc(h.get('host', ''))}, {esc(h.get('security', 'none'))}, {esc(fp)}, {1 if h.get('is_disabled') else 0}, {esc(path)}, {esc(h.get('alpn', ''))}, {1 if h.get('allowinsecure') else 0}, {frag_sql}, {1 if h.get('mux_enable') else 0}, {1 if h.get('random_user_agent') else 0}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
-    key = u.get('key') or ''
+    # Handle different key field names
+    key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     status = u.get('status', 'active')
     if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
     svc = u.get('service_id') or 1
     created = ts(u.get('created_at')) if ts(u.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id, lifetime_used_traffic, on_hold_timeout, on_hold_expire_duration, sub_updated_at, sub_last_user_agent, online_at, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at, created_at) VALUES ({u['id']}, {esc(uname)}, {esc(key)}, '{status}', {int(u.get('used_traffic', 0))}, {nv(u.get('data_limit'))}, {nv(u.get('expire'))}, {u.get('admin_id', 1)}, {esc(u.get('note', ''))}, {svc}, {int(u.get('lifetime_used_traffic', 0))}, {ts(u.get('on_hold_timeout'))}, {nv(u.get('on_hold_expire_duration'))}, {ts(u.get('sub_updated_at'))}, {esc(u.get('sub_last_user_agent'))}, {ts(u.get('online_at'))}, {ts(u.get('sub_revoked_at'))}, {esc(u.get('data_limit_reset_strategy'))}, {ts(u.get('traffic_reset_at'))}, {created}) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);")
+    expire = get_expire(u)
+    sql.append(f"INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id, lifetime_used_traffic, on_hold_timeout, on_hold_expire_duration, sub_updated_at, sub_last_user_agent, online_at, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at, created_at) VALUES ({u['id']}, {esc(uname)}, {esc(key)}, '{status}', {int(u.get('used_traffic') or 0)}, {nv(u.get('data_limit'))}, {expire}, {u.get('admin_id') or 1}, {esc(u.get('note', ''))}, {svc}, {int(u.get('lifetime_used_traffic') or 0)}, {ts(u.get('on_hold_timeout'))}, {nv(u.get('on_hold_expire_duration'))}, {ts(u.get('sub_updated_at'))}, {esc(u.get('sub_last_user_agent'))}, {ts(u.get('online_at'))}, {ts(u.get('sub_revoked_at'))}, {esc(u.get('data_limit_reset_strategy'))}, {ts(u.get('traffic_reset_at'))}, {created}) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);")
 
 for p in data.get('proxies') or []:
     if not p.get('id'): continue
@@ -865,7 +919,7 @@ for p in data.get('proxies') or []:
         try: settings = json.loads(settings)
         except: pass
     settings = fix_path(settings)
-    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p['user_id']}, {esc(p['type'])}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
+    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
 
 for sh in data.get('service_hosts') or []:
     if sh.get('service_id') and sh.get('host_id'):
@@ -883,7 +937,7 @@ for ni in data.get('node_inbounds') or []:
     if ni.get('node_id') and ni.get('inbound_tag'):
         sql.append(f"INSERT IGNORE INTO node_inbounds (node_id, inbound_tag) VALUES ({ni['node_id']}, {esc(ni['inbound_tag'])});")
 
-if not data.get('service_hosts'):
+if not data.get('service_hosts') and data.get('hosts'):
     sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
 
 for c in data.get('core_configs') or []:
@@ -1131,7 +1185,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.7"
+    ui_header "MRM MIGRATION V11.8"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1278,7 +1332,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.7"
+        ui_header "MRM MIGRATION V11.8"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
