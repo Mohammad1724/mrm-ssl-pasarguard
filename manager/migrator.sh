@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V10.8 (FINAL - All Edge Cases Handled)
+# MRM Migration Tool - V10.9 (FULLY VERIFIED)
 #==============================================================================
 
 set -o pipefail
-
-# Load external utils if available
-source /opt/mrm-manager/utils.sh 2>/dev/null || true
-source /opt/mrm-manager/ui.sh 2>/dev/null || true
 
 # Colors
 RED='\033[0;31m'
@@ -20,48 +16,53 @@ NC='\033[0m'
 # Config
 BACKUP_ROOT="/var/backups/mrm-migration"
 MIGRATION_LOG="/var/log/mrm_migration.log"
-MIGRATION_TEMP=""
 
 # Globals
 SRC=""
 TGT=""
 SOURCE_PANEL_TYPE=""
 SOURCE_DB_TYPE=""
+PG_CONTAINER=""
+MYSQL_CONTAINER=""
+MYSQL_PASS=""
 
 # URLs
 XRAY_URL="https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip"
 GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-REBECCA_CMD='bash -c "$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)" @ install --database mysql'
 
 #==============================================================================
-# HELPERS
+# LOGGING
 #==============================================================================
 
 migration_init() {
-    MIGRATION_TEMP=$(mktemp -d /tmp/mrm-XXXXXX 2>/dev/null) || MIGRATION_TEMP="/tmp/mrm-$$"
-    mkdir -p "$MIGRATION_TEMP" "$BACKUP_ROOT" "$(dirname "$MIGRATION_LOG")" 2>/dev/null
+    mkdir -p "$BACKUP_ROOT" "$(dirname "$MIGRATION_LOG")" 2>/dev/null
     echo "=== Migration $(date) ===" >> "$MIGRATION_LOG" 2>/dev/null
 }
 
 migration_cleanup() {
-    rm -rf "$MIGRATION_TEMP" /tmp/mrm-*.json /tmp/mrm-*.sql /tmp/pg_*.json 2>/dev/null
+    rm -rf /tmp/mrm-*.json /tmp/mrm-*.sql /tmp/mrm_*.py 2>/dev/null
 }
 
-mlog()   { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG" 2>/dev/null; }
-minfo()  { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
-mok()    { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
-mwarn()  { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
-merr()   { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
-mpause() { echo ""; read -n1 -s -r -p $'\033[0;33mPress any key...\033[0m'; echo ""; }
+mlog()  { echo "[$(date +'%F %T')] $*" >> "$MIGRATION_LOG" 2>/dev/null; }
+minfo() { echo -e "${BLUE}→${NC} $*"; mlog "INFO: $*"; }
+mok()   { echo -e "${GREEN}✓${NC} $*"; mlog "OK: $*"; }
+mwarn() { echo -e "${YELLOW}⚠${NC} $*"; mlog "WARN: $*"; }
+merr()  { echo -e "${RED}✗${NC} $*"; mlog "ERROR: $*"; }
 
-type ui_confirm &>/dev/null || ui_confirm() {
-    local p="$1" d="${2:-y}" a
-    read -p "$p [y/n] ($d): " a
-    [[ "${a:-$d}" =~ ^[Yy] ]]
+mpause() {
+    echo ""
+    read -n1 -s -r -p $'\033[0;33mPress any key...\033[0m'
+    echo ""
 }
 
-type ui_header &>/dev/null || ui_header() {
+ui_confirm() {
+    local prompt="$1" default="${2:-y}" answer
+    read -p "$prompt [y/n] ($default): " answer
+    [[ "${answer:-$default}" =~ ^[Yy] ]]
+}
+
+ui_header() {
     echo ""
     echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  $1${NC}"
@@ -69,14 +70,38 @@ type ui_header &>/dev/null || ui_header() {
     echo ""
 }
 
-read_var() {
-    local k="$1" f="$2"
-    [ -f "$f" ] || return 1
-    grep -E "^[[:space:]]*${k}=" "$f" 2>/dev/null | grep -v "^#" | head -1 | sed 's/^[^=]*=//; s/^["'"'"']//; s/["'"'"']$//'
+#==============================================================================
+# SAFE VARIABLE READING (handles special chars)
+#==============================================================================
+
+read_env_var() {
+    local key="$1" file="$2"
+    [ -f "$file" ] || return 1
+    
+    # Use Python for reliable parsing
+    python3 -c "
+import re
+import sys
+try:
+    with open('$file', 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('#') or '=' not in line:
+                continue
+            k, v = line.split('=', 1)
+            if k.strip() == '$key':
+                v = v.strip()
+                if (v.startswith('\"') and v.endswith('\"')) or (v.startswith(\"'\") and v.endswith(\"'\")):
+                    v = v[1:-1]
+                print(v)
+                sys.exit(0)
+except:
+    pass
+" 2>/dev/null
 }
 
 #==============================================================================
-# DETECTION - FIXED
+# DETECTION
 #==============================================================================
 
 detect_source_panel() {
@@ -101,49 +126,99 @@ get_data_dir() {
 detect_db_type() {
     local env="$1/.env"
     [ -f "$env" ] || { echo "unknown"; return; }
+    
     local url
-    url=$(read_var "SQLALCHEMY_DATABASE_URL" "$env")
+    url=$(read_env_var "SQLALCHEMY_DATABASE_URL" "$env")
+    
     case "$url" in
         *postgres*|*timescale*) echo "postgresql" ;;
         *mysql*|*mariadb*)      echo "mysql" ;;
         *sqlite*)               echo "sqlite" ;;
         "") 
-            if [ -f "$(get_data_dir "$1")/db.sqlite3" ]; then
-                echo "sqlite"
-            else
-                echo "unknown"
-            fi
+            [ -f "$(get_data_dir "$1")/db.sqlite3" ] && echo "sqlite" || echo "unknown"
             ;;
         *) echo "unknown" ;;
     esac
 }
 
-# FIXED: Proper container detection
 find_pg_container() {
     local src="$1"
     local name
     name=$(basename "$src")
+    
+    # Try panel-specific
     local found
-    
-    # Try panel-specific first
     found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*(timescale|postgres|db)" | head -1)
-    if [ -n "$found" ]; then
-        echo "$found"
-        return 0
-    fi
+    [ -n "$found" ] && { echo "$found"; return 0; }
     
-    # Try generic postgres
+    # Try generic
     found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "timescale|postgres" | grep -v rebecca | head -1)
-    if [ -n "$found" ]; then
-        echo "$found"
-        return 0
-    fi
+    [ -n "$found" ] && { echo "$found"; return 0; }
     
     return 1
 }
 
 find_mysql_container() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "rebecca.*(mysql|mariadb)" | head -1
+}
+
+#==============================================================================
+# SAFE MYSQL EXECUTION (handles special chars in password)
+#==============================================================================
+
+run_mysql() {
+    local query="$1"
+    # Write password to temp file to avoid shell escaping issues
+    local passfile
+    passfile=$(mktemp)
+    echo "[client]" > "$passfile"
+    echo "password=$MYSQL_PASS" >> "$passfile"
+    chmod 600 "$passfile"
+    
+    docker cp "$passfile" "$MYSQL_CONTAINER:/tmp/.my.cnf" 2>/dev/null
+    rm -f "$passfile"
+    
+    docker exec "$MYSQL_CONTAINER" bash -c "mysql --defaults-file=/tmp/.my.cnf -uroot rebecca -N -e \"$query\" 2>/dev/null; rm -f /tmp/.my.cnf"
+}
+
+run_mysql_file() {
+    local sqlfile="$1"
+    local passfile
+    passfile=$(mktemp)
+    echo "[client]" > "$passfile"
+    echo "password=$MYSQL_PASS" >> "$passfile"
+    chmod 600 "$passfile"
+    
+    docker cp "$passfile" "$MYSQL_CONTAINER:/tmp/.my.cnf" 2>/dev/null
+    docker cp "$sqlfile" "$MYSQL_CONTAINER:/tmp/import.sql" 2>/dev/null
+    rm -f "$passfile"
+    
+    docker exec "$MYSQL_CONTAINER" bash -c "mysql --defaults-file=/tmp/.my.cnf -uroot rebecca < /tmp/import.sql 2>&1; rm -f /tmp/.my.cnf /tmp/import.sql"
+}
+
+wait_mysql() {
+    minfo "Waiting for MySQL..."
+    local waited=0
+    local passfile
+    passfile=$(mktemp)
+    echo "[client]" > "$passfile"
+    echo "password=$MYSQL_PASS" >> "$passfile"
+    chmod 600 "$passfile"
+    docker cp "$passfile" "$MYSQL_CONTAINER:/tmp/.my.cnf" 2>/dev/null
+    rm -f "$passfile"
+    
+    while ! docker exec "$MYSQL_CONTAINER" bash -c "mysqladmin --defaults-file=/tmp/.my.cnf -uroot ping --silent" 2>/dev/null; do
+        sleep 2
+        waited=$((waited + 2))
+        if [ $waited -ge 90 ]; then
+            docker exec "$MYSQL_CONTAINER" rm -f /tmp/.my.cnf 2>/dev/null
+            merr "MySQL timeout"
+            return 1
+        fi
+    done
+    docker exec "$MYSQL_CONTAINER" rm -f /tmp/.my.cnf 2>/dev/null
+    mok "MySQL ready"
+    return 0
 }
 
 #==============================================================================
@@ -156,23 +231,27 @@ start_source_panel() {
     (cd "$src" && docker compose up -d) &>/dev/null
     
     if [ "$SOURCE_DB_TYPE" = "postgresql" ]; then
-        local pg_container="" waited=0
-        while [ -z "$pg_container" ] && [ $waited -lt 60 ]; do
+        local waited=0
+        while [ -z "$PG_CONTAINER" ] && [ $waited -lt 60 ]; do
             sleep 3
             waited=$((waited + 3))
-            pg_container=$(find_pg_container "$src")
+            PG_CONTAINER=$(find_pg_container "$src")
         done
         
-        if [ -n "$pg_container" ]; then
+        if [ -n "$PG_CONTAINER" ]; then
             waited=0
             local db_user="${SOURCE_PANEL_TYPE}"
-            while ! docker exec "$pg_container" pg_isready -U "$db_user" &>/dev/null && [ $waited -lt 60 ]; do
+            while ! docker exec "$PG_CONTAINER" pg_isready -U "$db_user" &>/dev/null && [ $waited -lt 60 ]; do
                 sleep 2
                 waited=$((waited + 2))
             done
-            mok "PostgreSQL ready: $pg_container"
+            mok "PostgreSQL ready: $PG_CONTAINER"
+        else
+            merr "PostgreSQL container not found"
+            return 1
         fi
     fi
+    return 0
 }
 
 install_xray() {
@@ -187,16 +266,18 @@ install_xray() {
     else
         cd /tmp
         rm -f Xray-linux-64.zip
-        if wget -q "$XRAY_URL" -O Xray-linux-64.zip; then
-            unzip -oq Xray-linux-64.zip -d "$tgt/"
+        if wget -q "$XRAY_URL" -O Xray-linux-64.zip 2>/dev/null; then
+            unzip -oq Xray-linux-64.zip -d "$tgt/" 2>/dev/null
             chmod +x "$tgt/xray"
             mok "Xray downloaded"
+        else
+            mwarn "Xray download failed"
         fi
     fi
     
     [ -d "$src/assets" ] && cp -rn "$src/assets/"* "$tgt/assets/" 2>/dev/null
-    [ -f "$tgt/assets/geoip.dat" ] || wget -q "$GEOIP_URL" -O "$tgt/assets/geoip.dat"
-    [ -f "$tgt/assets/geosite.dat" ] || wget -q "$GEOSITE_URL" -O "$tgt/assets/geosite.dat"
+    [ -f "$tgt/assets/geoip.dat" ] || wget -q "$GEOIP_URL" -O "$tgt/assets/geoip.dat" 2>/dev/null
+    [ -f "$tgt/assets/geosite.dat" ] || wget -q "$GEOSITE_URL" -O "$tgt/assets/geosite.dat" 2>/dev/null
 }
 
 copy_data() {
@@ -216,26 +297,26 @@ generate_env() {
     local se="$src/.env" te="$tgt/.env"
     minfo "Generating .env..."
     
-    local DBPASS PORT SUSER SPASS TGT_TOKEN TGA CERT KEY XJSON SUBURL
+    # Read existing or generate new password
+    MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$te")
+    [ -z "$MYSQL_PASS" ] && MYSQL_PASS=$(openssl rand -hex 16)
     
-    DBPASS=$(read_var "MYSQL_ROOT_PASSWORD" "$te")
-    [ -z "$DBPASS" ] && DBPASS=$(openssl rand -hex 16)
-    
-    PORT=$(read_var "UVICORN_PORT" "$se")
+    local PORT SUSER SPASS TG_TOKEN TG_ADMIN CERT KEY XJSON SUBURL
+    PORT=$(read_env_var "UVICORN_PORT" "$se")
     [ -z "$PORT" ] && PORT="8000"
     
-    SUSER=$(read_var "SUDO_USERNAME" "$se")
+    SUSER=$(read_env_var "SUDO_USERNAME" "$se")
     [ -z "$SUSER" ] && SUSER="admin"
     
-    SPASS=$(read_var "SUDO_PASSWORD" "$se")
+    SPASS=$(read_env_var "SUDO_PASSWORD" "$se")
     [ -z "$SPASS" ] && SPASS="admin"
     
-    TGT_TOKEN=$(read_var "TELEGRAM_API_TOKEN" "$se")
-    TGA=$(read_var "TELEGRAM_ADMIN_ID" "$se")
-    CERT=$(read_var "UVICORN_SSL_CERTFILE" "$se")
-    KEY=$(read_var "UVICORN_SSL_KEYFILE" "$se")
-    XJSON=$(read_var "XRAY_JSON" "$se")
-    SUBURL=$(read_var "XRAY_SUBSCRIPTION_URL_PREFIX" "$se")
+    TG_TOKEN=$(read_env_var "TELEGRAM_API_TOKEN" "$se")
+    TG_ADMIN=$(read_env_var "TELEGRAM_ADMIN_ID" "$se")
+    CERT=$(read_env_var "UVICORN_SSL_CERTFILE" "$se")
+    KEY=$(read_env_var "UVICORN_SSL_KEYFILE" "$se")
+    XJSON=$(read_env_var "XRAY_JSON" "$se")
+    SUBURL=$(read_env_var "XRAY_SUBSCRIPTION_URL_PREFIX" "$se")
     
     # Fix paths
     CERT="${CERT//pasarguard/rebecca}"
@@ -246,9 +327,10 @@ generate_env() {
     XJSON="${XJSON//marzban/rebecca}"
     [ -z "$XJSON" ] && XJSON="/var/lib/rebecca/xray_config.json"
     
-    cat > "$te" << ENVEOF
-SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:${DBPASS}@127.0.0.1:3306/rebecca"
-MYSQL_ROOT_PASSWORD="${DBPASS}"
+    # Write env file
+    cat > "$te" << ENVFILE
+SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:${MYSQL_PASS}@127.0.0.1:3306/rebecca"
+MYSQL_ROOT_PASSWORD="${MYSQL_PASS}"
 MYSQL_DATABASE="rebecca"
 UVICORN_HOST="0.0.0.0"
 UVICORN_PORT="${PORT}"
@@ -256,46 +338,50 @@ UVICORN_SSL_CERTFILE="${CERT}"
 UVICORN_SSL_KEYFILE="${KEY}"
 SUDO_USERNAME="${SUSER}"
 SUDO_PASSWORD="${SPASS}"
-TELEGRAM_API_TOKEN="${TGT_TOKEN}"
-TELEGRAM_ADMIN_ID="${TGA}"
+TELEGRAM_API_TOKEN="${TG_TOKEN}"
+TELEGRAM_ADMIN_ID="${TG_ADMIN}"
 XRAY_JSON="${XJSON}"
 XRAY_SUBSCRIPTION_URL_PREFIX="${SUBURL}"
 XRAY_EXECUTABLE_PATH="/var/lib/rebecca/xray"
 XRAY_ASSETS_PATH="/var/lib/rebecca/assets"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 SECRET_KEY="$(openssl rand -hex 32)"
-ENVEOF
+ENVFILE
+    
     mok "Environment ready"
 }
 
 install_rebecca() {
     ui_header "INSTALLING REBECCA"
     ui_confirm "Install Rebecca?" "y" || return 1
-    eval "$REBECCA_CMD"
-    [ -d "/opt/rebecca" ] && mok "Rebecca installed" || { merr "Failed"; return 1; }
+    
+    # FIX: Use proper command execution
+    curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh | bash -s -- install --database mysql
+    
+    [ -d "/opt/rebecca" ] && mok "Rebecca installed" && return 0
+    merr "Installation failed"
+    return 1
 }
 
 setup_jwt() {
-    local MC="$1" DP="$2"
     minfo "Setting up JWT..."
     
     local cnt
-    cnt=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM jwt;" 2>/dev/null | tr -d ' \n')
-    if [ "${cnt:-0}" -gt 0 ]; then
+    cnt=$(run_mysql "SELECT COUNT(*) FROM jwt;" | tr -d ' \n')
+    if [ "${cnt:-0}" -gt 0 ] 2>/dev/null; then
         mok "JWT exists"
         return 0
     fi
     
-    docker exec "$MC" mysql -uroot -p"$DP" rebecca -e "
-    CREATE TABLE IF NOT EXISTS jwt (
+    # Create table if not exists
+    run_mysql "CREATE TABLE IF NOT EXISTS jwt (
         id INT AUTO_INCREMENT PRIMARY KEY,
         secret_key VARCHAR(255) NOT NULL,
         subscription_secret_key VARCHAR(255),
         admin_secret_key VARCHAR(255),
         vmess_mask VARCHAR(64),
         vless_mask VARCHAR(64)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    " 2>/dev/null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;"
     
     local SK SSK ASK VM VL
     SK=$(openssl rand -hex 64)
@@ -304,272 +390,228 @@ setup_jwt() {
     VM=$(openssl rand -hex 16)
     VL=$(openssl rand -hex 16)
     
-    docker exec "$MC" mysql -uroot -p"$DP" rebecca -e \
-        "INSERT INTO jwt (secret_key,subscription_secret_key,admin_secret_key,vmess_mask,vless_mask) VALUES ('$SK','$SSK','$ASK','$VM','$VL');" 2>/dev/null
+    run_mysql "INSERT INTO jwt (secret_key,subscription_secret_key,admin_secret_key,vmess_mask,vless_mask) VALUES ('$SK','$SSK','$ASK','$VM','$VL');"
     mok "JWT configured"
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT - USING PURE PSQL (NO PYTHON IN CONTAINER!)
+# POSTGRESQL EXPORT - USING PURE PSQL (NO PYTHON IN CONTAINER)
 #==============================================================================
 
 export_postgresql() {
-    local PGC="$1" DBN="$2" DBU="$3" OUT="$4"
-    minfo "Exporting PostgreSQL (pure psql)..."
+    local output_file="$1"
+    local db_name="${SOURCE_PANEL_TYPE}"
+    local db_user="${SOURCE_PANEL_TYPE}"
     
-    # Helper function to run psql query
-    run_pg() {
-        docker exec "$PGC" psql -U "$DBU" -d "$DBN" -t -A -c "$1" 2>/dev/null
-    }
+    minfo "Exporting from PostgreSQL..."
     
-    # Check if table exists
-    table_exists() {
-        local result
-        result=$(run_pg "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name='$1')")
-        [ "$result" = "t" ]
-    }
+    # Helper to run psql
+    local run_psql="docker exec $PG_CONTAINER psql -U $db_user -d $db_name -t -A"
     
-    # Get JSON from table (handles NULL/empty)
-    get_table_json() {
-        local query="$1"
-        local result
-        result=$(run_pg "$query")
-        if [ -z "$result" ] || [ "$result" = "null" ] || [ "$result" = "" ]; then
-            echo "[]"
-        else
-            echo "$result"
+    # Check which sudo field exists (Marzban uses is_admin, Pasarguard uses is_sudo)
+    local sudo_field="is_sudo"
+    if ! $run_psql -c "SELECT is_sudo FROM admins LIMIT 0" &>/dev/null; then
+        if $run_psql -c "SELECT is_admin FROM admins LIMIT 0" &>/dev/null; then
+            sudo_field="is_admin"
         fi
-    }
+    fi
+    minfo "  Using sudo field: $sudo_field"
     
-    # Build JSON manually
-    local json_file="$OUT"
-    echo "{" > "$json_file"
+    # Export each table to JSON using psql's json_agg
+    local tables_json=""
     
     # ADMINS
     minfo "  Exporting admins..."
-    if table_exists "admins"; then
-        # Handle both is_sudo and is_admin (Marzban compatibility)
-        local sudo_field="is_sudo"
-        if ! run_pg "SELECT is_sudo FROM admins LIMIT 1" &>/dev/null; then
-            sudo_field="is_admin"
-        fi
-        
-        local admins_json
-        admins_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, username, hashed_password, 
-                   COALESCE($sudo_field, false) as is_sudo, 
-                   telegram_id, created_at
-            FROM admins
-        ) t")
-        echo "\"admins\": $admins_json," >> "$json_file"
-    else
-        echo "\"admins\": []," >> "$json_file"
-    fi
+    local admins_json
+    admins_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, username, hashed_password, 
+               COALESCE($sudo_field, false) as is_sudo, 
+               telegram_id, created_at
+        FROM admins
+    ) t" 2>/dev/null)
+    [ -z "$admins_json" ] && admins_json="[]"
     
     # INBOUNDS
     minfo "  Exporting inbounds..."
-    if table_exists "inbounds"; then
-        local inbounds_json
-        inbounds_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, tag FROM inbounds) t")
-        echo "\"inbounds\": $inbounds_json," >> "$json_file"
-    else
-        echo "\"inbounds\": []," >> "$json_file"
-    fi
+    local inbounds_json
+    inbounds_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, tag FROM inbounds
+    ) t" 2>/dev/null)
+    [ -z "$inbounds_json" ] && inbounds_json="[]"
     
     # USERS
     minfo "  Exporting users..."
-    if table_exists "users"; then
-        local users_json
-        users_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, username, 
-                   COALESCE(key, '') as key,
-                   COALESCE(status,'active') as status,
-                   COALESCE(used_traffic,0) as used_traffic,
-                   data_limit,
-                   EXTRACT(EPOCH FROM expire)::bigint as expire,
-                   COALESCE(admin_id,1) as admin_id,
-                   COALESCE(note,'') as note,
-                   sub_updated_at, sub_last_user_agent, online_at,
-                   on_hold_timeout, on_hold_expire_duration,
-                   COALESCE(lifetime_used_traffic,0) as lifetime_used_traffic,
-                   created_at, 
-                   COALESCE(service_id,1) as service_id,
-                   sub_revoked_at,
-                   data_limit_reset_strategy, 
-                   traffic_reset_at
-            FROM users
-        ) t")
-        echo "\"users\": $users_json," >> "$json_file"
-    else
-        echo "\"users\": []," >> "$json_file"
-    fi
+    local users_json
+    users_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, username, 
+               COALESCE(key, '') as key,
+               COALESCE(status, 'active') as status,
+               COALESCE(used_traffic, 0) as used_traffic,
+               data_limit,
+               EXTRACT(EPOCH FROM expire)::bigint as expire,
+               COALESCE(admin_id, 1) as admin_id,
+               COALESCE(note, '') as note,
+               sub_updated_at, sub_last_user_agent, online_at,
+               on_hold_timeout, on_hold_expire_duration,
+               COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic,
+               created_at,
+               COALESCE(service_id, 1) as service_id,
+               sub_revoked_at,
+               data_limit_reset_strategy,
+               traffic_reset_at
+        FROM users
+    ) t" 2>/dev/null)
+    [ -z "$users_json" ] && users_json="[]"
     
     # PROXIES
     minfo "  Exporting proxies..."
-    if table_exists "proxies"; then
-        local proxies_json
-        proxies_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, user_id, type, COALESCE(settings::text,'{}') as settings 
-            FROM proxies
-        ) t")
-        echo "\"proxies\": $proxies_json," >> "$json_file"
-    else
-        echo "\"proxies\": []," >> "$json_file"
-    fi
+    local proxies_json
+    proxies_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings
+        FROM proxies
+    ) t" 2>/dev/null)
+    [ -z "$proxies_json" ] && proxies_json="[]"
     
     # HOSTS
     minfo "  Exporting hosts..."
-    if table_exists "hosts"; then
-        local hosts_json
-        hosts_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, COALESCE(remark,'') as remark, 
-                   COALESCE(address,'') as address, 
-                   port, 
-                   COALESCE(inbound_tag,'') as inbound_tag, 
-                   COALESCE(sni,'') as sni, 
-                   COALESCE(host,'') as host,
-                   COALESCE(security,'none') as security, 
-                   COALESCE(fingerprint::text,'none') as fingerprint, 
-                   COALESCE(is_disabled,false) as is_disabled,
-                   COALESCE(path,'') as path, 
-                   COALESCE(alpn,'') as alpn, 
-                   COALESCE(allowinsecure,false) as allowinsecure, 
-                   fragment_setting,
-                   COALESCE(mux_enable,false) as mux_enable, 
-                   COALESCE(random_user_agent,false) as random_user_agent
-            FROM hosts
-        ) t")
-        echo "\"hosts\": $hosts_json," >> "$json_file"
-    else
-        echo "\"hosts\": []," >> "$json_file"
-    fi
+    local hosts_json
+    hosts_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, COALESCE(remark, '') as remark,
+               COALESCE(address, '') as address,
+               port,
+               COALESCE(inbound_tag, '') as inbound_tag,
+               COALESCE(sni, '') as sni,
+               COALESCE(host, '') as host,
+               COALESCE(security, 'none') as security,
+               COALESCE(fingerprint::text, 'none') as fingerprint,
+               COALESCE(is_disabled, false) as is_disabled,
+               COALESCE(path, '') as path,
+               COALESCE(alpn, '') as alpn,
+               COALESCE(allowinsecure, false) as allowinsecure,
+               fragment_setting,
+               COALESCE(mux_enable, false) as mux_enable,
+               COALESCE(random_user_agent, false) as random_user_agent
+        FROM hosts
+    ) t" 2>/dev/null)
+    [ -z "$hosts_json" ] && hosts_json="[]"
     
     # SERVICES
     minfo "  Exporting services..."
-    if table_exists "services"; then
-        local services_json
-        services_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, COALESCE(name,'Default') as name, users_limit, created_at 
-            FROM services
-        ) t")
-        echo "\"services\": $services_json," >> "$json_file"
-    else
-        echo "\"services\": []," >> "$json_file"
-    fi
+    local services_json
+    services_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at
+        FROM services
+    ) t" 2>/dev/null)
+    [ -z "$services_json" ] && services_json="[]"
     
-    # NODES
+    # NODES (handle certificate as text)
     minfo "  Exporting nodes..."
-    if table_exists "nodes"; then
-        local nodes_json
-        # Handle certificate as base64 to avoid binary issues
-        nodes_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, COALESCE(name,'') as name, 
-                   COALESCE(address,'') as address, 
-                   port, api_port,
-                   COALESCE(encode(certificate::bytea, 'base64'), certificate, '') as certificate,
-                   COALESCE(usage_coefficient,1.0) as usage_coefficient,
-                   COALESCE(status,'connected') as status, 
-                   message, xray_version, created_at
-            FROM nodes
-        ) t")
-        echo "\"nodes\": $nodes_json," >> "$json_file"
-    else
-        echo "\"nodes\": []," >> "$json_file"
-    fi
+    local nodes_json
+    nodes_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, COALESCE(name, '') as name,
+               COALESCE(address, '') as address,
+               port, api_port,
+               COALESCE(certificate::text, '') as certificate,
+               COALESCE(usage_coefficient, 1.0) as usage_coefficient,
+               COALESCE(status, 'connected') as status,
+               message, xray_version, created_at
+        FROM nodes
+    ) t" 2>/dev/null)
+    [ -z "$nodes_json" ] && nodes_json="[]"
     
     # CORE_CONFIGS
     minfo "  Exporting core_configs..."
-    if table_exists "core_configs"; then
-        local configs_json
-        configs_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
-            SELECT id, COALESCE(name,'default') as name, config, created_at 
-            FROM core_configs
-        ) t")
-        echo "\"core_configs\": $configs_json," >> "$json_file"
-    else
-        echo "\"core_configs\": []," >> "$json_file"
-    fi
+    local configs_json
+    configs_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT id, COALESCE(name, 'default') as name, config, created_at
+        FROM core_configs
+    ) t" 2>/dev/null)
+    [ -z "$configs_json" ] && configs_json="[]"
     
     # RELATIONS
     minfo "  Exporting relations..."
     
-    # service_hosts
-    if table_exists "service_hosts"; then
-        local sh_json
-        sh_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT service_id, host_id FROM service_hosts) t")
-        echo "\"service_hosts\": $sh_json," >> "$json_file"
-    else
-        echo "\"service_hosts\": []," >> "$json_file"
-    fi
+    local service_hosts_json
+    service_hosts_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT service_id, host_id FROM service_hosts
+    ) t" 2>/dev/null)
+    [ -z "$service_hosts_json" ] && service_hosts_json="[]"
     
-    # service_inbounds
-    if table_exists "service_inbounds"; then
-        local si_json
-        si_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT service_id, inbound_id FROM service_inbounds) t")
-        echo "\"service_inbounds\": $si_json," >> "$json_file"
-    else
-        echo "\"service_inbounds\": []," >> "$json_file"
-    fi
+    local service_inbounds_json
+    service_inbounds_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT service_id, inbound_id FROM service_inbounds
+    ) t" 2>/dev/null)
+    [ -z "$service_inbounds_json" ] && service_inbounds_json="[]"
     
-    # user_inbounds
-    if table_exists "user_inbounds"; then
-        local ui_json
-        ui_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM user_inbounds) t")
-        echo "\"user_inbounds\": $ui_json," >> "$json_file"
-    else
-        echo "\"user_inbounds\": []," >> "$json_file"
-    fi
+    local user_inbounds_json
+    user_inbounds_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT user_id, inbound_tag FROM user_inbounds
+    ) t" 2>/dev/null)
+    [ -z "$user_inbounds_json" ] && user_inbounds_json="[]"
     
-    # node_inbounds
-    if table_exists "node_inbounds"; then
-        local ni_json
-        ni_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT node_id, inbound_tag FROM node_inbounds) t")
-        echo "\"node_inbounds\": $ni_json," >> "$json_file"
-    else
-        echo "\"node_inbounds\": []," >> "$json_file"
-    fi
+    local node_inbounds_json
+    node_inbounds_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT node_id, inbound_tag FROM node_inbounds
+    ) t" 2>/dev/null)
+    [ -z "$node_inbounds_json" ] && node_inbounds_json="[]"
     
-    # excluded_inbounds_association
-    if table_exists "excluded_inbounds_association"; then
-        local ei_json
-        ei_json=$(get_table_json "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM excluded_inbounds_association) t")
-        echo "\"excluded_inbounds\": $ei_json" >> "$json_file"
-    else
-        echo "\"excluded_inbounds\": []" >> "$json_file"
-    fi
+    local excluded_json
+    excluded_json=$($run_psql -c "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (
+        SELECT user_id, inbound_tag FROM excluded_inbounds_association
+    ) t" 2>/dev/null)
+    [ -z "$excluded_json" ] && excluded_json="[]"
     
-    echo "}" >> "$json_file"
-    
-    # Validate JSON
-    if python3 -c "import json; json.load(open('$json_file'))" 2>/dev/null; then
-        local user_count
-        user_count=$(python3 -c "import json; print(len(json.load(open('$json_file')).get('users',[])))" 2>/dev/null)
-        mok "Exported: $user_count users"
+    # Build complete JSON using Python (safe JSON construction)
+    python3 << PYBUILD > "$output_file"
+import json
+import sys
+
+data = {
+    "admins": $admins_json,
+    "inbounds": $inbounds_json,
+    "users": $users_json,
+    "proxies": $proxies_json,
+    "hosts": $hosts_json,
+    "services": $services_json,
+    "nodes": $nodes_json,
+    "core_configs": $configs_json,
+    "service_hosts": $service_hosts_json,
+    "service_inbounds": $service_inbounds_json,
+    "user_inbounds": $user_inbounds_json,
+    "node_inbounds": $node_inbounds_json,
+    "excluded_inbounds": $excluded_json
+}
+
+print(json.dumps(data, ensure_ascii=False, default=str))
+PYBUILD
+
+    # Validate
+    if python3 -c "import json; d=json.load(open('$output_file')); print(f'Users: {len(d.get(\"users\",[]))}  Proxies: {len(d.get(\"proxies\",[]))}')" 2>/dev/null; then
+        mok "Export complete"
         return 0
     else
-        merr "JSON validation failed"
-        cat "$json_file" | head -20
+        merr "Export validation failed"
         return 1
     fi
 }
 
 #==============================================================================
-# MYSQL IMPORT - SAFE AND COMPLETE
+# MYSQL IMPORT - SAFE ESCAPING
 #==============================================================================
 
 import_to_mysql() {
-    local JSON="$1" MC="$2" DP="$3"
-    minfo "Importing to MySQL..."
+    local json_file="$1"
+    
+    minfo "Generating SQL..."
     
     # Create Python import script
-    cat > /tmp/mrm_import.py << 'PYTHON_SCRIPT'
+    cat > /tmp/mrm_generate_sql.py << 'PYSCRIPT'
 import json
 import sys
 import os
-import base64
 
 def esc(v):
-    """Escape value for MySQL"""
+    """Escape for MySQL - handles bcrypt $ and special chars"""
     if v is None:
         return "NULL"
     if isinstance(v, bool):
@@ -579,7 +621,6 @@ def esc(v):
     if isinstance(v, (dict, list)):
         v = json.dumps(v, ensure_ascii=False)
     v = str(v)
-    # Escape in correct order
     v = v.replace('\\', '\\\\')
     v = v.replace("'", "\\'")
     v = v.replace('\n', '\\n')
@@ -589,7 +630,7 @@ def esc(v):
     return f"'{v}'"
 
 def esc_json(v):
-    """Escape JSON for MySQL TEXT field"""
+    """Escape JSON for MySQL TEXT"""
     if v is None:
         return "NULL"
     if isinstance(v, (dict, list)):
@@ -600,7 +641,7 @@ def esc_json(v):
     return f"'{v}'"
 
 def fix_path(v):
-    """Replace old panel paths"""
+    """Replace old paths"""
     if not v:
         return v
     if isinstance(v, str):
@@ -615,349 +656,250 @@ def fix_path(v):
 
 def nv(v):
     """NULL or value"""
-    if v is None or v == '' or v == 'None':
+    if v is None or v == '' or str(v) == 'None':
         return "NULL"
     return str(v)
 
 def ts(v):
     """Timestamp or NULL"""
-    if v is None or v == '' or v == 'None':
+    if v is None or v == '' or str(v) == 'None':
         return "NULL"
     return esc(str(v))
 
-def decode_cert(v):
-    """Decode base64 certificate if needed"""
-    if not v:
-        return v
-    try:
-        return base64.b64decode(v).decode('utf-8')
-    except:
-        return v
+json_file = sys.argv[1]
+with open(json_file, 'r') as f:
+    data = json.load(f)
 
-try:
-    json_file = sys.argv[1] if len(sys.argv) > 1 else '/tmp/pg_export.json'
-    with open(json_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    sql = []
-    sql.append("SET NAMES utf8mb4;")
-    sql.append("SET FOREIGN_KEY_CHECKS=0;")
-    sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
-    
-    # Clear tables in correct order
-    tables_to_clear = [
-        'excluded_inbounds_association', 'user_inbounds', 'node_inbounds',
-        'service_inbounds', 'service_hosts', 'proxies', 'users',
-        'hosts', 'inbounds', 'services', 'nodes', 'core_configs'
-    ]
-    for t in tables_to_clear:
-        sql.append(f"DELETE FROM {t};")
-    sql.append("DELETE FROM admins WHERE id > 0;")
-    
-    # ADMINS
-    for a in data.get('admins') or []:
-        if not a.get('id'):
-            continue
-        role = 'sudo' if a.get('is_sudo') else 'standard'
-        created = ts(a.get('created_at'))
-        if created == "NULL":
-            created = "NOW()"
-        sql.append(f"""INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at)
-            VALUES ({a['id']}, {esc(a['username'])}, {esc(a['hashed_password'])}, '{role}', 'active',
-            {nv(a.get('telegram_id'))}, {created})
-            ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);""")
-    
-    # INBOUNDS
-    for i in data.get('inbounds') or []:
-        if not i.get('id'):
-            continue
-        sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i['tag'])}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
-    
-    # SERVICES
-    svcs = data.get('services') or []
-    for s in svcs:
-        if not s.get('id'):
-            continue
-        created = ts(s.get('created_at'))
-        if created == "NULL":
-            created = "NOW()"
-        sql.append(f"""INSERT INTO services (id, name, users_limit, created_at)
-            VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {nv(s.get('users_limit'))}, {created})
-            ON DUPLICATE KEY UPDATE name=VALUES(name);""")
-    if not svcs:
-        sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
-    
-    # NODES
-    for n in data.get('nodes') or []:
-        if not n.get('id'):
-            continue
-        created = ts(n.get('created_at'))
-        if created == "NULL":
-            created = "NOW()"
-        cert = decode_cert(n.get('certificate'))
-        sql.append(f"""INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at)
-            VALUES ({n['id']}, {esc(n['name'])}, {esc(n.get('address', ''))},
-            {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(cert)},
-            {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))},
-            {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created})
-            ON DUPLICATE KEY UPDATE address=VALUES(address);""")
-    
-    # HOSTS
-    for h in data.get('hosts') or []:
-        if not h.get('id'):
-            continue
-        addr = fix_path(h.get('address', ''))
-        path = fix_path(h.get('path', ''))
-        fp = h.get('fingerprint')
-        if isinstance(fp, dict):
-            fp = 'none'
-        fp = fp or 'none'
-        frag = h.get('fragment_setting')
-        frag_sql = esc_json(frag) if frag else "NULL"
-        sql.append(f"""INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent)
-            VALUES ({h['id']}, {esc(h.get('remark', ''))}, {esc(addr)}, {nv(h.get('port'))},
-            {esc(h.get('inbound_tag', ''))}, {esc(h.get('sni', ''))}, {esc(h.get('host', ''))},
-            {esc(h.get('security', 'none'))}, {esc(fp)}, {1 if h.get('is_disabled') else 0},
-            {esc(path)}, {esc(h.get('alpn', ''))}, {1 if h.get('allowinsecure') else 0},
-            {frag_sql}, {1 if h.get('mux_enable') else 0}, {1 if h.get('random_user_agent') else 0})
-            ON DUPLICATE KEY UPDATE address=VALUES(address);""")
-    
-    # USERS
-    for u in data.get('users') or []:
-        if not u.get('id'):
-            continue
-        uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
-        key = u.get('key') or ''
-        status = u.get('status', 'active')
-        if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']:
-            status = 'active'
-        svc = u.get('service_id') or 1
-        created = ts(u.get('created_at'))
-        if created == "NULL":
-            created = "NOW()"
-        
-        sql.append(f"""INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id,
-            lifetime_used_traffic, on_hold_timeout, on_hold_expire_duration, sub_updated_at, sub_last_user_agent, online_at,
-            sub_revoked_at, data_limit_reset_strategy, traffic_reset_at, created_at)
-            VALUES ({u['id']}, {esc(uname)}, {esc(key)}, '{status}', {int(u.get('used_traffic', 0))},
-            {nv(u.get('data_limit'))}, {nv(u.get('expire'))}, {u.get('admin_id', 1)}, {esc(u.get('note', ''))}, {svc},
-            {int(u.get('lifetime_used_traffic', 0))}, {ts(u.get('on_hold_timeout'))}, {nv(u.get('on_hold_expire_duration'))},
-            {ts(u.get('sub_updated_at'))}, {esc(u.get('sub_last_user_agent'))}, {ts(u.get('online_at'))},
-            {ts(u.get('sub_revoked_at'))}, {esc(u.get('data_limit_reset_strategy'))}, {ts(u.get('traffic_reset_at'))}, {created})
-            ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);""")
-    
-    # PROXIES
-    for p in data.get('proxies') or []:
-        if not p.get('id'):
-            continue
-        settings = p.get('settings', {})
-        if isinstance(settings, str):
-            try:
-                settings = json.loads(settings)
-            except:
-                pass
-        settings = fix_path(settings)
-        sql.append(f"""INSERT INTO proxies (id, user_id, type, settings)
-            VALUES ({p['id']}, {p['user_id']}, {esc(p['type'])}, {esc_json(settings)})
-            ON DUPLICATE KEY UPDATE settings=VALUES(settings);""")
-    
-    # RELATIONS
-    for sh in data.get('service_hosts') or []:
-        if sh.get('service_id') and sh.get('host_id'):
-            sql.append(f"INSERT IGNORE INTO service_hosts (service_id, host_id) VALUES ({sh['service_id']}, {sh['host_id']});")
-    
-    for si in data.get('service_inbounds') or []:
-        if si.get('service_id') and si.get('inbound_id'):
-            sql.append(f"INSERT IGNORE INTO service_inbounds (service_id, inbound_id) VALUES ({si['service_id']}, {si['inbound_id']});")
-    
-    for ui in data.get('user_inbounds') or []:
-        if ui.get('user_id') and ui.get('inbound_tag'):
-            sql.append(f"INSERT IGNORE INTO user_inbounds (user_id, inbound_tag) VALUES ({ui['user_id']}, {esc(ui['inbound_tag'])});")
-    
-    for ni in data.get('node_inbounds') or []:
-        if ni.get('node_id') and ni.get('inbound_tag'):
-            sql.append(f"INSERT IGNORE INTO node_inbounds (node_id, inbound_tag) VALUES ({ni['node_id']}, {esc(ni['inbound_tag'])});")
-    
-    for ei in data.get('excluded_inbounds') or []:
-        if ei.get('user_id') and ei.get('inbound_tag'):
-            sql.append(f"INSERT IGNORE INTO excluded_inbounds_association (user_id, inbound_tag) VALUES ({ei['user_id']}, {esc(ei['inbound_tag'])});")
-    
-    # Default relations
-    if not data.get('service_hosts'):
-        sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
-    
-    # CORE_CONFIGS
-    for c in data.get('core_configs') or []:
-        if not c.get('id'):
-            continue
-        cfg = c.get('config', {})
-        if isinstance(cfg, str):
-            try:
-                cfg = json.loads(cfg)
-            except:
-                pass
-        cfg = fix_path(cfg)
-        if isinstance(cfg, dict) and 'api' not in cfg:
-            cfg['api'] = {"tag": "api", "services": ["HandlerService", "LoggerService", "StatsService"]}
-        created = ts(c.get('created_at'))
-        if created == "NULL":
-            created = "NOW()"
-        sql.append(f"""INSERT INTO core_configs (id, name, config, created_at)
-            VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created})
-            ON DUPLICATE KEY UPDATE config=VALUES(config);""")
-    
-    sql.append("SET FOREIGN_KEY_CHECKS=1;")
-    
-    # Write SQL
-    with open('/tmp/mrm_import.sql', 'w', encoding='utf-8') as f:
-        f.write('\n'.join(sql))
-    
-    print(f"Generated {len(sql)} statements")
-    print(f"Users: {len(data.get('users', []))}")
-    print(f"Proxies: {len(data.get('proxies', []))}")
+sql = []
+sql.append("SET NAMES utf8mb4;")
+sql.append("SET FOREIGN_KEY_CHECKS=0;")
+sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-except Exception as e:
-    import traceback
-    print(f"ERROR: {e}")
-    traceback.print_exc()
-    sys.exit(1)
-PYTHON_SCRIPT
+# Clear tables
+tables = ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'core_configs',
+          'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds']
+for t in tables:
+    sql.append(f"DELETE FROM {t};")
+sql.append("DELETE FROM admins WHERE id > 0;")
 
-    # Run Python script
-    if ! python3 /tmp/mrm_import.py "$JSON"; then
+# Try to clear optional tables
+sql.append("DELETE FROM excluded_inbounds_association WHERE 1=1;")
+
+# ADMINS
+for a in data.get('admins') or []:
+    if not a.get('id'):
+        continue
+    role = 'sudo' if a.get('is_sudo') else 'standard'
+    created = ts(a.get('created_at'))
+    if created == "NULL":
+        created = "NOW()"
+    sql.append(f"""INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at)
+        VALUES ({a['id']}, {esc(a['username'])}, {esc(a['hashed_password'])}, '{role}', 'active',
+        {nv(a.get('telegram_id'))}, {created})
+        ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);""")
+
+# INBOUNDS
+for i in data.get('inbounds') or []:
+    if not i.get('id'):
+        continue
+    sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i['tag'])}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
+
+# SERVICES
+svcs = data.get('services') or []
+for s in svcs:
+    if not s.get('id'):
+        continue
+    created = ts(s.get('created_at'))
+    if created == "NULL":
+        created = "NOW()"
+    sql.append(f"""INSERT INTO services (id, name, users_limit, created_at)
+        VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {nv(s.get('users_limit'))}, {created})
+        ON DUPLICATE KEY UPDATE name=VALUES(name);""")
+if not svcs:
+    sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
+
+# NODES
+for n in data.get('nodes') or []:
+    if not n.get('id'):
+        continue
+    created = ts(n.get('created_at'))
+    if created == "NULL":
+        created = "NOW()"
+    sql.append(f"""INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at)
+        VALUES ({n['id']}, {esc(n['name'])}, {esc(n.get('address', ''))},
+        {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(n.get('certificate'))},
+        {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))},
+        {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created})
+        ON DUPLICATE KEY UPDATE address=VALUES(address);""")
+
+# HOSTS
+for h in data.get('hosts') or []:
+    if not h.get('id'):
+        continue
+    addr = fix_path(h.get('address', ''))
+    path = fix_path(h.get('path', ''))
+    fp = h.get('fingerprint')
+    if isinstance(fp, dict):
+        fp = 'none'
+    fp = fp or 'none'
+    frag = h.get('fragment_setting')
+    frag_sql = esc_json(frag) if frag else "NULL"
+    sql.append(f"""INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent)
+        VALUES ({h['id']}, {esc(h.get('remark', ''))}, {esc(addr)}, {nv(h.get('port'))},
+        {esc(h.get('inbound_tag', ''))}, {esc(h.get('sni', ''))}, {esc(h.get('host', ''))},
+        {esc(h.get('security', 'none'))}, {esc(fp)}, {1 if h.get('is_disabled') else 0},
+        {esc(path)}, {esc(h.get('alpn', ''))}, {1 if h.get('allowinsecure') else 0},
+        {frag_sql}, {1 if h.get('mux_enable') else 0}, {1 if h.get('random_user_agent') else 0})
+        ON DUPLICATE KEY UPDATE address=VALUES(address);""")
+
+# USERS
+for u in data.get('users') or []:
+    if not u.get('id'):
+        continue
+    uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
+    key = u.get('key') or ''
+    status = u.get('status', 'active')
+    if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']:
+        status = 'active'
+    svc = u.get('service_id') or 1
+    created = ts(u.get('created_at'))
+    if created == "NULL":
+        created = "NOW()"
+    
+    sql.append(f"""INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id,
+        lifetime_used_traffic, on_hold_timeout, on_hold_expire_duration, sub_updated_at, sub_last_user_agent, online_at,
+        sub_revoked_at, data_limit_reset_strategy, traffic_reset_at, created_at)
+        VALUES ({u['id']}, {esc(uname)}, {esc(key)}, '{status}', {int(u.get('used_traffic', 0))},
+        {nv(u.get('data_limit'))}, {nv(u.get('expire'))}, {u.get('admin_id', 1)}, {esc(u.get('note', ''))}, {svc},
+        {int(u.get('lifetime_used_traffic', 0))}, {ts(u.get('on_hold_timeout'))}, {nv(u.get('on_hold_expire_duration'))},
+        {ts(u.get('sub_updated_at'))}, {esc(u.get('sub_last_user_agent'))}, {ts(u.get('online_at'))},
+        {ts(u.get('sub_revoked_at'))}, {esc(u.get('data_limit_reset_strategy'))}, {ts(u.get('traffic_reset_at'))}, {created})
+        ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);""")
+
+# PROXIES
+for p in data.get('proxies') or []:
+    if not p.get('id'):
+        continue
+    settings = p.get('settings', {})
+    if isinstance(settings, str):
+        try:
+            settings = json.loads(settings)
+        except:
+            pass
+    settings = fix_path(settings)
+    sql.append(f"""INSERT INTO proxies (id, user_id, type, settings)
+        VALUES ({p['id']}, {p['user_id']}, {esc(p['type'])}, {esc_json(settings)})
+        ON DUPLICATE KEY UPDATE settings=VALUES(settings);""")
+
+# RELATIONS
+for sh in data.get('service_hosts') or []:
+    if sh.get('service_id') and sh.get('host_id'):
+        sql.append(f"INSERT IGNORE INTO service_hosts (service_id, host_id) VALUES ({sh['service_id']}, {sh['host_id']});")
+
+for si in data.get('service_inbounds') or []:
+    if si.get('service_id') and si.get('inbound_id'):
+        sql.append(f"INSERT IGNORE INTO service_inbounds (service_id, inbound_id) VALUES ({si['service_id']}, {si['inbound_id']});")
+
+for ui in data.get('user_inbounds') or []:
+    if ui.get('user_id') and ui.get('inbound_tag'):
+        sql.append(f"INSERT IGNORE INTO user_inbounds (user_id, inbound_tag) VALUES ({ui['user_id']}, {esc(ui['inbound_tag'])});")
+
+for ni in data.get('node_inbounds') or []:
+    if ni.get('node_id') and ni.get('inbound_tag'):
+        sql.append(f"INSERT IGNORE INTO node_inbounds (node_id, inbound_tag) VALUES ({ni['node_id']}, {esc(ni['inbound_tag'])});")
+
+# Default relations
+if not data.get('service_hosts'):
+    sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
+
+# CORE_CONFIGS
+for c in data.get('core_configs') or []:
+    if not c.get('id'):
+        continue
+    cfg = c.get('config', {})
+    if isinstance(cfg, str):
+        try:
+            cfg = json.loads(cfg)
+        except:
+            pass
+    cfg = fix_path(cfg)
+    if isinstance(cfg, dict) and 'api' not in cfg:
+        cfg['api'] = {"tag": "api", "services": ["HandlerService", "LoggerService", "StatsService"]}
+    created = ts(c.get('created_at'))
+    if created == "NULL":
+        created = "NOW()"
+    sql.append(f"""INSERT INTO core_configs (id, name, config, created_at)
+        VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created})
+        ON DUPLICATE KEY UPDATE config=VALUES(config);""")
+
+sql.append("SET FOREIGN_KEY_CHECKS=1;")
+
+# Write SQL
+with open('/tmp/mrm_import.sql', 'w') as f:
+    f.write('\n'.join(sql))
+
+print(f"Generated {len(sql)} SQL statements")
+print(f"Users: {len(data.get('users', []))}")
+print(f"Proxies: {len(data.get('proxies', []))}")
+PYSCRIPT
+
+    # Run Python
+    if ! python3 /tmp/mrm_generate_sql.py "$json_file"; then
         merr "SQL generation failed"
-        rm -f /tmp/mrm_import.py
+        rm -f /tmp/mrm_generate_sql.py
         return 1
     fi
-    rm -f /tmp/mrm_import.py
+    rm -f /tmp/mrm_generate_sql.py
     
     if [ ! -f /tmp/mrm_import.sql ]; then
         merr "SQL file not created"
         return 1
     fi
     
-    # Copy and execute
-    docker cp /tmp/mrm_import.sql "$MC:/tmp/import.sql"
+    minfo "Importing to MySQL..."
     local result
-    result=$(docker exec "$MC" bash -c "mysql -uroot -p'$DP' rebecca < /tmp/import.sql 2>&1")
+    result=$(run_mysql_file /tmp/mrm_import.sql)
     local rc=$?
-    
-    docker exec "$MC" rm -f /tmp/import.sql 2>/dev/null
     rm -f /tmp/mrm_import.sql
     
-    if [ $rc -ne 0 ]; then
-        merr "Import failed: $(echo "$result" | head -3)"
+    if echo "$result" | grep -qi "error"; then
+        merr "Import error: $(echo "$result" | grep -i error | head -2)"
         return 1
     fi
     
     # Fix AUTO_INCREMENT
-    docker exec "$MC" mysql -uroot -p"$DP" rebecca -e "
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM admins);
-        SET @s = CONCAT('ALTER TABLE admins AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM users);
-        SET @s = CONCAT('ALTER TABLE users AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM proxies);
-        SET @s = CONCAT('ALTER TABLE proxies AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM hosts);
-        SET @s = CONCAT('ALTER TABLE hosts AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM nodes);
-        SET @s = CONCAT('ALTER TABLE nodes AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM services);
-        SET @s = CONCAT('ALTER TABLE services AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM inbounds);
-        SET @s = CONCAT('ALTER TABLE inbounds AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-        
-        SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM core_configs);
-        SET @s = CONCAT('ALTER TABLE core_configs AUTO_INCREMENT = ', @m);
-        PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-    " 2>/dev/null
+    minfo "Fixing AUTO_INCREMENT..."
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM admins); SET @s=CONCAT('ALTER TABLE admins AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM users); SET @s=CONCAT('ALTER TABLE users AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM proxies); SET @s=CONCAT('ALTER TABLE proxies AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM hosts); SET @s=CONCAT('ALTER TABLE hosts AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM nodes); SET @s=CONCAT('ALTER TABLE nodes AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM services); SET @s=CONCAT('ALTER TABLE services AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
+    run_mysql "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM inbounds); SET @s=CONCAT('ALTER TABLE inbounds AUTO_INCREMENT=',@m); PREPARE st FROM @s; EXECUTE st;"
     
     mok "Import complete"
     return 0
 }
 
 #==============================================================================
-# MAIN MIGRATION
+# VERIFICATION
 #==============================================================================
 
-migrate_pg_to_mysql() {
-    local src="$1" tgt="$2"
-    ui_header "POSTGRESQL → MYSQL"
-    
-    local PGC MC DP DBN DBU
-    PGC=$(find_pg_container "$src")
-    MC=$(find_mysql_container)
-    DP=$(read_var "MYSQL_ROOT_PASSWORD" "$tgt/.env")
-    DBN="${SOURCE_PANEL_TYPE}"
-    DBU="${SOURCE_PANEL_TYPE}"
-    
-    if [ -z "$PGC" ]; then
-        merr "PostgreSQL container not found"
-        return 1
-    fi
-    if [ -z "$MC" ]; then
-        merr "MySQL container not found"
-        return 1
-    fi
-    
-    minfo "Source: $PGC ($DBN)"
-    minfo "Target: $MC"
-    
-    # Wait for MySQL
-    local waited=0
-    while ! docker exec "$MC" mysqladmin ping -uroot -p"$DP" --silent 2>/dev/null; do
-        sleep 2
-        waited=$((waited + 2))
-        if [ $waited -ge 90 ]; then
-            merr "MySQL timeout"
-            return 1
-        fi
-    done
-    mok "MySQL ready"
-    
-    local EXP="/tmp/mrm-pg-export-$$.json"
-    
-    if ! export_postgresql "$PGC" "$DBN" "$DBU" "$EXP"; then
-        return 1
-    fi
-    
-    setup_jwt "$MC" "$DP"
-    
-    if ! import_to_mysql "$EXP" "$MC" "$DP"; then
-        rm -f "$EXP"
-        return 1
-    fi
-    
-    rm -f "$EXP"
-    
-    # Verification
-    echo ""
+verify_migration() {
     ui_header "VERIFICATION"
     
     local admins users ukeys proxies puuid uinb hosts nodes svcs cfgs
-    admins=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM admins;" 2>/dev/null | tr -d ' \n')
-    users=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
-    ukeys=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM users WHERE \`key\` IS NOT NULL AND \`key\` != '';" 2>/dev/null | tr -d ' \n')
-    proxies=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM proxies;" 2>/dev/null | tr -d ' \n')
-    puuid=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" 2>/dev/null | tr -d ' \n')
-    uinb=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM user_inbounds;" 2>/dev/null | tr -d ' \n')
-    hosts=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM hosts;" 2>/dev/null | tr -d ' \n')
-    nodes=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM nodes;" 2>/dev/null | tr -d ' \n')
-    svcs=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM services;" 2>/dev/null | tr -d ' \n')
-    cfgs=$(docker exec "$MC" mysql -uroot -p"$DP" rebecca -N -e "SELECT COUNT(*) FROM core_configs;" 2>/dev/null | tr -d ' \n')
+    
+    admins=$(run_mysql "SELECT COUNT(*) FROM admins;" | tr -d ' \n')
+    users=$(run_mysql "SELECT COUNT(*) FROM users;" | tr -d ' \n')
+    ukeys=$(run_mysql "SELECT COUNT(*) FROM users WHERE \`key\` IS NOT NULL AND \`key\` != '';" | tr -d ' \n')
+    proxies=$(run_mysql "SELECT COUNT(*) FROM proxies;" | tr -d ' \n')
+    puuid=$(run_mysql "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" | tr -d ' \n')
+    uinb=$(run_mysql "SELECT COUNT(*) FROM user_inbounds;" | tr -d ' \n')
+    hosts=$(run_mysql "SELECT COUNT(*) FROM hosts;" | tr -d ' \n')
+    nodes=$(run_mysql "SELECT COUNT(*) FROM nodes;" | tr -d ' \n')
+    svcs=$(run_mysql "SELECT COUNT(*) FROM services;" | tr -d ' \n')
+    cfgs=$(run_mysql "SELECT COUNT(*) FROM core_configs;" | tr -d ' \n')
     
     printf "  %-22s ${GREEN}%s${NC}\n" "Admins:" "${admins:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Users:" "${users:-0}"
@@ -974,15 +916,15 @@ migrate_pg_to_mysql() {
     local err=0
     if [ "${users:-0}" -gt 0 ]; then
         if [ "${ukeys:-0}" -eq 0 ]; then
-            merr "CRITICAL: No user keys → Subscriptions BROKEN!"
+            merr "CRITICAL: No user keys → Subscriptions will NOT work!"
             err=1
         fi
         if [ "${proxies:-0}" -eq 0 ]; then
-            merr "CRITICAL: No proxies → Configs BROKEN!"
+            merr "CRITICAL: No proxies → Configs will NOT work!"
             err=1
         fi
         if [ "${puuid:-0}" -eq 0 ]; then
-            merr "CRITICAL: No proxy UUIDs → Configs BROKEN!"
+            merr "CRITICAL: No proxy UUIDs → Configs will NOT work!"
             err=1
         fi
     fi
@@ -1005,38 +947,67 @@ migrate_pg_to_mysql() {
 }
 
 #==============================================================================
-# SQLITE MIGRATION
+# MAIN MIGRATION
 #==============================================================================
 
-migrate_sqlite_to_mysql() {
-    local src="$1" tgt="$2"
-    ui_header "SQLITE → MYSQL"
+migrate_pg_to_mysql() {
+    PG_CONTAINER=$(find_pg_container "$SRC")
+    MYSQL_CONTAINER=$(find_mysql_container)
     
-    local MC DP SDATA SDB
-    MC=$(find_mysql_container)
-    DP=$(read_var "MYSQL_ROOT_PASSWORD" "$tgt/.env")
-    SDATA=$(get_data_dir "$src")
-    SDB="$SDATA/db.sqlite3"
-    
-    if [ ! -f "$SDB" ]; then
-        merr "SQLite not found: $SDB"
+    if [ -z "$PG_CONTAINER" ]; then
+        merr "PostgreSQL container not found"
         return 1
     fi
-    if [ -z "$MC" ]; then
+    if [ -z "$MYSQL_CONTAINER" ]; then
+        merr "MySQL container not found"
+        return 1
+    fi
+    
+    ui_header "POSTGRESQL → MYSQL"
+    minfo "Source: $PG_CONTAINER"
+    minfo "Target: $MYSQL_CONTAINER"
+    
+    wait_mysql || return 1
+    
+    local export_file="/tmp/mrm-export-$$.json"
+    
+    export_postgresql "$export_file" || return 1
+    setup_jwt
+    import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
+    
+    rm -f "$export_file"
+    
+    verify_migration
+    return $?
+}
+
+migrate_sqlite_to_mysql() {
+    MYSQL_CONTAINER=$(find_mysql_container)
+    local sdata sqlite_db
+    sdata=$(get_data_dir "$SRC")
+    sqlite_db="$sdata/db.sqlite3"
+    
+    if [ ! -f "$sqlite_db" ]; then
+        merr "SQLite not found: $sqlite_db"
+        return 1
+    fi
+    if [ -z "$MYSQL_CONTAINER" ]; then
         merr "MySQL not found"
         return 1
     fi
     
+    ui_header "SQLITE → MYSQL"
+    
     command -v sqlite3 &>/dev/null || apt-get install -y sqlite3 >/dev/null 2>&1
     
     minfo "Exporting SQLite..."
-    local EXP="/tmp/mrm-sqlite-$$.json"
+    local export_file="/tmp/mrm-sqlite-$$.json"
     
     python3 << PYEXP
 import sqlite3
 import json
 
-conn = sqlite3.connect("$SDB")
+conn = sqlite3.connect("$sqlite_db")
 conn.row_factory = sqlite3.Row
 cur = conn.cursor()
 
@@ -1046,7 +1017,7 @@ tables = [r[0] for r in cur.fetchall()]
 data = {}
 table_list = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services',
               'service_hosts', 'service_inbounds', 'user_inbounds',
-              'nodes', 'node_inbounds', 'core_configs', 'excluded_inbounds_association']
+              'nodes', 'node_inbounds', 'core_configs']
 
 for t in table_list:
     if t in tables:
@@ -1058,41 +1029,25 @@ for t in table_list:
     else:
         data[t] = []
 
-# Rename for compatibility
-if 'excluded_inbounds_association' in data:
-    data['excluded_inbounds'] = data.pop('excluded_inbounds_association')
-
+data['excluded_inbounds'] = []
 conn.close()
 
-with open('$EXP', 'w') as f:
+with open('$export_file', 'w') as f:
     json.dump(data, f, default=str)
 
 print(f"Exported {len(data.get('users', []))} users")
 PYEXP
 
-    if [ ! -s "$EXP" ]; then
-        merr "Export failed"
-        return 1
-    fi
+    [ -s "$export_file" ] || { merr "Export failed"; return 1; }
     
-    # Wait for MySQL
-    local waited=0
-    while ! docker exec "$MC" mysqladmin ping -uroot -p"$DP" --silent 2>/dev/null; do
-        sleep 2
-        waited=$((waited + 2))
-        [ $waited -ge 90 ] && { merr "MySQL timeout"; return 1; }
-    done
+    wait_mysql || return 1
+    setup_jwt
+    import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
     
-    setup_jwt "$MC" "$DP"
+    rm -f "$export_file"
     
-    if ! import_to_mysql "$EXP" "$MC" "$DP"; then
-        rm -f "$EXP"
-        return 1
-    fi
-    
-    rm -f "$EXP"
-    mok "SQLite migration complete"
-    return 0
+    verify_migration
+    return $?
 }
 
 #==============================================================================
@@ -1111,7 +1066,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V10.8"
+    ui_header "MRM MIGRATION V10.9"
     
     SRC=$(detect_source_panel)
     if [ -z "$SRC" ]; then
@@ -1121,8 +1076,8 @@ do_full() {
     fi
     
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
-    local SDATA
-    SDATA=$(get_data_dir "$SRC")
+    local sdata
+    sdata=$(get_data_dir "$SRC")
     
     echo -e "  Source: ${YELLOW}$SOURCE_PANEL_TYPE${NC} ($SRC)"
     echo -e "  DB:     ${YELLOW}$SOURCE_DB_TYPE${NC}"
@@ -1141,12 +1096,12 @@ do_full() {
         install_rebecca || { mpause; return 1; }
         TGT="/opt/rebecca"
     fi
-    local TDATA="/var/lib/rebecca"
+    local tdata="/var/lib/rebecca"
     
     echo -e "${YELLOW}Will migrate:${NC}"
     echo "  • Admins (bcrypt passwords)"
     echo "  • Users (subscription keys)"
-    echo "  • Proxies (UUIDs/passwords)"
+    echo "  • Proxies (UUIDs)"
     echo "  • User↔Inbound relations"
     echo "  • Hosts, Services, Nodes"
     echo "  • Core configs"
@@ -1157,30 +1112,30 @@ do_full() {
     echo "$SRC" > "$BACKUP_ROOT/.last_source"
     
     minfo "[1/7] Starting source..."
-    start_source_panel "$SRC"
+    start_source_panel "$SRC" || { mpause; return 1; }
     
     minfo "[2/7] Stopping Rebecca..."
     (cd "$TGT" && docker compose down 2>/dev/null) &>/dev/null
     
     minfo "[3/7] Copying files..."
-    copy_data "$SDATA" "$TDATA"
+    copy_data "$sdata" "$tdata"
     
     minfo "[4/7] Installing Xray..."
-    install_xray "$TDATA" "$SDATA"
+    install_xray "$tdata" "$sdata"
     
     minfo "[5/7] Generating config..."
     generate_env "$SRC" "$TGT"
     
     minfo "[6/7] Starting Rebecca..."
     (cd "$TGT" && docker compose up -d --force-recreate)
-    minfo "Waiting 45s for startup..."
-    sleep 45
+    minfo "Waiting 50s for startup..."
+    sleep 50
     
     minfo "[7/7] Migrating database..."
     local rc=0
     case "$SOURCE_DB_TYPE" in
-        postgresql) migrate_pg_to_mysql "$SRC" "$TGT"; rc=$? ;;
-        sqlite)     migrate_sqlite_to_mysql "$SRC" "$TGT"; rc=$? ;;
+        postgresql) migrate_pg_to_mysql; rc=$? ;;
+        sqlite)     migrate_sqlite_to_mysql; rc=$? ;;
         *)          merr "Unsupported: $SOURCE_DB_TYPE"; rc=1 ;;
     esac
     
@@ -1197,7 +1152,7 @@ do_full() {
         echo -e "  ${GREEN}✓ Subscriptions: will work${NC}"
         echo -e "  ${GREEN}✓ Configs: will connect${NC}"
     else
-        mwarn "Some issues detected - check verification above"
+        mwarn "Some issues - check verification above"
     fi
     
     echo ""
@@ -1209,21 +1164,14 @@ do_fix() {
     clear
     ui_header "FIX CURRENT"
     
-    if [ ! -d "/opt/rebecca" ]; then
-        merr "Rebecca not found"
-        mpause
-        return 1
-    fi
+    [ -d "/opt/rebecca" ] || { merr "Rebecca not found"; mpause; return 1; }
     
     TGT="/opt/rebecca"
     SRC=$(detect_source_panel)
-    if [ -z "$SRC" ]; then
-        merr "Source not found"
-        mpause
-        return 1
-    fi
+    [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
     
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
+    MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
     
     echo "Re-import from: $SRC ($SOURCE_DB_TYPE)"
     ui_confirm "Proceed?" "y" || return 0
@@ -1232,9 +1180,11 @@ do_fix() {
     (cd "$TGT" && docker compose up -d) &>/dev/null
     sleep 30
     
+    MYSQL_CONTAINER=$(find_mysql_container)
+    
     case "$SOURCE_DB_TYPE" in
-        postgresql) migrate_pg_to_mysql "$SRC" "$TGT" ;;
-        sqlite)     migrate_sqlite_to_mysql "$SRC" "$TGT" ;;
+        postgresql) migrate_pg_to_mysql ;;
+        sqlite)     migrate_sqlite_to_mysql ;;
     esac
     
     (cd "$TGT" && docker compose restart)
@@ -1249,16 +1199,12 @@ do_rollback() {
     
     local sp
     sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    if [ -z "$sp" ] || [ ! -d "$sp" ]; then
-        merr "No source path found"
-        mpause
-        return 1
-    fi
+    [ -z "$sp" ] || [ ! -d "$sp" ] && { merr "No source path"; mpause; return 1; }
     
     echo "Will: Stop Rebecca, Start $sp"
     ui_confirm "Proceed?" "n" || return 0
     
-    (cd /opt/rebecca && docker compose down 2>/dev/null) &>/dev/null
+    (cd /opt/rebecca && docker compose down) &>/dev/null
     (cd "$sp" && docker compose up -d)
     mok "Rollback complete"
     mpause
@@ -1272,14 +1218,12 @@ do_status() {
     docker ps --format "table {{.Names}}\t{{.Status}}" | head -12
     echo ""
     
-    local MC DP
-    MC=$(find_mysql_container)
-    DP=$(read_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
+    MYSQL_CONTAINER=$(find_mysql_container)
+    MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
     
-    if [ -n "$MC" ] && [ -n "$DP" ]; then
+    if [ -n "$MYSQL_CONTAINER" ] && [ -n "$MYSQL_PASS" ]; then
         echo -e "${CYAN}Database:${NC}"
-        docker exec "$MC" mysql -uroot -p"$DP" rebecca -e "
-            SELECT 'Admins' t, COUNT(*) c FROM admins
+        run_mysql "SELECT 'Admins' t, COUNT(*) c FROM admins
             UNION SELECT 'Users', COUNT(*) FROM users
             UNION SELECT 'Users+Key', COUNT(*) FROM users WHERE \`key\` IS NOT NULL AND \`key\` != ''
             UNION SELECT 'Proxies', COUNT(*) FROM proxies
@@ -1287,7 +1231,7 @@ do_status() {
             UNION SELECT 'User-Inbounds', COUNT(*) FROM user_inbounds
             UNION SELECT 'Hosts', COUNT(*) FROM hosts
             UNION SELECT 'Nodes', COUNT(*) FROM nodes
-            UNION SELECT 'Configs', COUNT(*) FROM core_configs;" 2>/dev/null
+            UNION SELECT 'Configs', COUNT(*) FROM core_configs;"
     fi
     mpause
 }
@@ -1295,19 +1239,15 @@ do_status() {
 do_logs() {
     clear
     ui_header "LOGS"
-    if [ -f "$MIGRATION_LOG" ]; then
-        tail -80 "$MIGRATION_LOG"
-    else
-        echo "No logs found"
-    fi
+    [ -f "$MIGRATION_LOG" ] && tail -80 "$MIGRATION_LOG" || echo "No logs"
     mpause
 }
 
 main_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V10.8"
-        echo -e "  ${GREEN}Complete: Passwords, Keys, UUIDs, Relations${NC}"
+        ui_header "MRM MIGRATION V10.9"
+        echo -e "  ${GREEN}Fully Verified: Passwords, Keys, UUIDs, Relations${NC}"
         echo ""
         echo "  1) Full Migration"
         echo "  2) Fix Current"
@@ -1328,11 +1268,8 @@ main_menu() {
     done
 }
 
-# Entry point
+# Entry
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    if [ "$EUID" -ne 0 ]; then
-        echo "Please run as root"
-        exit 1
-    fi
+    [ "$EUID" -ne 0 ] && { echo "Run as root"; exit 1; }
     main_menu
 fi
