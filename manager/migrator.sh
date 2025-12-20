@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.5 (FIXED DATABASE CONNECTION)
+# MRM Migration Tool - V11.6 (FIXED EXPORT + TABLES)
 #==============================================================================
 
 set -o pipefail
@@ -149,14 +149,10 @@ parse_pg_connection() {
     db_url=$(read_env_var "SQLALCHEMY_DATABASE_URL" "$env_file")
     
     if [ -z "$db_url" ]; then
-        # Fallback to panel name
         PG_DB_NAME="${SOURCE_PANEL_TYPE}"
         PG_DB_USER="${SOURCE_PANEL_TYPE}"
         return 0
     fi
-    
-    # Parse URL: postgresql://user:pass@host:port/database
-    # or: postgresql+psycopg2://user:pass@host:port/database
     
     safe_write "$db_url" > "/tmp/mrm_dburl_$$"
     
@@ -168,25 +164,17 @@ ppid = os.getppid()
 with open(f"/tmp/mrm_dburl_{ppid}", "r") as f:
     url = f.read().strip()
 
-# Parse PostgreSQL URL
-# Formats:
-# postgresql://user:pass@host:port/database
-# postgresql+psycopg2://user:pass@host:port/database
-# postgres://user:pass@host:port/database
-
 match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^:]+):([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
 
 if match:
     user = match.group(1)
     database = match.group(5)
 else:
-    # Try without password
     match = re.match(r'(?:postgresql|postgres)(?:\+\w+)?://([^@]+)@([^:]+):(\d+)/(.+?)(?:\?.*)?$', url)
     if match:
         user = match.group(1)
         database = match.group(4)
     else:
-        # Fallback
         user = "postgres"
         database = "postgres"
 
@@ -201,7 +189,6 @@ PYPARSE
     
     rm -f "/tmp/mrm_dburl_$$" "/tmp/mrm_pguser_$$" "/tmp/mrm_pgdb_$$"
     
-    # Fallback if parsing failed
     [ -z "$PG_DB_USER" ] && PG_DB_USER="${SOURCE_PANEL_TYPE}"
     [ -z "$PG_DB_NAME" ] && PG_DB_NAME="${SOURCE_PANEL_TYPE}"
     
@@ -255,15 +242,12 @@ find_pg_container() {
     name=$(basename "$src")
 
     local found
-    # First try timescaledb specifically
     found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*timescale" | head -1)
     [ -n "$found" ] && { echo "$found"; return 0; }
 
-    # Then try postgres
     found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*(postgres|db)" | grep -v pgbouncer | head -1)
     [ -n "$found" ] && { echo "$found"; return 0; }
 
-    # Generic fallback
     found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "timescale|postgres" | grep -v rebecca | grep -v pgbouncer | head -1)
     [ -n "$found" ] && { echo "$found"; return 0; }
 
@@ -388,7 +372,6 @@ start_source_panel() {
         done
 
         if [ -n "$PG_CONTAINER" ]; then
-            # Parse connection info from .env
             parse_pg_connection "$src"
             minfo "  DB User: $PG_DB_USER, DB Name: $PG_DB_NAME"
             
@@ -602,7 +585,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Use parsed connection info)
+# POSTGRESQL EXPORT (FIXED - Write to file inside container)
 #==============================================================================
 
 export_postgresql() {
@@ -612,46 +595,6 @@ export_postgresql() {
 
     minfo "Exporting from PostgreSQL..."
     minfo "  Database: $db_name, User: $db_user"
-
-    # Try to list databases to verify connection
-    local db_list
-    db_list=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d postgres -t -A -c "SELECT datname FROM pg_database WHERE datistemplate = false;" 2>/dev/null)
-    minfo "  Available databases: $(echo "$db_list" | tr '\n' ' ')"
-
-    # If db_name doesn't exist, try common alternatives
-    if ! echo "$db_list" | grep -q "^${db_name}$"; then
-        mwarn "Database '$db_name' not found, trying alternatives..."
-        for alt_db in "marzban" "pasarguard" "postgres"; do
-            if echo "$db_list" | grep -q "^${alt_db}$"; then
-                minfo "  Trying database: $alt_db"
-                db_name="$alt_db"
-                break
-            fi
-        done
-    fi
-
-    # Try different users if needed
-    local test_conn
-    test_conn=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT 1;" 2>&1)
-    if echo "$test_conn" | grep -qi "error\|fatal"; then
-        mwarn "User '$db_user' failed, trying 'postgres'..."
-        db_user="postgres"
-    fi
-
-    minfo "  Final connection: User=$db_user, Database=$db_name"
-
-    # Verify data exists
-    local user_count
-    user_count=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
-    if [ -z "$user_count" ] || [ "$user_count" = "0" ]; then
-        mwarn "No users found in source database!"
-        # Show table list for debugging
-        local tables
-        tables=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT tablename FROM pg_tables WHERE schemaname='public';" 2>/dev/null)
-        minfo "  Tables in database: $(echo "$tables" | tr '\n' ' ')"
-    else
-        minfo "  Found $user_count users in source"
-    fi
 
     # Detect sudo field
     local sudo_field="is_sudo"
@@ -665,86 +608,143 @@ export_postgresql() {
     fi
     minfo "  Sudo field: $sudo_field"
 
-    local tmp_dir="/tmp/mrm_export_$$"
-    mkdir -p "$tmp_dir"
-
-    export_table() {
-        local name="$1"
-        local query="$2"
-        local result
-        result=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "$query" 2>/dev/null)
-        if [ -z "$result" ] || [ "$result" = "null" ] || [ "$result" = "" ]; then
-            echo "[]" > "$tmp_dir/${name}.json"
-        else
-            safe_writeln "$result" > "$tmp_dir/${name}.json"
-        fi
-    }
-
-    minfo "  Exporting tables..."
-
-    export_table "admins" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, username, hashed_password, COALESCE($sudo_field, false) as is_sudo, telegram_id, created_at FROM admins) t"
-
-    export_table "inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, tag FROM inbounds) t"
-
-    export_table "users" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, username, COALESCE(key, '') as key, COALESCE(status, 'active') as status, COALESCE(used_traffic, 0) as used_traffic, data_limit, EXTRACT(EPOCH FROM expire)::bigint as expire, COALESCE(admin_id, 1) as admin_id, COALESCE(note, '') as note, sub_updated_at, sub_last_user_agent, online_at, on_hold_timeout, on_hold_expire_duration, COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic, created_at, COALESCE(service_id, 1) as service_id, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at FROM users) t"
-
-    export_table "proxies" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings FROM proxies) t"
-
-    export_table "hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, COALESCE(remark, '') as remark, COALESCE(address, '') as address, port, COALESCE(inbound_tag, '') as inbound_tag, COALESCE(sni, '') as sni, COALESCE(host, '') as host, COALESCE(security, 'none') as security, COALESCE(fingerprint::text, 'none') as fingerprint, COALESCE(is_disabled, false) as is_disabled, COALESCE(path, '') as path, COALESCE(alpn, '') as alpn, COALESCE(allowinsecure, false) as allowinsecure, fragment_setting, COALESCE(mux_enable, false) as mux_enable, COALESCE(random_user_agent, false) as random_user_agent FROM hosts) t"
-
-    export_table "services" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at FROM services) t"
-
-    export_table "nodes" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, COALESCE(name, '') as name, COALESCE(address, '') as address, port, api_port, COALESCE(certificate::text, '') as certificate, COALESCE(usage_coefficient, 1.0) as usage_coefficient, COALESCE(status, 'connected') as status, message, xray_version, created_at FROM nodes) t"
-
-    export_table "core_configs" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT id, COALESCE(name, 'default') as name, config, created_at FROM core_configs) t"
-
-    export_table "service_hosts" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT service_id, host_id FROM service_hosts) t"
-    export_table "service_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT service_id, inbound_id FROM service_inbounds) t"
-    export_table "user_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM user_inbounds) t"
-    export_table "node_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT node_id, inbound_tag FROM node_inbounds) t"
-
-    docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-        "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM excluded_inbounds_association) t" \
-        2>/dev/null > "$tmp_dir/excluded_inbounds.json" || echo "[]" > "$tmp_dir/excluded_inbounds.json"
-
-    safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
-    safe_write "$output_file" > "/tmp/mrm_outfile_$$"
-
-    python3 << 'PYCOMBINE'
+    # Create export script inside container
+    local export_script="/tmp/mrm_export_$$.py"
+    cat > "$export_script" << PYEXPORT
 import json
-import os
+import psycopg2
+import psycopg2.extras
 
-ppid = os.getppid()
-with open(f"/tmp/mrm_tmpdir_{ppid}", "r") as f:
-    tmp_dir = f.read().strip()
-with open(f"/tmp/mrm_outfile_{ppid}", "r") as f:
-    output_file = f.read().strip()
+conn = psycopg2.connect(
+    host="localhost",
+    database="$db_name",
+    user="$db_user"
+)
+cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
 data = {}
-tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 
-          'nodes', 'core_configs', 'service_hosts', 'service_inbounds',
-          'user_inbounds', 'node_inbounds', 'excluded_inbounds']
 
-for table in tables:
-    fpath = os.path.join(tmp_dir, f"{table}.json")
+def safe_fetch(query, name):
     try:
-        with open(fpath, 'r') as f:
-            content = f.read().strip()
-            if content and content.lower() != 'null' and content != '':
-                parsed = json.loads(content)
-                data[table] = parsed if parsed else []
-            else:
-                data[table] = []
-    except:
-        data[table] = []
+        cur.execute(query)
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
+    except Exception as e:
+        print(f"Error fetching {name}: {e}")
+        return []
 
-with open(output_file, 'w') as f:
-    json.dump(data, f, ensure_ascii=False, default=str)
+# Admins
+data['admins'] = safe_fetch("""
+    SELECT id, username, hashed_password, 
+           COALESCE($sudo_field, false) as is_sudo, 
+           telegram_id, created_at 
+    FROM admins
+""", "admins")
+
+# Inbounds
+data['inbounds'] = safe_fetch("SELECT id, tag FROM inbounds", "inbounds")
+
+# Users
+data['users'] = safe_fetch("""
+    SELECT id, username, COALESCE(key, '') as key, 
+           COALESCE(status, 'active') as status,
+           COALESCE(used_traffic, 0) as used_traffic, 
+           data_limit,
+           EXTRACT(EPOCH FROM expire)::bigint as expire,
+           COALESCE(admin_id, 1) as admin_id,
+           COALESCE(note, '') as note,
+           sub_updated_at, sub_last_user_agent, online_at,
+           on_hold_timeout, on_hold_expire_duration,
+           COALESCE(lifetime_used_traffic, 0) as lifetime_used_traffic,
+           created_at, COALESCE(service_id, 1) as service_id,
+           sub_revoked_at, data_limit_reset_strategy, traffic_reset_at
+    FROM users
+""", "users")
+
+# Proxies
+data['proxies'] = safe_fetch("""
+    SELECT id, user_id, type, COALESCE(settings::text, '{}') as settings 
+    FROM proxies
+""", "proxies")
+
+# Hosts
+data['hosts'] = safe_fetch("""
+    SELECT id, COALESCE(remark, '') as remark, 
+           COALESCE(address, '') as address, port,
+           COALESCE(inbound_tag, '') as inbound_tag,
+           COALESCE(sni, '') as sni, COALESCE(host, '') as host,
+           COALESCE(security, 'none') as security,
+           COALESCE(fingerprint::text, 'none') as fingerprint,
+           COALESCE(is_disabled, false) as is_disabled,
+           COALESCE(path, '') as path,
+           COALESCE(alpn, '') as alpn,
+           COALESCE(allowinsecure, false) as allowinsecure,
+           fragment_setting,
+           COALESCE(mux_enable, false) as mux_enable,
+           COALESCE(random_user_agent, false) as random_user_agent
+    FROM hosts
+""", "hosts")
+
+# Services
+data['services'] = safe_fetch("""
+    SELECT id, COALESCE(name, 'Default') as name, users_limit, created_at 
+    FROM services
+""", "services")
+
+# Nodes
+data['nodes'] = safe_fetch("""
+    SELECT id, COALESCE(name, '') as name, 
+           COALESCE(address, '') as address, port, api_port,
+           COALESCE(certificate::text, '') as certificate,
+           COALESCE(usage_coefficient, 1.0) as usage_coefficient,
+           COALESCE(status, 'connected') as status,
+           message, xray_version, created_at
+    FROM nodes
+""", "nodes")
+
+# Core configs
+data['core_configs'] = safe_fetch("""
+    SELECT id, COALESCE(name, 'default') as name, config, created_at 
+    FROM core_configs
+""", "core_configs")
+
+# Relations
+data['service_hosts'] = safe_fetch("SELECT service_id, host_id FROM service_hosts", "service_hosts")
+data['service_inbounds'] = safe_fetch("SELECT service_id, inbound_id FROM service_inbounds", "service_inbounds")
+data['user_inbounds'] = safe_fetch("SELECT user_id, inbound_tag FROM user_inbounds", "user_inbounds")
+data['node_inbounds'] = safe_fetch("SELECT node_id, inbound_tag FROM node_inbounds", "node_inbounds")
+
+try:
+    data['excluded_inbounds'] = safe_fetch("SELECT user_id, inbound_tag FROM excluded_inbounds_association", "excluded_inbounds")
+except:
+    data['excluded_inbounds'] = []
+
+conn.close()
+
+# Convert datetime objects
+def convert(obj):
+    if hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    return str(obj)
+
+with open('/tmp/export.json', 'w') as f:
+    json.dump(data, f, default=convert, ensure_ascii=False)
 
 print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
-PYCOMBINE
+PYEXPORT
 
-    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
+    # Copy script to container and run
+    docker cp "$export_script" "$PG_CONTAINER:/tmp/export.py" 2>/dev/null
+    rm -f "$export_script"
+
+    minfo "  Exporting tables..."
+    local result
+    result=$(docker exec "$PG_CONTAINER" python3 /tmp/export.py 2>&1)
+    echo "$result"
+
+    # Copy result back
+    docker cp "$PG_CONTAINER:/tmp/export.json" "$output_file" 2>/dev/null
+    docker exec "$PG_CONTAINER" rm -f /tmp/export.py /tmp/export.json 2>/dev/null
 
     if [ -s "$output_file" ]; then
         mok "Export complete"
@@ -755,7 +755,7 @@ PYCOMBINE
 }
 
 #==============================================================================
-# MYSQL IMPORT (FIXED - Create optional tables before delete)
+# MYSQL IMPORT (FIXED - Create all missing tables)
 #==============================================================================
 
 import_to_mysql() {
@@ -836,7 +836,14 @@ sql.append("SET NAMES utf8mb4;")
 sql.append("SET FOREIGN_KEY_CHECKS=0;")
 sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-# Only delete from existing tables
+# Create ALL optional tables if not exist
+sql.append("CREATE TABLE IF NOT EXISTS service_hosts (service_id INT NOT NULL, host_id INT NOT NULL, PRIMARY KEY (service_id, host_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+sql.append("CREATE TABLE IF NOT EXISTS service_inbounds (service_id INT NOT NULL, inbound_id INT NOT NULL, PRIMARY KEY (service_id, inbound_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+sql.append("CREATE TABLE IF NOT EXISTS user_inbounds (user_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (user_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+sql.append("CREATE TABLE IF NOT EXISTS node_inbounds (node_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (node_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+sql.append("CREATE TABLE IF NOT EXISTS core_configs (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, config JSON, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
+
+# Delete existing data
 sql.append("DELETE FROM proxies;")
 sql.append("DELETE FROM users;")
 sql.append("DELETE FROM hosts;")
@@ -844,16 +851,11 @@ sql.append("DELETE FROM inbounds;")
 sql.append("DELETE FROM services;")
 sql.append("DELETE FROM nodes;")
 sql.append("DELETE FROM admins WHERE id > 0;")
-
-# FIXED: Create optional tables if not exist, then delete
-sql.append("CREATE TABLE IF NOT EXISTS service_hosts (service_id INT NOT NULL, host_id INT NOT NULL, PRIMARY KEY (service_id, host_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS service_inbounds (service_id INT NOT NULL, inbound_id INT NOT NULL, PRIMARY KEY (service_id, inbound_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS user_inbounds (user_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (user_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS node_inbounds (node_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (node_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 sql.append("DELETE FROM service_hosts;")
 sql.append("DELETE FROM service_inbounds;")
 sql.append("DELETE FROM user_inbounds;")
 sql.append("DELETE FROM node_inbounds;")
+sql.append("DELETE FROM core_configs;")
 
 for a in data.get('admins') or []:
     if not a.get('id'): continue
@@ -1172,7 +1174,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.5"
+    ui_header "MRM MIGRATION V11.6"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1319,7 +1321,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.5"
+        ui_header "MRM MIGRATION V11.6"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
