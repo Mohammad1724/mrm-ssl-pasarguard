@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.8 (DYNAMIC COLUMN DETECTION)
+# MRM Migration Tool - V11.9 (CSV EXPORT FIX)
 #==============================================================================
 
 set -o pipefail
@@ -585,7 +585,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Use SELECT * for dynamic schema)
+# POSTGRESQL EXPORT (FIXED - Export CSV inside container, then convert)
 #==============================================================================
 
 export_postgresql() {
@@ -601,67 +601,37 @@ export_postgresql() {
     for tbl in users admins proxies hosts inbounds services nodes; do
         local cnt
         cnt=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT COUNT(*) FROM $tbl;" 2>/dev/null | tr -d ' \n\r')
-        [ -n "$cnt" ] && echo "    $tbl: $cnt"
+        [ -n "$cnt" ] && [ "$cnt" != "0" ] && echo "    $tbl: $cnt"
     done
 
     local tmp_dir="/tmp/mrm_exp_$$"
     mkdir -p "$tmp_dir"
 
-    # Export function using SELECT * (works with any schema)
-    export_pg_table() {
-        local tname="$1"
-        local out_file="$tmp_dir/${tname}.json"
-        
-        # Use SELECT * to get all columns dynamically
-        local result
-        result=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
-            "SELECT COALESCE(json_agg(t),'[]'::json) FROM (SELECT * FROM $tname) t;" 2>&1)
-        
-        # Check for errors
-        if echo "$result" | grep -qiE "error|does not exist"; then
-            echo "[]" > "$out_file"
-            return 1
-        fi
-        
-        # Clean and save
-        result=$(echo "$result" | tr -d '\r' | head -1)
-        if [ -z "$result" ] || [ "$result" = "null" ]; then
-            echo "[]" > "$out_file"
-        else
-            echo "$result" > "$out_file"
-        fi
-        return 0
-    }
+    minfo "  Exporting tables via CSV..."
 
-    minfo "  Exporting tables..."
-
-    # Export main tables
-    for tbl in admins inbounds users proxies hosts services nodes; do
-        export_pg_table "$tbl"
+    # Export each table to CSV file inside container, then copy out
+    for tbl in admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds; do
+        docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c \
+            "COPY (SELECT * FROM $tbl) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>/dev/null
+        docker cp "$PG_CONTAINER:/tmp/${tbl}.csv" "$tmp_dir/${tbl}.csv" 2>/dev/null
+        docker exec "$PG_CONTAINER" rm -f "/tmp/${tbl}.csv" 2>/dev/null
     done
 
-    # Try optional tables (may not exist)
-    export_pg_table "core_configs" 2>/dev/null || echo "[]" > "$tmp_dir/core_configs.json"
-    export_pg_table "service_hosts" 2>/dev/null || echo "[]" > "$tmp_dir/service_hosts.json"
-    export_pg_table "service_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/service_inbounds.json"
-    export_pg_table "user_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/user_inbounds.json"
-    export_pg_table "node_inbounds" 2>/dev/null || echo "[]" > "$tmp_dir/node_inbounds.json"
-    export_pg_table "excluded_inbounds_association" 2>/dev/null || echo "[]" > "$tmp_dir/excluded_inbounds.json"
-    
-    # Rename excluded_inbounds_association if it was exported
-    [ -f "$tmp_dir/excluded_inbounds_association.json" ] && mv "$tmp_dir/excluded_inbounds_association.json" "$tmp_dir/excluded_inbounds.json"
+    # Try core_configs (may not exist)
+    docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c \
+        "COPY (SELECT * FROM core_configs) TO '/tmp/core_configs.csv' WITH (FORMAT csv, HEADER true);" 2>/dev/null
+    docker cp "$PG_CONTAINER:/tmp/core_configs.csv" "$tmp_dir/core_configs.csv" 2>/dev/null
+    docker exec "$PG_CONTAINER" rm -f "/tmp/core_configs.csv" 2>/dev/null
 
-    # Combine all JSON files using Python on HOST
+    # Convert CSVs to JSON using Python on HOST
     safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
     safe_write "$output_file" > "/tmp/mrm_outfile_$$"
-    safe_write "$PG_CONTAINER" > "/tmp/mrm_pgcont_$$"
-    safe_write "$db_user" > "/tmp/mrm_dbuser_$$"
-    safe_write "$db_name" > "/tmp/mrm_dbname_$$"
 
-    python3 << 'PYCOMBINE'
+    python3 << 'PYCONVERT'
+import csv
 import json
 import os
-import subprocess
+from datetime import datetime
 
 ppid = os.getppid()
 
@@ -674,53 +644,76 @@ def read_file(name):
 
 tmp_dir = read_file("tmpdir")
 output_file = read_file("outfile")
-pg_container = read_file("pgcont")
-db_user = read_file("dbuser")
-db_name = read_file("dbname")
 
 data = {}
 tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 
-          'nodes', 'core_configs', 'service_hosts', 'service_inbounds',
-          'user_inbounds', 'node_inbounds', 'excluded_inbounds']
+          'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 
+          'node_inbounds', 'core_configs']
+
+def parse_value(val, col_name):
+    """Parse CSV value to appropriate Python type"""
+    if val == '' or val is None:
+        return None
+    
+    # Boolean
+    if val.lower() in ('t', 'true'):
+        return True
+    if val.lower() in ('f', 'false'):
+        return False
+    
+    # Try integer
+    try:
+        if '.' not in val and val.isdigit():
+            return int(val)
+    except:
+        pass
+    
+    # Try float
+    try:
+        if '.' in val:
+            return float(val)
+    except:
+        pass
+    
+    # Try JSON (for settings, config, fragment_setting)
+    if col_name in ('settings', 'config', 'fragment_setting') or val.startswith('{') or val.startswith('['):
+        try:
+            return json.loads(val)
+        except:
+            pass
+    
+    return val
 
 for table in tables:
-    fpath = os.path.join(tmp_dir, f"{table}.json")
+    csv_path = os.path.join(tmp_dir, f"{table}.csv")
     try:
-        with open(fpath, 'r') as f:
-            content = f.read().strip()
-            if content and content.lower() != 'null' and content != '':
-                try:
-                    parsed = json.loads(content)
-                    data[table] = parsed if parsed else []
-                except json.JSONDecodeError as e:
-                    print(f"JSON error {table}: {e}")
-                    data[table] = []
-            else:
-                data[table] = []
+        if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+            with open(csv_path, 'r', encoding='utf-8', errors='replace') as f:
+                reader = csv.DictReader(f)
+                rows = []
+                for row in reader:
+                    parsed_row = {}
+                    for k, v in row.items():
+                        parsed_row[k] = parse_value(v, k)
+                    rows.append(parsed_row)
+                data[table] = rows
+        else:
+            data[table] = []
     except Exception as e:
+        print(f"Error reading {table}: {e}")
         data[table] = []
 
-# Normalize field names for compatibility
+data['excluded_inbounds'] = []
+
+# Normalize field names
 def normalize_user(u):
-    # Handle different key field names
     if 'key' not in u and 'uuid' in u:
         u['key'] = u['uuid']
     if 'key' not in u and 'subscription_key' in u:
         u['key'] = u['subscription_key']
-    # Handle expire timestamp
-    if 'expire' in u and u['expire']:
-        try:
-            # If it's a datetime string, convert to timestamp
-            if isinstance(u['expire'], str) and 'T' in u['expire']:
-                from datetime import datetime
-                dt = datetime.fromisoformat(u['expire'].replace('Z', '+00:00'))
-                u['expire'] = int(dt.timestamp())
-        except:
-            pass
     return u
 
 def normalize_admin(a):
-    # Handle is_sudo vs is_admin
     if 'is_sudo' not in a:
         a['is_sudo'] = a.get('is_admin', False)
     return a
@@ -732,9 +725,9 @@ with open(output_file, 'w') as f:
     json.dump(data, f, ensure_ascii=False, default=str)
 
 print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
-PYCOMBINE
+PYCONVERT
 
-    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$" "/tmp/mrm_pgcont_$$" "/tmp/mrm_dbuser_$$" "/tmp/mrm_dbname_$$"
+    rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
 
     if [ -s "$output_file" ]; then
         mok "Export complete"
@@ -745,7 +738,7 @@ PYCOMBINE
 }
 
 #==============================================================================
-# MYSQL IMPORT (FIXED - Handle dynamic schema)
+# MYSQL IMPORT
 #==============================================================================
 
 import_to_mysql() {
@@ -819,7 +812,6 @@ def ts(v):
     return esc(str(v))
 
 def get_expire(u):
-    """Get expire as unix timestamp"""
     exp = u.get('expire')
     if exp is None or exp == '' or str(exp) == 'None':
         return "NULL"
@@ -827,11 +819,15 @@ def get_expire(u):
         return str(int(exp))
     if isinstance(exp, str):
         try:
-            # Try parsing as datetime
             from datetime import datetime
-            if 'T' in exp:
-                dt = datetime.fromisoformat(exp.replace('Z', '+00:00'))
-                return str(int(dt.timestamp()))
+            if 'T' in exp or '-' in exp:
+                # Parse datetime string
+                for fmt in ['%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S']:
+                    try:
+                        dt = datetime.strptime(exp.replace('+00:00', '').replace('Z', ''), fmt.replace('%z', ''))
+                        return str(int(dt.timestamp()))
+                    except:
+                        continue
             return str(int(float(exp)))
         except:
             return "NULL"
@@ -845,14 +841,14 @@ sql.append("SET NAMES utf8mb4;")
 sql.append("SET FOREIGN_KEY_CHECKS=0;")
 sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-# Create ALL optional tables if not exist
+# Create optional tables
 sql.append("CREATE TABLE IF NOT EXISTS service_hosts (service_id INT NOT NULL, host_id INT NOT NULL, PRIMARY KEY (service_id, host_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 sql.append("CREATE TABLE IF NOT EXISTS service_inbounds (service_id INT NOT NULL, inbound_id INT NOT NULL, PRIMARY KEY (service_id, inbound_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 sql.append("CREATE TABLE IF NOT EXISTS user_inbounds (user_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (user_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 sql.append("CREATE TABLE IF NOT EXISTS node_inbounds (node_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (node_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 sql.append("CREATE TABLE IF NOT EXISTS core_configs (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, config JSON, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
 
-# Delete existing data
+# Delete existing
 sql.append("DELETE FROM proxies;")
 sql.append("DELETE FROM users;")
 sql.append("DELETE FROM hosts;")
@@ -887,7 +883,10 @@ if not svcs:
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at) VALUES ({n['id']}, {esc(n.get('name',''))}, {esc(n.get('address', ''))}, {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(n.get('certificate'))}, {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))}, {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    cert = n.get('certificate', '')
+    if isinstance(cert, bytes):
+        cert = cert.decode('utf-8', errors='replace')
+    sql.append(f"INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at) VALUES ({n['id']}, {esc(n.get('name',''))}, {esc(n.get('address', ''))}, {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(cert)}, {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))}, {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
@@ -903,7 +902,6 @@ for h in data.get('hosts') or []:
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
-    # Handle different key field names
     key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     status = u.get('status', 'active')
     if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
@@ -1016,7 +1014,7 @@ FIXSQL
 verify_migration() {
     ui_header "VERIFICATION"
 
-    local admins users ukeys proxies puuid uinb hosts nodes svcs cfgs
+    local admins users ukeys proxies puuid hosts nodes svcs
 
     admins=$(run_mysql_query "SELECT COUNT(*) FROM admins;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     users=$(run_mysql_query "SELECT COUNT(*) FROM users;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
@@ -1185,7 +1183,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.8"
+    ui_header "MRM MIGRATION V11.9"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1332,7 +1330,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.8"
+        ui_header "MRM MIGRATION V11.9"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
