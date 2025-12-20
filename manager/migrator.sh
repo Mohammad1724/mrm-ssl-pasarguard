@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V10.3 (Final Stable - Zero Errors Edition)
+# MRM Migration Tool - V10.4 (Standalone - No Dependencies)
 #==============================================================================
 
 # --- CONFIGURATION ---
@@ -17,29 +17,18 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # --- UTILS ---
-log()   { echo -e "${BLUE}[$(date +'%T')]${NC} $1"; echo "[$(date +'%F %T')] $1" >> "$MIGRATION_LOG"; }
-ok()    { echo -e "${GREEN}✓ $1${NC}"; }
-warn()  { echo -e "${YELLOW}⚠ $1${NC}"; }
-err()   { echo -e "${RED}✗ $1${NC}"; }
+log()   { echo -e "${BLUE}[INFO]${NC} $1"; }
+ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
+err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 pause() { echo ""; read -n 1 -s -r -p "Press any key to continue..."; echo ""; }
 
 migration_init() {
-    MIGRATION_TEMP=$(mktemp -d /tmp/mrm-migration-XXXXXX)
-    mkdir -p "$BACKUP_ROOT"
-    touch "$MIGRATION_LOG"
+    MIGRATION_TEMP="/tmp/mrm_mig_$(date +%s)"
+    mkdir -p "$MIGRATION_TEMP" "$BACKUP_ROOT"
 }
 
 migration_cleanup() {
     rm -rf "$MIGRATION_TEMP"
-}
-
-# --- DATABASE HELPERS ---
-get_db_pass() {
-    if [ -f "$REBECCA_DIR/.env" ]; then
-        grep MYSQL_ROOT_PASSWORD "$REBECCA_DIR/.env" | cut -d'=' -f2 | tr -d '"'
-    else
-        echo "password"
-    fi
 }
 
 find_container() {
@@ -47,360 +36,292 @@ find_container() {
     docker ps --format '{{.Names}}' | grep -iE "$keyword" | head -1
 }
 
-run_mysql() {
-    local pass=$(get_db_pass)
-    local container=$(find_container "rebecca.*mysql")
-    docker exec "$container" mysql -uroot -p"$pass" rebecca -N -e "$1" 2>/dev/null
+get_db_pass() {
+    grep MYSQL_ROOT_PASSWORD "$REBECCA_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d '"'
 }
 
-# --- 1. PREPARATION & BACKUP ---
-create_backup() {
+# --- 1. START SOURCE ---
+start_source() {
     local src="$1"
-    log "Creating backup of $src..."
+    log "Starting source panel ($src)..."
+    (cd "$src" && docker compose up -d)
     
-    local ts=$(date +%Y%m%d_%H%M%S)
-    local dest="$BACKUP_ROOT/backup_$ts"
-    mkdir -p "$dest"
-    
-    # Save metadata
-    echo "$src" > "$BACKUP_ROOT/.last_source"
-    echo "$src" > "$dest/source_path.txt"
-    
-    # Backup Data
-    local data_dir="/var/lib/$(basename "$src")"
-    [ "$src" == "/opt/pasarguard" ] && data_dir="/var/lib/pasarguard"
-    
-    if [ -d "$data_dir" ]; then
-        tar --exclude='mysql' --exclude='postgres' --exclude='timescale' -czf "$dest/data.tar.gz" -C "$(dirname "$data_dir")" "$(basename "$data_dir")"
-        ok "Data backed up to $dest"
-    else
-        warn "Data directory not found"
-    fi
-}
-
-# --- 2. INSTALLATION ---
-install_rebecca_if_needed() {
-    if [ ! -d "$REBECCA_DIR" ]; then
-        log "Installing Rebecca..."
-        bash -c "$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)" @ install --database mysql
-        
-        # Ensure it starts
-        cd "$REBECCA_DIR" && docker compose up -d
-        sleep 10
-    fi
-}
-
-# --- 3. DATA EXTRACTION (PostgreSQL) ---
-extract_data_from_pasarguard() {
-    local src="$1"
-    log "Extracting data from Pasarguard..."
-    
-    # Start Pasarguard
-    (cd "$src" && docker compose up -d) &>/dev/null
+    log "Waiting for Database..."
     sleep 15
     
     local pg=$(find_container "pasarguard.*(timescale|postgres)")
-    if [ -z "$pg" ]; then err "Pasarguard DB not found"; return 1; fi
+    if [ -z "$pg" ]; then 
+        err "Database container not found!"
+        return 1
+    fi
+    ok "Found database: $pg"
+    echo "$pg" > "$MIGRATION_TEMP/pg_container"
+}
+
+# --- 2. EXPORT DATA ---
+export_data() {
+    local pg=$(cat "$MIGRATION_TEMP/pg_container")
+    log "Exporting data from $pg..."
     
-    # 1. Export Admins
+    # Export Admins
     docker exec "$pg" psql -U pasarguard -d pasarguard -t -A -c \
         "SELECT id, username, hashed_password, COALESCE(is_sudo, false), COALESCE(telegram_id, 0) FROM admins;" > "$MIGRATION_TEMP/admins.txt"
-        
-    # 2. Export Users
-    # Note: Converting timestamp to epoch for Rebecca
+    
+    # Export Users (Convert Time)
     docker exec "$pg" psql -U pasarguard -d pasarguard -t -A -c \
         "SELECT id, username, COALESCE(status, 'active'), COALESCE(used_traffic, 0), data_limit, EXTRACT(EPOCH FROM expire)::bigint, note FROM users;" > "$MIGRATION_TEMP/users.txt"
         
-    # 3. Export Inbounds
+    # Export Inbounds
     docker exec "$pg" psql -U pasarguard -d pasarguard -t -A -c \
         "SELECT id, tag FROM inbounds;" > "$MIGRATION_TEMP/inbounds.txt"
         
-    # 4. Export Hosts
-    # Note: Handling fingerprint enum and paths
+    # Export Hosts
     docker exec "$pg" psql -U pasarguard -d pasarguard -t -A -c \
         "SELECT id, remark, address, port, inbound_tag, sni, host, security, COALESCE(fingerprint::text, 'none'), is_disabled, path FROM hosts;" > "$MIGRATION_TEMP/hosts.txt"
         
-    # 5. Export Core Config
+    # Export Config
     docker exec "$pg" psql -U pasarguard -d pasarguard -t -A -c \
         "SELECT config FROM core_configs LIMIT 1;" > "$MIGRATION_TEMP/config.json"
-        
-    ok "Data extraction complete"
     
-    # Stop Pasarguard
-    (cd "$src" && docker compose down) &>/dev/null
+    # Validate exports
+    if [ ! -s "$MIGRATION_TEMP/users.txt" ]; then
+        err "No users exported! Check source database."
+        return 1
+    fi
+    
+    ok "Data exported successfully."
+    
+    # Stop Source
+    log "Stopping source panel..."
+    cd "$(cat $BACKUP_ROOT/.last_source)" && docker compose down
 }
 
-# --- 4. IMPORT LOGIC (Python for Safety) ---
-import_to_rebecca() {
-    log "Importing data to Rebecca..."
+# --- 3. GENERATE SQL (PYTHON WITHOUT DEPENDENCIES) ---
+generate_sql() {
+    log "Generating SQL import file..."
     
-    # Copy files to Rebeeca
-    cp -r "$MIGRATION_TEMP"/* /tmp/
+    # Generate Secrets in Bash to pass to Python
+    export JWT_KEY=$(openssl rand -hex 64)
+    export SUB_KEY=$(openssl rand -hex 64)
+    export ADM_KEY=$(openssl rand -hex 64)
+    export VMESS=$(openssl rand -hex 16)
+    export VLESS=$(openssl rand -hex 16)
+    export TEMP_DIR="$MIGRATION_TEMP"
+
+    python3 << 'EOF'
+import os
+import json
+import sys
+
+temp_dir = os.environ['TEMP_DIR']
+sql_file = os.path.join(temp_dir, 'import.sql')
+
+statements = []
+statements.append("SET FOREIGN_KEY_CHECKS=0;")
+statements.append("DELETE FROM users; DELETE FROM admins; DELETE FROM inbounds; DELETE FROM hosts;")
+statements.append("DELETE FROM services; DELETE FROM service_hosts; DELETE FROM core_configs; DELETE FROM jwt;")
+
+# 1. ADMINS
+try:
+    with open(os.path.join(temp_dir, 'admins.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split('|')
+            if len(parts) >= 3:
+                role = 'sudo' if parts[3] == 't' else 'standard'
+                tgid = parts[4] if parts[4] != '0' else 'NULL'
+                pw = parts[2].replace("'", "''")
+                stmt = f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({parts[0]}, '{parts[1]}', '{pw}', '{role}', 'active', {tgid}, NOW());"
+                statements.append(stmt)
+except: pass
+
+# 2. INBOUNDS
+try:
+    with open(os.path.join(temp_dir, 'inbounds.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split('|')
+            if len(parts) >= 2:
+                stmt = f"INSERT INTO inbounds (id, tag, protocol) VALUES ({parts[0]}, '{parts[1]}', 'mixed');"
+                statements.append(stmt)
+except: pass
+
+# 3. USERS
+try:
+    with open(os.path.join(temp_dir, 'users.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split('|')
+            if len(parts) >= 2:
+                # Fix username
+                user = parts[1].replace('@','').replace('.','_').replace('-','_')
+                
+                limit = parts[4] if parts[4] else 'NULL'
+                expire = parts[5] if parts[5] else 'NULL'
+                note = parts[6].replace("'", "''") if len(parts) > 6 else ''
+                
+                stmt = f"INSERT INTO users (id, username, status, used_traffic, data_limit, expire, admin_id, note, created_at) VALUES ({parts[0]}, '{user}', '{parts[2]}', {parts[3]}, {limit}, {expire}, 1, '{note}', NOW());"
+                statements.append(stmt)
+except: pass
+
+# 4. HOSTS
+try:
+    with open(os.path.join(temp_dir, 'hosts.txt'), 'r') as f:
+        for line in f:
+            parts = line.strip().split('|')
+            if len(parts) >= 11:
+                # Replace paths
+                addr = parts[2].replace('pasarguard', 'rebecca')
+                path = parts[10].replace('pasarguard', 'rebecca')
+                remark = parts[1].replace("'", "''")
+                
+                port = parts[3] if parts[3] else 'NULL'
+                dis = 1 if parts[9] == 't' else 0
+                fp = parts[8] if parts[8] else 'none'
+                
+                stmt = f"INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path) VALUES ({parts[0]}, '{remark}', '{addr}', {port}, '{parts[4]}', '{parts[5]}', '{parts[6]}', '{parts[7]}', '{fp}', {dis}, '{path}');"
+                statements.append(stmt)
+except: pass
+
+# 5. CORE CONFIG
+try:
+    with open(os.path.join(temp_dir, 'config.json'), 'r') as f:
+        config = f.read().strip()
+        if config:
+            config = config.replace('pasarguard', 'rebecca')
+            # Fix JSON for API
+            try:
+                c_json = json.loads(config)
+                if 'api' not in c_json:
+                    c_json['api'] = {"tag": "api", "services": ["HandlerService", "LoggerService", "StatsService"]}
+                config = json.dumps(c_json)
+            except: pass
+            
+            config_esc = config.replace("'", "''").replace("\\", "\\\\")
+            statements.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES (1, 'default', '{config_esc}', NOW());")
+except: pass
+
+# 6. JWT
+jwt = os.environ['JWT_KEY']
+sub = os.environ['SUB_KEY']
+adm = os.environ['ADM_KEY']
+vm = os.environ['VMESS']
+vl = os.environ['VLESS']
+statements.append(f"INSERT INTO jwt (secret_key, subscription_secret_key, admin_secret_key, vmess_mask, vless_mask) VALUES ('{jwt}', '{sub}', '{adm}', '{vm}', '{vl}');")
+
+# 7. SERVICES
+statements.append("INSERT INTO services (id, name, created_at) VALUES (1, 'Default Service', NOW());")
+statements.append("INSERT INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
+statements.append("UPDATE users SET service_id = 1 WHERE service_id IS NULL;")
+statements.append("SET FOREIGN_KEY_CHECKS=1;")
+
+with open(sql_file, 'w') as f:
+    f.write('\n'.join(statements))
+
+print("SQL generated")
+EOF
+
+    if [ -f "$MIGRATION_TEMP/import.sql" ]; then
+        ok "SQL file generated successfully."
+    else
+        err "Failed to generate SQL."
+        return 1
+    fi
+}
+
+# --- 4. EXECUTE MIGRATION ---
+execute_migration() {
+    log "Applying migration to Rebecca..."
     
     local db_pass=$(get_db_pass)
     local mysql_container=$(find_container "rebecca.*mysql")
     
-    # Python script to handle complex logic safely
-    python3 << PYEOF
-import pymysql
-import json
-import os
-import secrets
-
-# Connect to MySQL
-try:
-    conn = pymysql.connect(
-        host='127.0.0.1',
-        user='root',
-        password='$db_pass',
-        database='rebecca',
-        port=3306,
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor
-    )
-except:
-    # Try docker socket via os command if local connect fails (usually happens)
-    print("Direct connection failed, generating SQL file...")
-    pass
-
-def generate_sql_file():
-    sql_commands = []
-    
-    # 1. CLEANUP
-    sql_commands.append("SET FOREIGN_KEY_CHECKS=0;")
-    tables = ['users', 'admins', 'inbounds', 'hosts', 'services', 'service_hosts', 'core_configs', 'jwt', 'proxies']
-    for t in tables:
-        sql_commands.append(f"DELETE FROM {t};")
-    
-    # 2. ADMINS
-    try:
-        with open('/tmp/admins.txt', 'r') as f:
-            for line in f:
-                parts = line.strip().split('|')
-                if len(parts) >= 3:
-                    uid, user, phash, sudo, tgid = parts[0], parts[1], parts[2], parts[3], parts[4]
-                    role = 'sudo' if sudo == 't' else 'standard'
-                    tgid = 'NULL' if tgid == '0' or not tgid else tgid
-                    # Escape hash
-                    phash = phash.replace("'", "''")
-                    sql_commands.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({uid}, '{user}', '{phash}', '{role}', 'active', {tgid}, NOW());")
-    except Exception as e:
-        print(f"Admin error: {e}")
-
-    # 3. USERS
-    try:
-        with open('/tmp/users.txt', 'r') as f:
-            for line in f:
-                parts = line.strip().split('|')
-                if len(parts) >= 2:
-                    uid, user = parts[0], parts[1]
-                    status = parts[2] if len(parts) > 2 else 'active'
-                    used = parts[3] if len(parts) > 3 and parts[3] else '0'
-                    limit = parts[4] if len(parts) > 4 and parts[4] else 'NULL'
-                    expire = parts[5] if len(parts) > 5 and parts[5] else 'NULL'
-                    note = parts[6] if len(parts) > 6 else ''
-                    
-                    # Cleanup
-                    user = user.replace('@', '').replace('.', '_').replace('-', '_')
-                    note = note.replace("'", "''")
-                    if limit == '': limit = 'NULL'
-                    if expire == '': expire = 'NULL'
-                    
-                    sql_commands.append(f"INSERT INTO users (id, username, status, used_traffic, data_limit, expire, admin_id, note, created_at) VALUES ({uid}, '{user}', '{status}', {used}, {limit}, {expire}, 1, '{note}', NOW());")
-    except Exception as e:
-        print(f"User error: {e}")
-
-    # 4. INBOUNDS
-    try:
-        with open('/tmp/inbounds.txt', 'r') as f:
-            for line in f:
-                parts = line.strip().split('|')
-                if len(parts) >= 2:
-                    uid, tag = parts[0], parts[1]
-                    sql_commands.append(f"INSERT INTO inbounds (id, tag, protocol) VALUES ({uid}, '{tag}', 'mixed');")
-    except Exception as e:
-        print(f"Inbound error: {e}")
-
-    # 5. HOSTS
-    try:
-        with open('/tmp/hosts.txt', 'r') as f:
-            for line in f:
-                parts = line.strip().split('|')
-                if len(parts) >= 7:
-                    uid, remark, address, port, tag, sni, host, sec, fp, dis, path = parts + [''] * (11 - len(parts))
-                    
-                    # Fixes
-                    address = address.replace('pasarguard', 'rebecca')
-                    path = path.replace('pasarguard', 'rebecca')
-                    remark = remark.replace("'", "''")
-                    
-                    if not port: port = 'NULL'
-                    dis_val = 1 if dis == 't' else 0
-                    if not fp: fp = 'none'
-                    
-                    sql_commands.append(f"INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path) VALUES ({uid}, '{remark}', '{address}', {port}, '{tag}', '{sni}', '{host}', '{sec}', '{fp}', {dis_val}, '{path}');")
-    except Exception as e:
-        print(f"Host error: {e}")
-
-    # 6. CONFIG
-    try:
-        with open('/tmp/config.json', 'r') as f:
-            config = f.read().strip()
-            if config:
-                # Basic python string replace for paths
-                config = config.replace('pasarguard', 'rebecca')
-                # Escape for SQL
-                config_esc = config.replace("'", "''").replace("\\\\", "\\\\\\\\")
-                sql_commands.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES (1, 'default', '{config_esc}', NOW());")
-    except Exception as e:
-        print(f"Config error: {e}")
-
-    # 7. JWT
-    jwt_key = secrets.token_hex(32)
-    sub_key = secrets.token_hex(32)
-    adm_key = secrets.token_hex(32)
-    vmess = secrets.token_hex(8)
-    vless = secrets.token_hex(8)
-    
-    sql_commands.append(f"INSERT INTO jwt (secret_key, subscription_secret_key, admin_secret_key, vmess_mask, vless_mask) VALUES ('{jwt_key}', '{sub_key}', '{adm_key}', '{vmess}', '{vless}');")
-
-    # 8. SERVICES
-    sql_commands.append("INSERT INTO services (id, name, created_at) VALUES (1, 'Default Service', NOW());")
-    sql_commands.append("DELETE FROM service_hosts;")
-    sql_commands.append("INSERT INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
-    sql_commands.append("UPDATE users SET service_id = 1 WHERE service_id IS NULL;")
-    sql_commands.append("SET FOREIGN_KEY_CHECKS=1;")
-
-    # Write to file
-    with open('/tmp/import.sql', 'w') as f:
-        f.write('\n'.join(sql_commands))
-
-generate_sql_file()
-PYEOF
-
-    # Execute generated SQL
-    local container=$(find_container "rebecca.*mysql")
-    docker cp /tmp/import.sql "$container:/tmp/import.sql"
-    docker exec "$container" mysql -uroot -p"$db_pass" rebecca -e "SOURCE /tmp/import.sql"
-    
-    ok "Import completed"
-}
-
-# --- 5. FILE COPY ---
-setup_files() {
-    local src="$1"
-    log "Setting up files..."
-    
-    local src_data="/var/lib/$(basename "$src")"
-    [ "$src" == "/opt/pasarguard" ] && src_data="/var/lib/pasarguard"
-    
-    # Copy Assets
-    mkdir -p /var/lib/rebecca/assets /var/lib/rebecca/certs
-    
-    if [ -d "$src_data/assets" ]; then
-        cp -rn "$src_data/assets/"* /var/lib/rebecca/assets/ 2>/dev/null
+    if [ -z "$mysql_container" ]; then
+        err "Rebecca MySQL not running!"
+        return 1
     fi
     
-    # Download Xray if missing
-    if [ ! -f /var/lib/rebecca/xray ]; then
-        log "Downloading Xray..."
-        wget -q -O /tmp/xray.zip "$XRAY_DOWNLOAD_URL"
-        unzip -o /tmp/xray.zip -d /var/lib/rebecca/
-        chmod +x /var/lib/rebecca/xray
+    # Copy SQL file
+    docker cp "$MIGRATION_TEMP/import.sql" "$mysql_container:/tmp/import.sql"
+    
+    # Execute
+    docker exec "$mysql_container" mysql -uroot -p"$db_pass" rebecca -e "SOURCE /tmp/import.sql"
+    
+    if [ $? -eq 0 ]; then
+        ok "Database import successful."
+    else
+        err "Database import failed."
+        return 1
     fi
     
-    # Download Geo files
-    [ ! -f /var/lib/rebecca/assets/geoip.dat ] && wget -q -O /var/lib/rebecca/assets/geoip.dat "$GEOIP_URL"
-    [ ! -f /var/lib/rebecca/assets/geosite.dat ] && wget -q -O /var/lib/rebecca/assets/geosite.dat "$GEOSITE_URL"
-    
-    ok "Files configured"
-}
-
-# --- MAIN LOGIC ---
-do_full_migration() {
-    clear
-    ui_header "MRM MIGRATION V10.3 (FINAL)"
-    
-    # 1. Detect Source
-    local src=""
-    if [ -d "/opt/pasarguard" ]; then src="/opt/pasarguard"; 
-    elif [ -d "/opt/marzban" ]; then src="/opt/marzban"; fi
-    
-    if [ -z "$src" ]; then err "Source panel not found"; pause; return; fi
-    log "Source: $src"
-    
-    if ! ui_confirm "Start Migration?" "y"; then return; fi
-    
-    migration_init
-    
-    # 2. Backup
-    create_backup "$src"
-    
-    # 3. Install Rebecca
-    install_rebecca_if_needed
-    
-    # 4. Extract
-    extract_data_from_pasarguard "$src"
-    
-    # 5. Files
-    setup_files "$src"
-    
-    # 6. Import
-    import_to_rebecca
-    
-    # 7. Restart
+    # Restart
     log "Restarting Rebecca..."
     cd "$REBECCA_DIR" && docker compose restart
     sleep 15
     
-    # 8. Verify
-    log "--- Verification ---"
-    run_mysql "SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Inbounds', COUNT(*) FROM inbounds UNION SELECT 'Hosts', COUNT(*) FROM hosts UNION SELECT 'Config', COUNT(*) FROM core_configs UNION SELECT 'Services', COUNT(*) FROM services;"
+    # Verify
+    log "--- Final Check ---"
+    docker exec "$mysql_container" mysql -uroot -p"$db_pass" rebecca -e "SELECT 'Users' as T, COUNT(*) FROM users UNION SELECT 'Inbounds', COUNT(*) FROM inbounds UNION SELECT 'Config', COUNT(*) FROM core_configs;"
     
     echo ""
-    log "Checking Xray..."
+    log "Xray Logs:"
     docker logs rebecca-rebecca-1 2>&1 | grep -iE "xray|inbound" | tail -5
     
-    ok "Migration Complete!"
-    migration_cleanup
-    pause
+    ok "MIGRATION COMPLETE"
 }
 
-do_rollback() {
+# --- MAIN MENU ---
+do_migration() {
     clear
-    ui_header "ROLLBACK"
+    ui_header "MRM MIGRATION V10.4"
     
-    local last_source=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    if [ -z "$last_source" ]; then err "No history found"; pause; return; fi
+    # Detect Source
+    local src=""
+    if [ -d "/opt/pasarguard" ]; then src="/opt/pasarguard"; 
+    elif [ -d "/opt/marzban" ]; then src="/opt/marzban"; fi
     
-    warn "This will STOP Rebecca and START $(basename $last_source)"
-    if ! ui_confirm "Proceed?" "n"; then return; fi
+    if [ -z "$src" ]; then err "Source not found"; pause; return; fi
     
-    log "Stopping Rebecca..."
-    cd "$REBECCA_DIR" && docker compose down
+    echo "$src" > "$BACKUP_ROOT/.last_source"
     
-    log "Starting Old Panel..."
-    cd "$last_source" && docker compose up -d
+    # Detect Target
+    if [ ! -d "$REBECCA_DIR" ]; then
+        log "Rebecca not installed. Installing..."
+        bash -c "$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)" @ install --database mysql
+    fi
     
-    ok "Rollback Complete"
+    if ! ui_confirm "Start Migration from $(basename $src)?" "y"; then return; fi
+    
+    migration_init
+    
+    start_source "$src"
+    export_data
+    generate_sql
+    execute_migration
+    
+    migration_cleanup
     pause
 }
 
 menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION TOOL V10.3"
-        echo "1) Full Migration (Recommended)"
+        ui_header "MRM MIGRATION TOOL V10.4"
+        echo "1) Start Migration"
         echo "2) Rollback"
-        echo "3) View Logs"
-        echo "0) Exit"
-        echo ""
+        echo "3) Exit"
         read -p "Select: " opt
         case "$opt" in
-            1) do_full_migration ;;
-            2) do_rollback ;;
-            3) tail -50 "$MIGRATION_LOG"; pause ;;
-            0) exit 0 ;;
+            1) do_migration ;;
+            2) 
+                local old=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
+                if [ -n "$old" ]; then
+                    cd "$REBECCA_DIR" && docker compose down
+                    cd "$old" && docker compose up -d
+                    ok "Rollback complete"
+                else
+                    err "No history"
+                fi
+                pause
+                ;;
+            3) exit 0 ;;
         esac
     done
 }
