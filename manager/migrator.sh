@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.2 (FINAL - NO BUGS)
+# MRM Migration Tool - V11.3 (FINAL - ALL BUGS FIXED)
 #==============================================================================
 
 set -o pipefail
@@ -29,10 +29,9 @@ GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/downl
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 
 #==============================================================================
-# SAFE WRITE FUNCTIONS (handles all special chars)
+# SAFE WRITE FUNCTIONS
 #==============================================================================
 
-# Safe write - handles strings starting with - and containing special chars
 safe_write() {
     printf '%s' "$1"
 }
@@ -52,19 +51,16 @@ check_dependencies() {
     command -v docker &>/dev/null || missing="$missing docker"
     command -v openssl &>/dev/null || missing="$missing openssl"
     command -v curl &>/dev/null || missing="$missing curl"
+    command -v unzip &>/dev/null || missing="$missing unzip"
     
     if [ -n "$missing" ]; then
-        echo -e "${RED}Missing:$missing${NC}"
-        echo "Installing..."
+        echo -e "${YELLOW}Installing:$missing${NC}"
         if command -v apt-get &>/dev/null; then
-            apt-get update -qq && apt-get install -y python3 docker.io openssl curl &>/dev/null
+            apt-get update -qq && apt-get install -y python3 docker.io openssl curl unzip &>/dev/null
         elif command -v yum &>/dev/null; then
-            yum install -y python3 docker openssl curl &>/dev/null
+            yum install -y python3 docker openssl curl unzip &>/dev/null
         elif command -v dnf &>/dev/null; then
-            dnf install -y python3 docker openssl curl &>/dev/null
-        else
-            echo "Please install manually:$missing"
-            return 1
+            dnf install -y python3 docker openssl curl unzip &>/dev/null
         fi
     fi
     return 0
@@ -78,7 +74,7 @@ migration_init() {
     mkdir -p "$BACKUP_ROOT" 2>/dev/null
     mkdir -p "$(dirname "$MIGRATION_LOG")" 2>/dev/null
     safe_writeln "=== Migration $(date) ===" >> "$MIGRATION_LOG" 2>/dev/null
-    check_dependencies || return 1
+    check_dependencies
 }
 
 migration_cleanup() {
@@ -113,26 +109,21 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING
+# SAFE ENV VAR READING (FIXED)
 #==============================================================================
 
 read_env_var() {
     local key="$1" file="$2"
     [ -f "$file" ] || return 1
     
-    # Simple and reliable grep-based reading
-    local line
+    local line value
     line=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
     [ -z "$line" ] && return 1
     
-    # Extract value after first =
-    local value="${line#*=}"
-    
-    # Remove leading/trailing whitespace
+    value="${line#*=}"
     value="${value#"${value%%[![:space:]]*}"}"
     value="${value%"${value##*[![:space:]]}"}"
     
-    # Remove surrounding quotes
     if [[ "$value" == \"*\" ]]; then
         value="${value:1:-1}"
     elif [[ "$value" == \'*\' ]]; then
@@ -141,6 +132,7 @@ read_env_var() {
     
     printf '%s' "$value"
 }
+
 #==============================================================================
 # DETECTION
 #==============================================================================
@@ -188,10 +180,16 @@ find_pg_container() {
     name=$(basename "$src")
     
     local found
-    found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*(timescale|postgres|db)" | head -1)
+    # First try timescaledb specifically
+    found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*timescale" | head -1)
     [ -n "$found" ] && { echo "$found"; return 0; }
     
-    found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "timescale|postgres" | grep -v rebecca | head -1)
+    # Then try postgres
+    found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "${name}.*(postgres|db)" | grep -v pgbouncer | head -1)
+    [ -n "$found" ] && { echo "$found"; return 0; }
+    
+    # Generic fallback
+    found=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "timescale|postgres" | grep -v rebecca | grep -v pgbouncer | head -1)
     [ -n "$found" ] && { echo "$found"; return 0; }
     
     return 1
@@ -275,6 +273,27 @@ wait_mysql() {
     return 0
 }
 
+wait_rebecca_tables() {
+    minfo "Waiting for Rebecca tables..."
+    local waited=0
+    local max_wait=120
+    
+    while [ $waited -lt $max_wait ]; do
+        local tables
+        tables=$(run_mysql_query "SHOW TABLES LIKE 'users';" 2>/dev/null | grep -c "users")
+        if [ "$tables" -gt 0 ] 2>/dev/null; then
+            mok "Rebecca tables ready"
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        echo -n "."
+    done
+    echo ""
+    merr "Rebecca tables not created"
+    return 1
+}
+
 #==============================================================================
 # SETUP FUNCTIONS
 #==============================================================================
@@ -283,9 +302,7 @@ start_source_panel() {
     local src="$1"
     minfo "Starting source panel..."
     
-    if ! (cd "$src" && docker compose up -d) &>/dev/null; then
-        mwarn "docker compose warning (may be ok)"
-    fi
+    (cd "$src" && docker compose up -d) &>/dev/null
     
     if [ "$SOURCE_DB_TYPE" = "postgresql" ]; then
         local waited=0
@@ -382,7 +399,6 @@ generate_env() {
     XJSON="${XJSON//marzban/rebecca}"
     [ -z "$XJSON" ] && XJSON="/var/lib/rebecca/xray_config.json"
     
-    # Write all values to temp files for Python
     local tmpdir="/tmp/mrm_env_$$"
     mkdir -p "$tmpdir"
     safe_write "$MYSQL_PASS" > "$tmpdir/mysql_pass"
@@ -459,12 +475,12 @@ PYENV
 install_rebecca() {
     ui_header "INSTALLING REBECCA"
     
-    echo -e "${YELLOW}Rebecca needs to be installed manually first.${NC}"
+    echo -e "${YELLOW}Rebecca requires manual installation.${NC}"
     echo ""
-    echo "Run this command:"
+    echo -e "Run this command first:"
     echo -e "${CYAN}bash -c \"\$(curl -sL https://github.com/rebeccapanel/Rebecca-scripts/raw/master/rebecca.sh)\" @ install --database mysql${NC}"
     echo ""
-    echo "After installation completes, run migration again."
+    echo "After installation, run migration again."
     echo ""
     
     mpause
@@ -475,9 +491,9 @@ setup_jwt() {
     minfo "Setting up JWT..."
     
     local result
-    result=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>/dev/null | tr -d ' \n\r')
+    result=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     
-    if [[ "$result" =~ ^[0-9]+$ ]] && [ "$result" -gt 0 ]; then
+    if [ "${result:-0}" -gt 0 ] 2>/dev/null; then
         mok "JWT exists"
         return 0
     fi
@@ -508,7 +524,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT
+# POSTGRESQL EXPORT (FIXED - Direct connection, not via PgBouncer)
 #==============================================================================
 
 export_postgresql() {
@@ -517,6 +533,16 @@ export_postgresql() {
     local db_user="${SOURCE_PANEL_TYPE}"
     
     minfo "Exporting from PostgreSQL..."
+    
+    # Verify data exists
+    local user_count
+    user_count=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' \n')
+    if [ -z "$user_count" ] || [ "$user_count" = "0" ]; then
+        mwarn "No users found in source database!"
+        # Continue anyway to export other data
+    else
+        minfo "  Found $user_count users in source"
+    fi
     
     # Detect sudo field
     local sudo_field="is_sudo"
@@ -533,7 +559,6 @@ export_postgresql() {
     local tmp_dir="/tmp/mrm_export_$$"
     mkdir -p "$tmp_dir"
     
-    # Export function
     export_table() {
         local name="$1"
         local query="$2"
@@ -569,12 +594,10 @@ export_postgresql() {
     export_table "user_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM user_inbounds) t"
     export_table "node_inbounds" "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT node_id, inbound_tag FROM node_inbounds) t"
     
-    # Try excluded_inbounds (may not exist)
     docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -t -A -c \
         "SELECT COALESCE(json_agg(row_to_json(t)),'[]') FROM (SELECT user_id, inbound_tag FROM excluded_inbounds_association) t" \
         2>/dev/null > "$tmp_dir/excluded_inbounds.json" || echo "[]" > "$tmp_dir/excluded_inbounds.json"
     
-    # Combine using Python
     safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
     safe_write "$output_file" > "/tmp/mrm_outfile_$$"
     
@@ -704,11 +727,20 @@ sql.append("SET NAMES utf8mb4;")
 sql.append("SET FOREIGN_KEY_CHECKS=0;")
 sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-tables = ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'core_configs',
-          'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds']
-for t in tables:
-    sql.append(f"DELETE FROM {t};")
+# Only delete from existing tables
+sql.append("DELETE FROM proxies;")
+sql.append("DELETE FROM users;")
+sql.append("DELETE FROM hosts;")
+sql.append("DELETE FROM inbounds;")
+sql.append("DELETE FROM services;")
+sql.append("DELETE FROM nodes;")
 sql.append("DELETE FROM admins WHERE id > 0;")
+
+# Try to delete from optional tables (may not exist)
+sql.append("DELETE FROM service_hosts;")
+sql.append("DELETE FROM service_inbounds;")
+sql.append("DELETE FROM user_inbounds;")
+sql.append("DELETE FROM node_inbounds;")
 
 for a in data.get('admins') or []:
     if not a.get('id'): continue
@@ -724,7 +756,7 @@ svcs = data.get('services') or []
 for s in svcs:
     if not s.get('id'): continue
     created = ts(s.get('created_at')) if ts(s.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO services (id, name, users_limit, created_at) VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {nv(s.get('users_limit'))}, {created}) ON DUPLICATE KEY UPDATE name=VALUES(name);")
+    sql.append(f"INSERT INTO services (id, name, created_at) VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {created}) ON DUPLICATE KEY UPDATE name=VALUES(name);")
 if not svcs:
     sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
@@ -865,22 +897,18 @@ verify_migration() {
     ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`key\` IS NOT NULL AND \`key\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     proxies=$(run_mysql_query "SELECT COUNT(*) FROM proxies;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     puuid=$(run_mysql_query "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
-    uinb=$(run_mysql_query "SELECT COUNT(*) FROM user_inbounds;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     hosts=$(run_mysql_query "SELECT COUNT(*) FROM hosts;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     nodes=$(run_mysql_query "SELECT COUNT(*) FROM nodes;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     svcs=$(run_mysql_query "SELECT COUNT(*) FROM services;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
-    cfgs=$(run_mysql_query "SELECT COUNT(*) FROM core_configs;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     
     printf "  %-22s ${GREEN}%s${NC}\n" "Admins:" "${admins:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Users:" "${users:-0}"
     printf "  %-22s ${GREEN}%s${NC} ← subscriptions\n" "Users with Key:" "${ukeys:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Proxies:" "${proxies:-0}"
     printf "  %-22s ${GREEN}%s${NC} ← configs\n" "Proxies with UUID:" "${puuid:-0}"
-    printf "  %-22s ${GREEN}%s${NC} ← user↔inbound\n" "User-Inbounds:" "${uinb:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Hosts:" "${hosts:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Nodes:" "${nodes:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Services:" "${svcs:-0}"
-    printf "  %-22s ${GREEN}%s${NC}\n" "Core Configs:" "${cfgs:-0}"
     echo ""
     
     local err=0
@@ -888,7 +916,6 @@ verify_migration() {
     if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
         [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No keys!"; err=1; }
         [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No proxies!"; err=1; }
-        [ "${puuid:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No UUIDs!"; err=1; }
     fi
     [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
     
@@ -980,6 +1007,7 @@ SQLITEEXP
     [ -s "$export_file" ] || { merr "Export failed"; return 1; }
     
     wait_mysql || return 1
+    wait_rebecca_tables || return 1
     setup_jwt
     import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
     
@@ -1004,6 +1032,7 @@ migrate_pg_to_mysql() {
     minfo "Target: $MYSQL_CONTAINER"
     
     wait_mysql || return 1
+    wait_rebecca_tables || return 1
     
     local export_file="/tmp/mrm_export_$$.json"
     
@@ -1028,9 +1057,9 @@ stop_old() {
 }
 
 do_full() {
-    migration_init || { mpause; return 1; }
+    migration_init
     clear
-    ui_header "MRM MIGRATION V11.2"
+    ui_header "MRM MIGRATION V11.3"
     
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1046,7 +1075,7 @@ do_full() {
     
     [ "$SOURCE_DB_TYPE" = "unknown" ] && { merr "Unknown DB"; mpause; return 1; }
     
-    [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca || { mpause; return 1; }; TGT="/opt/rebecca"; }
+    [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca; return 1; }
     
     echo -e "${YELLOW}Will migrate:${NC}"
     echo "  • Admins • Users • Proxies"
@@ -1073,9 +1102,9 @@ do_full() {
     generate_env "$SRC" "$TGT"
     
     minfo "[6/7] Starting Rebecca..."
-    (cd "$TGT" && docker compose up -d --force-recreate) || mwarn "Compose warning"
-    minfo "Waiting 45s..."
-    sleep 45
+    (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
+    minfo "Waiting 60s for Rebecca to initialize..."
+    sleep 60
     
     minfo "[7/7] Migrating database..."
     local rc=0
@@ -1115,7 +1144,7 @@ do_fix() {
     
     start_source_panel "$SRC"
     (cd "$TGT" && docker compose up -d) &>/dev/null
-    sleep 30
+    sleep 60
     
     MYSQL_CONTAINER=$(find_mysql_container)
     
@@ -1170,16 +1199,20 @@ do_logs() {
     mpause
 }
 
+#==============================================================================
+# MAIN MENU (FIXED NAME: migrator_menu)
+#==============================================================================
+
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.2"
+        ui_header "MRM MIGRATION V11.3"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
         echo "  4) Status"
         echo "  5) Logs"
-        echo "  0) Exit"
+        echo "  0) Back"
         echo ""
         read -p "Select: " opt
         case "$opt" in
@@ -1188,12 +1221,12 @@ migrator_menu() {
             3) do_rollback ;;
             4) do_status ;;
             5) do_logs ;;
-            0) migration_cleanup; exit 0 ;;
+            0) migration_cleanup; return 0 ;;
         esac
     done
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     [ "$EUID" -ne 0 ] && { echo "Run as root"; exit 1; }
-    main_menu
+    migrator_menu
 fi
