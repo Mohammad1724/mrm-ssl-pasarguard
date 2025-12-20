@@ -1179,7 +1179,7 @@ do_logs() {
     mpause
 }
 
-main_menu() {
+migrator_menu() {
     while true; do
         clear
         ui_header "MRM MIGRATION V11.2"
