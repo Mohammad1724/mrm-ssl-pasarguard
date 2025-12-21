@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.4 (ENV PARSER FIX)
+# MRM Migration Tool - V12.5 (FULL ORIGINAL CODE + AUTO FIXES)
 #==============================================================================
 
 set -o pipefail
@@ -111,7 +111,7 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING (FIXED FOR SPACES)
+# SAFE ENV VAR READING (FIXED: Handles spaces)
 #==============================================================================
 
 read_env_var() {
@@ -119,7 +119,7 @@ read_env_var() {
     [ -f "$file" ] || return 1
 
     local line value
-    # FIXED: Regex now accepts spaces around '=' (e.g., KEY = VALUE)
+    # Modified Regex to allow spaces around = (e.g. KEY = VALUE)
     line=$(grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
     [ -z "$line" ] && return 1
 
@@ -739,7 +739,7 @@ get_mysql_columns() {
 }
 
 #==============================================================================
-# MYSQL IMPORT (SCHEMA-AWARE)
+# MYSQL IMPORT (SCHEMA-AWARE + AUTO FIX)
 #==============================================================================
 
 import_to_mysql() {
@@ -785,7 +785,7 @@ users_cols = set(read_file("userscols").split(',')) if read_file("userscols") el
 
 def esc(v, col_name=None):
     if v is None:
-        # Schema awareness: if column is NOT NULL in MySQL, use empty string
+        # FIXED: Handle NOT NULL columns in new Rebecca versions
         if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint'):
             return "''"
         return "NULL"
@@ -908,11 +908,12 @@ for s in svcs:
 if not svcs:
     sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
-# Nodes - WITH UPLINK/DOWNLINK FIX
+# Nodes - FIXED: uplink/downlink as integers
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
     
+    # Build dynamic INSERT based on available columns
     cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
     vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), nv(n.get('port')), esc(n.get('status', 'connected')), created]
     
@@ -934,13 +935,10 @@ for n in data.get('nodes') or []:
     if 'downlink' in nodes_cols:
         cols.append('downlink')
         vals.append(str(int(n.get('downlink') or 0)))
-    if 'data_limit' in nodes_cols:
-        cols.append('data_limit')
-        vals.append(nv(n.get('data_limit')))
     
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Hosts
+# Hosts - FIXED: handle NOT NULL columns
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
     addr = fix_path(h.get('address', ''))
@@ -951,6 +949,7 @@ for h in data.get('hosts') or []:
     frag = h.get('fragment_setting')
     frag_sql = esc_json(frag) if frag else "NULL"
     
+    # Build dynamic INSERT
     cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
     vals = [str(h['id']), esc(h.get('remark', '')), esc(addr, 'address'), nv(h.get('port')), 
             esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', ''), 'sni'), 
@@ -981,14 +980,17 @@ for h in data.get('hosts') or []:
     
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Users
+# Users - FIXED: Dynamic key/token + Auto Service ID
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
     key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     status = u.get('status', 'active')
     if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
+    
+    # FIX: Force service ID to 1 if missing
     svc = u.get('service_id') or 1
+    
     created = ts(u.get('created_at')) if ts(u.get('created_at')) != "NULL" else "NOW()"
     expire = get_expire(u)
     
@@ -1064,12 +1066,41 @@ for c in data.get('core_configs') or []:
     created = ts(c.get('created_at')) if ts(c.get('created_at')) != "NULL" else "NOW()"
     sql.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created}) ON DUPLICATE KEY UPDATE config=VALUES(config);")
 
+# === AUTO REPAIR SECTION START ===
+# This part automatically fixes missing proxies and relationships
+key_col = '`key`' if 'key' in users_cols else 'token'
+
+sql.append("-- AUTO REPAIR: Force all users to default service")
+sql.append("UPDATE users SET service_id = 1 WHERE service_id IS NULL OR service_id = 0;")
+
+sql.append("-- AUTO REPAIR: Generate missing proxies for users (VLESS default)")
+sql.append(f"""
+INSERT IGNORE INTO proxies (user_id, type, settings)
+SELECT id, 'vless', CONCAT('{{"id": "', {key_col}, '", "flow": ""}}')
+FROM users
+WHERE ({key_col} IS NOT NULL AND {key_col} != '')
+AND id NOT IN (SELECT user_id FROM proxies);
+""")
+
+sql.append("-- AUTO REPAIR: Link all users to all inbounds")
+sql.append("""
+INSERT IGNORE INTO user_inbounds (user_id, inbound_tag)
+SELECT u.id, i.tag 
+FROM users u 
+CROSS JOIN inbounds i;
+""")
+
+sql.append("-- AUTO REPAIR: Link inbounds and hosts to default service")
+sql.append("INSERT IGNORE INTO service_inbounds (service_id, inbound_id) SELECT 1, id FROM inbounds;")
+sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
+# === AUTO REPAIR SECTION END ===
+
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
 
 with open(sql_file, 'w') as f:
     f.write('\n'.join(sql))
 
-print(f"Generated {len(sql)} statements")
+print(f"Generated {len(sql)} statements (including auto-repair)")
 PYIMPORT
 
     rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$"
@@ -1131,7 +1162,7 @@ verify_migration() {
 
     local admins users ukeys proxies puuid hosts nodes svcs
 
-    # Detect subscription key column dynamically for count
+    # Detect user key column for counting
     local key_col
     key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
     [ -z "$key_col" ] && key_col="key"
@@ -1159,7 +1190,7 @@ verify_migration() {
 
     if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
         [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { mwarn "No keys - check column $key_col"; }
-        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - check source database proxies table"; }
+        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - check if auto-repair worked"; }
     fi
     [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
 
@@ -1300,11 +1331,12 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V12.4"
+    ui_header "MRM MIGRATION V12.5"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
 
+    SOURCE_PANEL_TYPE=$(basename "$SRC")
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     local sdata
     sdata=$(get_data_dir "$SRC")
@@ -1327,27 +1359,27 @@ do_full() {
 
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
 
-    minfo "Starting source..."
+    minfo "[1/7] Starting source..."
     start_source_panel "$SRC" || { mpause; return 1; }
 
-    minfo "Stopping Rebecca..."
+    minfo "[2/7] Stopping Rebecca..."
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    minfo "Copying data..."
+    minfo "[3/7] Copying files..."
     copy_data "$sdata" "/var/lib/rebecca"
 
-    minfo "Installing Xray..."
+    minfo "[4/7] Installing Xray..."
     install_xray "/var/lib/rebecca" "$sdata"
 
-    minfo "Generating config..."
+    minfo "[5/7] Generating config..."
     generate_env "$SRC" "$TGT"
 
-    minfo "Starting Rebecca..."
+    minfo "[6/7] Starting Rebecca..."
     (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
-    minfo "Initializing Rebecca (60s)..."
+    minfo "Waiting 60s for Rebecca to initialize..."
     sleep 60
 
-    minfo "Migrating database..."
+    minfo "[7/7] Migrating database..."
     local rc=0
     case "$SOURCE_DB_TYPE" in
         postgresql) migrate_pg_to_mysql; rc=$? ;;
@@ -1378,6 +1410,7 @@ do_fix() {
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
 
+    SOURCE_PANEL_TYPE=$(basename "$SRC")
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
 
@@ -1427,7 +1460,7 @@ do_status() {
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
 
     [ -n "$MYSQL_CONTAINER" ] && [ -n "$MYSQL_PASS" ] && {
-        echo -e "${CYAN}Database Statistics:${NC}"
+        echo -e "${CYAN}Database:${NC}"
         run_mysql_query "SELECT 'Admins' t, COUNT(*) c FROM admins UNION SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Hosts', COUNT(*) FROM hosts;"
     }
     mpause
@@ -1447,7 +1480,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V12.4"
+        ui_header "MRM MIGRATION V12.5"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
