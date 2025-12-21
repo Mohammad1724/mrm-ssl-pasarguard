@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.2 (FINAL STABLE FIX)
+# MRM Migration Tool - V12.2 (SCHEMA COMPATIBILITY FIX)
 #==============================================================================
 
 set -o pipefail
@@ -202,6 +202,7 @@ PYPARSE
 detect_source_panel() {
     for p in /opt/pasarguard /opt/marzban; do
         if [ -d "$p" ] && [ -f "$p/.env" ]; then
+            SOURCE_PANEL_TYPE=$(basename "$p")
             safe_writeln "$p"
             return 0
         fi
@@ -697,8 +698,10 @@ data['excluded_inbounds'] = []
 
 # Normalize
 def normalize_user(u):
-    if not u.get('key'):
-        u['key'] = u.get('uuid') or u.get('subscription_key') or u.get('sub_id') or ''
+    if 'key' not in u and 'uuid' in u:
+        u['key'] = u['uuid']
+    if 'key' not in u and 'subscription_key' in u:
+        u['key'] = u['subscription_key']
     return u
 
 def normalize_admin(a):
@@ -779,8 +782,11 @@ nodes_cols = set(read_file("nodescols").split(',')) if read_file("nodescols") el
 hosts_cols = set(read_file("hostscols").split(',')) if read_file("hostscols") else set()
 users_cols = set(read_file("userscols").split(',')) if read_file("userscols") else set()
 
-def esc(v):
+def esc(v, col_name=None):
     if v is None:
+        # Fix for Rebecca required columns
+        if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint'):
+            return "''"
         return "NULL"
     if isinstance(v, bool):
         return "1" if v else "0"
@@ -885,19 +891,19 @@ for a in data.get('admins') or []:
     if not a.get('id'): continue
     role = 'sudo' if a.get('is_sudo') or a.get('is_admin') else 'standard'
     created = ts(a.get('created_at')) if ts(a.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username') or '')}, {esc(a.get('hashed_password') or '')}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
+    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username',''))}, {esc(a.get('hashed_password',''))}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
 
 # Inbounds
 for i in data.get('inbounds') or []:
     if not i.get('id'): continue
-    sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i.get('tag') or '')}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
+    sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i.get('tag',''))}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
 
 # Services
 svcs = data.get('services') or []
 for s in svcs:
     if not s.get('id'): continue
     created = ts(s.get('created_at')) if ts(s.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO services (id, name, created_at) VALUES ({s['id']}, {esc(s.get('name') or 'Default')}, {created}) ON DUPLICATE KEY UPDATE name=VALUES(name);")
+    sql.append(f"INSERT INTO services (id, name, created_at) VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {created}) ON DUPLICATE KEY UPDATE name=VALUES(name);")
 if not svcs:
     sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
@@ -906,7 +912,7 @@ for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
     cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
-    vals = [str(n['id']), esc(n.get('name') or ''), esc(n.get('address') or ''), nv(n.get('port')), esc(n.get('status') or 'connected'), created]
+    vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), nv(n.get('port')), esc(n.get('status', 'connected')), created]
     if 'api_port' in nodes_cols:
         cols.append('api_port')
         vals.append(nv(n.get('api_port')))
@@ -915,36 +921,36 @@ for n in data.get('nodes') or []:
         vals.append(str(n.get('usage_coefficient', 1.0)))
     if 'xray_version' in nodes_cols:
         cols.append('xray_version')
-        vals.append(esc(n.get('xray_version') or ''))
+        vals.append(esc(n.get('xray_version')))
     if 'message' in nodes_cols:
         cols.append('message')
-        vals.append(esc(n.get('message') or ''))
+        vals.append(esc(n.get('message')))
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Hosts - FIX FOR ALPN/SNI/PATH CANNOT BE NULL
+# Hosts
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
-    addr = fix_path(h.get('address') or '')
-    path = fix_path(h.get('path') or '')
+    addr = fix_path(h.get('address', ''))
+    path = fix_path(h.get('path', ''))
     fp = h.get('fingerprint')
     if isinstance(fp, dict): fp = 'none'
     fp = fp or 'none'
     frag = h.get('fragment_setting')
     frag_sql = esc_json(frag) if frag else "NULL"
     cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
-    vals = [str(h['id']), esc(h.get('remark') or ''), esc(addr), nv(h.get('port')), 
-            esc(h.get('inbound_tag') or h.get('tag') or ''), esc(h.get('sni') or ''), 
-            esc(h.get('host') or ''), esc(h.get('security') or 'none'), 
+    vals = [str(h['id']), esc(h.get('remark', '')), esc(addr, 'address'), nv(h.get('port')), 
+            esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', ''), 'sni'), 
+            esc(h.get('host', ''), 'host'), esc(h.get('security', 'none')), 
             str(1 if h.get('is_disabled') else 0)]
     if 'fingerprint' in hosts_cols:
         cols.append('fingerprint')
-        vals.append(esc(fp))
+        vals.append(esc(fp, 'fingerprint'))
     if 'path' in hosts_cols:
         cols.append('path')
-        vals.append(esc(path))
+        vals.append(esc(path, 'path'))
     if 'alpn' in hosts_cols:
         cols.append('alpn')
-        vals.append(esc(h.get('alpn') or ''))
+        vals.append(esc(h.get('alpn', ''), 'alpn'))
     if 'allowinsecure' in hosts_cols:
         cols.append('allowinsecure')
         vals.append(str(1 if h.get('allowinsecure') else 0))
@@ -959,11 +965,11 @@ for h in data.get('hosts') or []:
         vals.append(str(1 if h.get('random_user_agent') else 0))
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Users - REBECCA COMPATIBILITY FIX (KEY/TOKEN)
+# Users
 for u in data.get('users') or []:
     if not u.get('id'): continue
-    uname = str(u.get('username') or '').replace('@', '_at_').replace('.', '_dot_')
-    key = u.get('key') or u.get('uuid') or u.get('subscription_key') or u.get('sub_id') or ''
+    uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
+    key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     status = u.get('status', 'active')
     if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
     svc = u.get('service_id') or 1
@@ -973,10 +979,8 @@ for u in data.get('users') or []:
     vals = [str(u['id']), esc(uname), f"'{status}'", str(int(u.get('used_traffic') or 0)), 
             str(u.get('admin_id') or 1), str(svc), created]
     user_key_col = None
-    if 'key' in users_cols:
-        user_key_col = '`key`'
-    elif 'token' in users_cols:
-        user_key_col = 'token'
+    if 'key' in users_cols: user_key_col = '`key`'
+    elif 'token' in users_cols: user_key_col = 'token'
     if user_key_col:
         cols.append(user_key_col)
         vals.append(esc(key))
@@ -988,7 +992,7 @@ for u in data.get('users') or []:
         vals.append(expire)
     if 'note' in users_cols:
         cols.append('note')
-        vals.append(esc(u.get('note') or ''))
+        vals.append(esc(u.get('note', '')))
     if 'lifetime_used_traffic' in users_cols:
         cols.append('lifetime_used_traffic')
         vals.append(str(int(u.get('lifetime_used_traffic') or 0)))
@@ -1005,7 +1009,7 @@ for p in data.get('proxies') or []:
         try: settings = json.loads(settings)
         except: pass
     settings = fix_path(settings)
-    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type') or '')}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
+    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
 
 # Relations
 for sh in data.get('service_hosts') or []:
@@ -1026,172 +1030,366 @@ for c in data.get('core_configs') or []:
     if not c.get('id'): continue
     cfg = fix_path(c.get('config', {}))
     created = ts(c.get('created_at')) if ts(c.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES ({c['id']}, {esc(c.get('name') or 'default')}, {esc_json(cfg)}, {created}) ON DUPLICATE KEY UPDATE config=VALUES(config);")
+    sql.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created}) ON DUPLICATE KEY UPDATE config=VALUES(config);")
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
-with open(sql_file, 'w') as f: f.write('\n'.join(sql))
+with open(sql_file, 'w') as f:
+    f.write('\n'.join(sql))
 print(f"Generated {len(sql)} statements")
 PYIMPORT
 
     rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$"
-    if [ ! -s "$sql_file" ]; then merr "SQL generation failed"; return 1; fi
+
+    if [ ! -s "$sql_file" ]; then
+        merr "SQL generation failed"
+        return 1
+    fi
+
     minfo "Importing..."
-    local result; result=$(run_mysql_file "$sql_file" 2>&1)
+    local result
+    result=$(run_mysql_file "$sql_file" 2>&1)
     rm -f "$sql_file"
-    if echo "$result" | grep -qi "error"; then merr "Import error: $(echo "$result" | grep -i error | head -1)"; return 1; fi
+
+    if echo "$result" | grep -qi "error"; then
+        merr "Import error: $(echo "$result" | grep -i error | head -1)"
+        return 1
+    fi
+
     minfo "Fixing AUTO_INCREMENT..."
     local fix_sql="/tmp/mrm_fix_$$.sql"
     cat > "$fix_sql" << 'FIXSQL'
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM admins);
-SET @s = CONCAT('ALTER TABLE admins AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE admins AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM users);
-SET @s = CONCAT('ALTER TABLE users AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE users AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM proxies);
-SET @s = CONCAT('ALTER TABLE proxies AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE proxies AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM hosts);
-SET @s = CONCAT('ALTER TABLE hosts AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE hosts AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM nodes);
-SET @s = CONCAT('ALTER TABLE nodes AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE nodes AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM services);
-SET @s = CONCAT('ALTER TABLE services AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE services AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM inbounds);
-SET @s = CONCAT('ALTER TABLE inbounds AUTO_INCREMENT = ', @m); PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @s = CONCAT('ALTER TABLE inbounds AUTO_INCREMENT = ', @m);
+PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 FIXSQL
     run_mysql_file "$fix_sql" >/dev/null 2>&1
     rm -f "$fix_sql"
+
     mok "Import complete"
     return 0
 }
 
 #==============================================================================
-# VERIFICATION (SMART SCHEMA AWARE)
+# VERIFICATION
 #==============================================================================
 
 verify_migration() {
     ui_header "VERIFICATION"
+
     local admins users ukeys proxies puuid hosts nodes svcs
-    local user_key_col; user_key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
-    [ -z "$user_key_col" ] && user_key_col="key"
+
+    # Detect user key column for counting
+    local key_col
+    key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
+    [ -z "$key_col" ] && key_col="key"
+
     admins=$(run_mysql_query "SELECT COUNT(*) FROM admins;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     users=$(run_mysql_query "SELECT COUNT(*) FROM users;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
-    ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`$user_key_col\` IS NOT NULL AND \`$user_key_col\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
+    ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`$key_col\` IS NOT NULL AND \`$key_col\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     proxies=$(run_mysql_query "SELECT COUNT(*) FROM proxies;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     puuid=$(run_mysql_query "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     hosts=$(run_mysql_query "SELECT COUNT(*) FROM hosts;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     nodes=$(run_mysql_query "SELECT COUNT(*) FROM nodes;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     svcs=$(run_mysql_query "SELECT COUNT(*) FROM services;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
+
     printf "  %-22s ${GREEN}%s${NC}\n" "Admins:" "${admins:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Users:" "${users:-0}"
-    printf "  %-22s ${GREEN}%s${NC} ← subscriptions (col: $user_key_col)\n" "Users with Key:" "${ukeys:-0}"
+    printf "  %-22s ${GREEN}%s${NC} ← subscriptions (col: $key_col)\n" "Users with Key:" "${ukeys:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Proxies:" "${proxies:-0}"
     printf "  %-22s ${GREEN}%s${NC} ← configs\n" "Proxies with UUID:" "${puuid:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Hosts:" "${hosts:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Nodes:" "${nodes:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Services:" "${svcs:-0}"
     echo ""
-    if [ "${users:-0}" -gt 0 ]; then
-        [ "${ukeys:-0}" -eq 0 ] && mwarn "No keys - check column $user_key_col"
-        [ "${proxies:-0}" -eq 0 ] && mwarn "No proxies found"
+
+    local err=0
+    if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
+        [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { mwarn "No keys - check column $key_col"; }
+        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - check source database proxies table"; }
     fi
-    [ "${hosts:-0}" -eq 0 ] && { merr "CRITICAL: No hosts!"; return 1; }
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n  ✓ Migration successful\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    return 0
+    [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
+
+    if [ $err -eq 0 ]; then
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}  ✓ Migration successful${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
+
+    return $err
 }
+
+#==============================================================================
+# SQLITE MIGRATION
+#==============================================================================
 
 migrate_sqlite_to_mysql() {
     MYSQL_CONTAINER=$(find_mysql_container)
-    local sqlite_db; sqlite_db="$(get_data_dir "$SRC")/db.sqlite3"
-    [ ! -f "$sqlite_db" ] || [ -z "$MYSQL_CONTAINER" ] && { merr "Source or Target DB not found"; return 1; }
+    local sdata sqlite_db
+    sdata=$(get_data_dir "$SRC")
+    sqlite_db="$sdata/db.sqlite3"
+
+    [ ! -f "$sqlite_db" ] && { merr "SQLite not found: $sqlite_db"; return 1; }
+    [ -z "$MYSQL_CONTAINER" ] && { merr "MySQL not found"; return 1; }
+
     ui_header "SQLITE → MYSQL"
-    command -v sqlite3 &>/dev/null || apt-get install -y sqlite3 >/dev/null 2>&1
+    command -v sqlite3 &>/dev/null || {
+        if command -v apt-get &>/dev/null; then
+            apt-get install -y sqlite3 >/dev/null 2>&1
+        elif command -v yum &>/dev/null; then
+            yum install -y sqlite >/dev/null 2>&1
+        fi
+    }
+
+    minfo "Exporting SQLite..."
     local export_file="/tmp/mrm_sqlite_$$.json"
-    safe_write "$sqlite_db" > "/tmp/mrm_sqlitedb_$$"; safe_write "$export_file" > "/tmp/mrm_expfile_$$"
+    safe_write "$sqlite_db" > "/tmp/mrm_sqlitedb_$$"
+    safe_write "$export_file" > "/tmp/mrm_expfile_$$"
+
     python3 << 'SQLITEEXP'
-import sqlite3, json, os
+import sqlite3
+import json
+import os
 ppid = os.getppid()
 with open(f"/tmp/mrm_sqlitedb_{ppid}", "r") as f: sqlite_db = f.read().strip()
 with open(f"/tmp/mrm_expfile_{ppid}", "r") as f: export_file = f.read().strip()
-conn = sqlite3.connect(sqlite_db); conn.row_factory = sqlite3.Row; cur = conn.cursor()
+conn = sqlite3.connect(sqlite_db)
+conn.row_factory = sqlite3.Row
+cur = conn.cursor()
 cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
 tables = [r[0] for r in cur.fetchall()]
-data = {}; table_list = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 'service_hosts', 'service_inbounds', 'user_inbounds', 'nodes', 'node_inbounds', 'core_configs']
+data = {}
+table_list = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services',
+              'service_hosts', 'service_inbounds', 'user_inbounds',
+              'nodes', 'node_inbounds', 'core_configs']
 for t in table_list:
     if t in tables:
-        try: cur.execute(f"SELECT * FROM {t}"); data[t] = [dict(r) for r in cur.fetchall()]
+        try:
+            cur.execute(f"SELECT * FROM {t}")
+            data[t] = [dict(r) for r in cur.fetchall()]
         except: data[t] = []
     else: data[t] = []
-data['excluded_inbounds'] = []; conn.close()
+data['excluded_inbounds'] = []
+conn.close()
 with open(export_file, 'w') as f: json.dump(data, f, default=str)
 SQLITEEXP
+
     rm -f "/tmp/mrm_sqlitedb_$$" "/tmp/mrm_expfile_$$"
-    wait_mysql && wait_rebecca_tables && setup_jwt && import_to_mysql "$export_file"
-    rm -f "$export_file" && verify_migration
+    wait_mysql || return 1
+    wait_rebecca_tables || return 1
+    setup_jwt
+    import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
+    rm -f "$export_file"
+    verify_migration
+    return $?
 }
+
+#==============================================================================
+# MAIN MIGRATION
+#==============================================================================
 
 migrate_pg_to_mysql() {
-    PG_CONTAINER=$(find_pg_container "$SRC"); MYSQL_CONTAINER=$(find_mysql_container)
-    [ -z "$PG_CONTAINER" ] || [ -z "$MYSQL_CONTAINER" ] && { merr "Containers not found"; return 1; }
+    PG_CONTAINER=$(find_pg_container "$SRC")
+    MYSQL_CONTAINER=$(find_mysql_container)
+
+    [ -z "$PG_CONTAINER" ] && { merr "PostgreSQL not found"; return 1; }
+    [ -z "$MYSQL_CONTAINER" ] && { merr "MySQL not found"; return 1; }
+
     ui_header "POSTGRESQL → MYSQL"
-    wait_mysql && wait_rebecca_tables
+    minfo "Source: $PG_CONTAINER"
+    minfo "Target: $MYSQL_CONTAINER"
+
+    wait_mysql || return 1
+    wait_rebecca_tables || return 1
+
     local export_file="/tmp/mrm_export_$$.json"
-    export_postgresql "$export_file" && setup_jwt && import_to_mysql "$export_file"
-    rm -f "$export_file" && verify_migration
+    export_postgresql "$export_file" || return 1
+    setup_jwt
+    import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
+    rm -f "$export_file"
+    verify_migration
+    return $?
 }
 
+#==============================================================================
+# ORCHESTRATION
+#==============================================================================
+
 stop_old() {
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "pasarguard|marzban" | grep -v rebecca | xargs -I {} docker stop {} 2>/dev/null
+    minfo "Stopping old panels..."
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -iE "pasarguard|marzban" | grep -v rebecca | while read -r c; do
+        docker stop "$c" 2>/dev/null
+    done
 }
 
 do_full() {
-    migration_init; clear; ui_header "MRM MIGRATION V12.2"
-    SRC=$(detect_source_panel); [ -z "$SRC" ] && { merr "No source"; mpause; return 1; }
-    SOURCE_PANEL_TYPE=$(basename "$SRC"); SOURCE_DB_TYPE=$(detect_db_type "$SRC")
-    echo -e "  Source: ${YELLOW}$SOURCE_PANEL_TYPE${NC} ($SRC)\n  DB:     ${YELLOW}$SOURCE_DB_TYPE${NC}\n  Target: ${GREEN}Rebecca${NC}\n"
+    migration_init
+    clear
+    ui_header "MRM MIGRATION V12.2"
+
+    SRC=$(detect_source_panel)
+    [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
+
+    SOURCE_DB_TYPE=$(detect_db_type "$SRC")
+    local sdata
+    sdata=$(get_data_dir "$SRC")
+
+    echo -e "  Source: ${YELLOW}$SOURCE_PANEL_TYPE${NC} ($SRC)"
+    echo -e "  DB:     ${YELLOW}$SOURCE_DB_TYPE${NC}"
+    echo -e "  Target: ${GREEN}Rebecca${NC}"
+    echo ""
+
+    [ "$SOURCE_DB_TYPE" = "unknown" ] && { merr "Unknown DB"; mpause; return 1; }
     [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca; return 1; }
+
     ui_confirm "Start?" "y" || return 0
+
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
-    start_source_panel "$SRC" && (cd "$TGT" && docker compose down) &>/dev/null
-    copy_data "$(get_data_dir "$SRC")" "/var/lib/rebecca" && install_xray "/var/lib/rebecca" "$(get_data_dir "$SRC")" && generate_env "$SRC" "$TGT"
+
+    minfo "Starting source..."
+    start_source_panel "$SRC" || { mpause; return 1; }
+
+    minfo "Stopping Rebecca..."
+    (cd "$TGT" && docker compose down) &>/dev/null
+
+    minfo "Copying data..."
+    copy_data "$sdata" "/var/lib/rebecca"
+
+    minfo "Installing Xray..."
+    install_xray "/var/lib/rebecca" "$sdata"
+
+    minfo "Generating config..."
+    generate_env "$SRC" "$TGT"
+
+    minfo "Starting Rebecca..."
     (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
-    minfo "Initializing Rebecca (60s)..."; sleep 60
-    local rc=1; [ "$SOURCE_DB_TYPE" = "postgresql" ] && migrate_pg_to_mysql && rc=0 || { [ "$SOURCE_DB_TYPE" = "sqlite" ] && migrate_sqlite_to_mysql && rc=0; }
-    (cd "$TGT" && docker compose restart) &>/dev/null; sleep 10; stop_old
+    minfo "Initializing Rebecca (60s)..."
+    sleep 60
+
+    minfo "Migrating database..."
+    local rc=0
+    case "$SOURCE_DB_TYPE" in
+        postgresql) migrate_pg_to_mysql; rc=$? ;;
+        sqlite)     migrate_sqlite_to_mysql; rc=$? ;;
+        *)          merr "Unsupported: $SOURCE_DB_TYPE"; rc=1 ;;
+    esac
+
+    minfo "Restarting..."
+    (cd "$TGT" && docker compose restart) &>/dev/null
+    sleep 10
+    stop_old
+
+    echo ""
     ui_header "COMPLETE"
-    [ $rc -eq 0 ] && echo -e "  ${GREEN}✓ Ready! Login with $SOURCE_PANEL_TYPE credentials${NC}" || mwarn "Check logs"
-    migration_cleanup; mpause
-}
+    [ $rc -eq 0 ] && echo -e "  ${GREEN}✓ Ready! Login with $SOURCE_PANEL_TYPE credentials${NC}" || mwarn "Check errors above"
 
-do_fix() {
-    clear; ui_header "FIX"; [ -d "/opt/rebecca" ] || { merr "Rebecca not found"; mpause; return 1; }
-    TGT="/opt/rebecca"; SRC=$(detect_source_panel); [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
-    SOURCE_PANEL_TYPE=$(basename "$SRC"); SOURCE_DB_TYPE=$(detect_db_type "$SRC"); MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
-    ui_confirm "Re-import from $SOURCE_PANEL_TYPE?" "y" || return 0
-    start_source_panel "$SRC"; (cd "$TGT" && docker compose up -d) &>/dev/null; sleep 60; MYSQL_CONTAINER=$(find_mysql_container)
-    [ "$SOURCE_DB_TYPE" = "postgresql" ] && migrate_pg_to_mysql || migrate_sqlite_to_mysql
-    (cd "$TGT" && docker compose restart) &>/dev/null; stop_old; mok "Done"; mpause
-}
-
-do_rollback() {
-    clear; ui_header "ROLLBACK"; sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    [ -z "$sp" ] || [ ! -d "$sp" ] && { merr "No source"; mpause; return 1; }
-    ui_confirm "Stop Rebecca, Start $sp?" "n" || return 0
-    (cd /opt/rebecca && docker compose down) &>/dev/null; (cd "$sp" && docker compose up -d); mok "Done"; mpause
-}
-
-do_status() {
-    clear; ui_header "STATUS"; docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | head -12
-    MYSQL_CONTAINER=$(find_mysql_container); MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
-    [ -n "$MYSQL_CONTAINER" ] && { echo -e "${CYAN}DB Statistics:${NC}"; run_mysql_query "SELECT 'Admins' t, COUNT(*) c FROM admins UNION SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Hosts', COUNT(*) FROM hosts;"; }
+    migration_cleanup
     mpause
 }
 
-do_logs() { clear; ui_header "LOGS"; [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRATION_LOG" || echo "No logs"; mpause; }
+do_fix() {
+    clear
+    ui_header "FIX"
+
+    [ -d "/opt/rebecca" ] || { merr "Rebecca not found"; mpause; return 1; }
+    TGT="/opt/rebecca"
+    SRC=$(detect_source_panel)
+    [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
+
+    SOURCE_DB_TYPE=$(detect_db_type "$SRC")
+    MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
+
+    ui_confirm "Re-import from $SRC?" "y" || return 0
+
+    start_source_panel "$SRC"
+    (cd "$TGT" && docker compose up -d) &>/dev/null
+    sleep 60
+
+    MYSQL_CONTAINER=$(find_mysql_container)
+    case "$SOURCE_DB_TYPE" in
+        postgresql) migrate_pg_to_mysql ;;
+        sqlite)     migrate_sqlite_to_mysql ;;
+    esac
+
+    (cd "$TGT" && docker compose restart) &>/dev/null
+    stop_old
+    mok "Done"
+    mpause
+}
+
+do_rollback() {
+    clear
+    ui_header "ROLLBACK"
+    local sp; sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
+    [ -z "$sp" ] || [ ! -d "$sp" ] && { merr "No source"; mpause; return 1; }
+    ui_confirm "Stop Rebecca, Start $sp?" "n" || return 0
+    (cd /opt/rebecca && docker compose down) &>/dev/null
+    (cd "$sp" && docker compose up -d)
+    mok "Done"
+    mpause
+}
+
+do_status() {
+    clear
+    ui_header "STATUS"
+    docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | head -12
+    echo ""
+    MYSQL_CONTAINER=$(find_mysql_container)
+    MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
+    [ -n "$MYSQL_CONTAINER" ] && [ -n "$MYSQL_PASS" ] && {
+        echo -e "${CYAN}Database Statistics:${NC}"
+        run_mysql_query "SELECT 'Admins' t, COUNT(*) c FROM admins UNION SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Hosts', COUNT(*) FROM hosts;"
+    }
+    mpause
+}
+
+do_logs() {
+    clear
+    ui_header "LOGS"
+    [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRATION_LOG" || echo "No logs"
+    mpause
+}
+
+#==============================================================================
+# MAIN MENU
+#==============================================================================
 
 migrator_menu() {
     while true; do
-        clear; ui_header "MRM MIGRATION V12.2"
-        echo -e "  1) Full Migration\n  2) Fix Current\n  3) Rollback\n  4) Status\n  5) Logs\n  0) Back\n"
+        clear
+        ui_header "MRM MIGRATION V12.2"
+        echo "  1) Full Migration"
+        echo "  2) Fix Current"
+        echo "  3) Rollback"
+        echo "  4) Status"
+        echo "  5) Logs"
+        echo "  0) Back"
+        echo ""
         read -p "Select: " opt
-        case "$opt" in 1) do_full ;; 2) do_fix ;; 3) do_rollback ;; 4) do_status ;; 5) do_logs ;; 0) migration_cleanup; return 0 ;; esac
+        case "$opt" in
+            1) do_full ;;
+            2) do_fix ;;
+            3) do_rollback ;;
+            4) do_status ;;
+            5) do_logs ;;
+            0) migration_cleanup; return 0 ;;
+        esac
     done
 }
 
