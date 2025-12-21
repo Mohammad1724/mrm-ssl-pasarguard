@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.0 (SCHEMA COMPATIBILITY FIX)
+# MRM Migration Tool - V12.1 (SCHEMA & VERIFICATION FIX)
 #==============================================================================
 
 set -o pipefail
@@ -1115,17 +1115,22 @@ FIXSQL
 }
 
 #==============================================================================
-# VERIFICATION
+# VERIFICATION (SMART SCHEMA AWARE)
 #==============================================================================
 
 verify_migration() {
     ui_header "VERIFICATION"
 
     local admins users ukeys proxies puuid hosts nodes svcs
+    
+    # Determine user key column name (key or token)
+    local user_key_col
+    user_key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
+    [ -z "$user_key_col" ] && user_key_col="key"
 
     admins=$(run_mysql_query "SELECT COUNT(*) FROM admins;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     users=$(run_mysql_query "SELECT COUNT(*) FROM users;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
-    ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`key\` IS NOT NULL AND \`key\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
+    ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`$user_key_col\` IS NOT NULL AND \`$user_key_col\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     proxies=$(run_mysql_query "SELECT COUNT(*) FROM proxies;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     puuid=$(run_mysql_query "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     hosts=$(run_mysql_query "SELECT COUNT(*) FROM hosts;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
@@ -1134,7 +1139,7 @@ verify_migration() {
 
     printf "  %-22s ${GREEN}%s${NC}\n" "Admins:" "${admins:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Users:" "${users:-0}"
-    printf "  %-22s ${GREEN}%s${NC} ← subscriptions\n" "Users with Key:" "${ukeys:-0}"
+    printf "  %-22s ${GREEN}%s${NC} ← subscriptions (col: $user_key_col)\n" "Users with Key:" "${ukeys:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Proxies:" "${proxies:-0}"
     printf "  %-22s ${GREEN}%s${NC} ← configs\n" "Proxies with UUID:" "${puuid:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Hosts:" "${hosts:-0}"
@@ -1145,8 +1150,13 @@ verify_migration() {
     local err=0
 
     if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
-        [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { mwarn "No keys - check if users have subscription keys"; }
-        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - may need manual config"; }
+        if [ "${ukeys:-0}" -eq 0 ] 2>/dev/null; then
+            mwarn "No keys - check if users have subscription keys in column $user_key_col"
+        fi
+        if [ "${proxies:-0}" -eq 0 ] 2>/dev/null; then
+             # Try to see if proxies are actually present but not in proxies table
+             mwarn "No proxies found in proxies table"
+        fi
     fi
     [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
 
