@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.3 (NODE UPLINK/DOWNLINK FIX)
+# MRM Migration Tool - V12.4 (ENV PARSER FIX)
 #==============================================================================
 
 set -o pipefail
@@ -111,7 +111,7 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING
+# SAFE ENV VAR READING (FIXED FOR SPACES)
 #==============================================================================
 
 read_env_var() {
@@ -119,7 +119,8 @@ read_env_var() {
     [ -f "$file" ] || return 1
 
     local line value
-    line=$(grep -E "^${key}=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
+    # FIXED: Regex now accepts spaces around '=' (e.g., KEY = VALUE)
+    line=$(grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
     [ -z "$line" ] && return 1
 
     value="${line#*=}"
@@ -784,7 +785,7 @@ users_cols = set(read_file("userscols").split(',')) if read_file("userscols") el
 
 def esc(v, col_name=None):
     if v is None:
-        # Schema awareness: return empty string for NOT NULL columns
+        # Schema awareness: if column is NOT NULL in MySQL, use empty string
         if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint'):
             return "''"
         return "NULL"
@@ -927,7 +928,6 @@ for n in data.get('nodes') or []:
     if 'message' in nodes_cols:
         cols.append('message')
         vals.append(esc(n.get('message')))
-    # FIX: uplink and downlink must be integers, not NULL
     if 'uplink' in nodes_cols:
         cols.append('uplink')
         vals.append(str(int(n.get('uplink') or 0)))
@@ -1131,7 +1131,7 @@ verify_migration() {
 
     local admins users ukeys proxies puuid hosts nodes svcs
 
-    # Detect subscription key column dynamically
+    # Detect subscription key column dynamically for count
     local key_col
     key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
     [ -z "$key_col" ] && key_col="key"
@@ -1300,7 +1300,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V12.3"
+    ui_header "MRM MIGRATION V12.4"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1327,27 +1327,27 @@ do_full() {
 
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
 
-    minfo "[1/7] Starting source..."
+    minfo "Starting source..."
     start_source_panel "$SRC" || { mpause; return 1; }
 
-    minfo "[2/7] Stopping Rebecca..."
+    minfo "Stopping Rebecca..."
     (cd "$TGT" && docker compose down) &>/dev/null
 
-    minfo "[3/7] Copying files..."
+    minfo "Copying data..."
     copy_data "$sdata" "/var/lib/rebecca"
 
-    minfo "[4/7] Installing Xray..."
+    minfo "Installing Xray..."
     install_xray "/var/lib/rebecca" "$sdata"
 
-    minfo "[5/7] Generating config..."
+    minfo "Generating config..."
     generate_env "$SRC" "$TGT"
 
-    minfo "[6/7] Starting Rebecca..."
+    minfo "Starting Rebecca..."
     (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
-    minfo "Waiting 60s for Rebecca to initialize..."
+    minfo "Initializing Rebecca (60s)..."
     sleep 60
 
-    minfo "[7/7] Migrating database..."
+    minfo "Migrating database..."
     local rc=0
     case "$SOURCE_DB_TYPE" in
         postgresql) migrate_pg_to_mysql; rc=$? ;;
@@ -1427,7 +1427,7 @@ do_status() {
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
 
     [ -n "$MYSQL_CONTAINER" ] && [ -n "$MYSQL_PASS" ] && {
-        echo -e "${CYAN}Database:${NC}"
+        echo -e "${CYAN}Database Statistics:${NC}"
         run_mysql_query "SELECT 'Admins' t, COUNT(*) c FROM admins UNION SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Hosts', COUNT(*) FROM hosts;"
     }
     mpause
@@ -1447,7 +1447,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V12.3"
+        ui_header "MRM MIGRATION V12.4"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
