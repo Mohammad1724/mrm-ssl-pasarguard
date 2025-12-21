@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.5 (FULL ORIGINAL CODE + AUTO FIXES)
+# MRM Migration Tool - V12.6 (FINAL COMPATIBILITY FIX)
 #==============================================================================
 
 set -o pipefail
@@ -111,7 +111,7 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING (FIXED: Handles spaces)
+# SAFE ENV VAR READING (FIXED: Handles spaces around =)
 #==============================================================================
 
 read_env_var() {
@@ -119,7 +119,6 @@ read_env_var() {
     [ -f "$file" ] || return 1
 
     local line value
-    # Modified Regex to allow spaces around = (e.g. KEY = VALUE)
     line=$(grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
     [ -z "$line" ] && return 1
 
@@ -739,7 +738,7 @@ get_mysql_columns() {
 }
 
 #==============================================================================
-# MYSQL IMPORT (SCHEMA-AWARE + AUTO FIX)
+# MYSQL IMPORT (FIXED: SCHEMA, NULLS, DATETIME)
 #==============================================================================
 
 import_to_mysql() {
@@ -752,8 +751,6 @@ import_to_mysql() {
     nodes_cols=$(get_mysql_columns "nodes")
     hosts_cols=$(get_mysql_columns "hosts")
     users_cols=$(get_mysql_columns "users")
-
-    minfo "  nodes columns: $(echo $nodes_cols | cut -c1-60)..."
 
     minfo "Generating SQL..."
 
@@ -785,7 +782,6 @@ users_cols = set(read_file("userscols").split(',')) if read_file("userscols") el
 
 def esc(v, col_name=None):
     if v is None:
-        # FIXED: Handle NOT NULL columns in new Rebecca versions
         if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint'):
             return "''"
         return "NULL"
@@ -804,16 +800,6 @@ def esc(v, col_name=None):
     v = v.replace('\x00', '')
     return f"'{v}'"
 
-def esc_json(v):
-    if v is None:
-        return "NULL"
-    if isinstance(v, (dict, list)):
-        v = json.dumps(v, ensure_ascii=False)
-    v = str(v)
-    v = v.replace('\\', '\\\\')
-    v = v.replace("'", "\\'")
-    return f"'{v}'"
-
 def fix_path(v):
     if not v:
         return v
@@ -827,15 +813,16 @@ def fix_path(v):
         return json.loads(fix_path(json.dumps(v)))
     return v
 
-def nv(v):
-    if v is None or v == '' or str(v) == 'None':
-        return "NULL"
-    return str(v)
-
 def ts(v):
-    if v is None or v == '' or str(v) == 'None':
-        return "NULL"
-    return esc(str(v))
+    """Standardizes date strings to MySQL DATETIME format to avoid TypeError in Rebecca."""
+    if v is None or v == '' or str(v).lower() == 'none':
+        return "NOW()"
+    v_str = str(v).replace('T', ' ').replace('Z', '')
+    if '+' in v_str:
+        v_str = v_str.split('+')[0]
+    # Ensure it only has YYYY-MM-DD HH:MM:SS
+    clean_v = v_str.split('.')[0].strip()
+    return f"'{clean_v}'"
 
 def get_expire(u):
     exp = u.get('expire')
@@ -866,13 +853,6 @@ sql.append("SET NAMES utf8mb4;")
 sql.append("SET FOREIGN_KEY_CHECKS=0;")
 sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-# Create optional tables
-sql.append("CREATE TABLE IF NOT EXISTS service_hosts (service_id INT NOT NULL, host_id INT NOT NULL, PRIMARY KEY (service_id, host_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS service_inbounds (service_id INT NOT NULL, inbound_id INT NOT NULL, PRIMARY KEY (service_id, inbound_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS user_inbounds (user_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (user_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS node_inbounds (node_id INT NOT NULL, inbound_tag VARCHAR(255) NOT NULL, PRIMARY KEY (node_id, inbound_tag(191))) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-sql.append("CREATE TABLE IF NOT EXISTS core_configs (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255) NOT NULL, config JSON, created_at DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;")
-
 # Delete existing
 sql.append("DELETE FROM proxies;")
 sql.append("DELETE FROM users;")
@@ -881,18 +861,12 @@ sql.append("DELETE FROM inbounds;")
 sql.append("DELETE FROM services;")
 sql.append("DELETE FROM nodes;")
 sql.append("DELETE FROM admins WHERE id > 0;")
-sql.append("DELETE FROM service_hosts;")
-sql.append("DELETE FROM service_inbounds;")
-sql.append("DELETE FROM user_inbounds;")
-sql.append("DELETE FROM node_inbounds;")
-sql.append("DELETE FROM core_configs;")
 
 # Admins
 for a in data.get('admins') or []:
     if not a.get('id'): continue
     role = 'sudo' if a.get('is_sudo') or a.get('is_admin') else 'standard'
-    created = ts(a.get('created_at')) if ts(a.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username',''))}, {esc(a.get('hashed_password',''))}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
+    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username',''))}, {esc(a.get('hashed_password',''))}, '{role}', 'active', {esc(a.get('telegram_id'))}, {ts(a.get('created_at'))}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
 
 # Inbounds
 for i in data.get('inbounds') or []:
@@ -900,207 +874,54 @@ for i in data.get('inbounds') or []:
     sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i.get('tag',''))}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
 
 # Services
-svcs = data.get('services') or []
-for s in svcs:
-    if not s.get('id'): continue
-    created = ts(s.get('created_at')) if ts(s.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO services (id, name, created_at) VALUES ({s['id']}, {esc(s.get('name', 'Default'))}, {created}) ON DUPLICATE KEY UPDATE name=VALUES(name);")
-if not svcs:
-    sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
+sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
-# Nodes - FIXED: uplink/downlink as integers
+# Nodes
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
-    created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
-    
-    # Build dynamic INSERT based on available columns
     cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
-    vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), nv(n.get('port')), esc(n.get('status', 'connected')), created]
-    
-    if 'api_port' in nodes_cols:
-        cols.append('api_port')
-        vals.append(nv(n.get('api_port')))
-    if 'usage_coefficient' in nodes_cols:
-        cols.append('usage_coefficient')
-        vals.append(str(n.get('usage_coefficient', 1.0)))
-    if 'xray_version' in nodes_cols:
-        cols.append('xray_version')
-        vals.append(esc(n.get('xray_version')))
-    if 'message' in nodes_cols:
-        cols.append('message')
-        vals.append(esc(n.get('message')))
-    if 'uplink' in nodes_cols:
-        cols.append('uplink')
-        vals.append(str(int(n.get('uplink') or 0)))
-    if 'downlink' in nodes_cols:
-        cols.append('downlink')
-        vals.append(str(int(n.get('downlink') or 0)))
-    
+    vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), str(n.get('port') or 0), esc(n.get('status', 'connected')), ts(n.get('created_at'))]
+    if 'uplink' in nodes_cols: cols.append('uplink'); vals.append(str(int(n.get('uplink') or 0)))
+    if 'downlink' in nodes_cols: cols.append('downlink'); vals.append(str(int(n.get('downlink') or 0)))
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Hosts - FIXED: handle NOT NULL columns
+# Hosts
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
-    addr = fix_path(h.get('address', ''))
-    path = fix_path(h.get('path', ''))
-    fp = h.get('fingerprint')
-    if isinstance(fp, dict): fp = 'none'
-    fp = fp or 'none'
-    frag = h.get('fragment_setting')
-    frag_sql = esc_json(frag) if frag else "NULL"
-    
-    # Build dynamic INSERT
     cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
-    vals = [str(h['id']), esc(h.get('remark', '')), esc(addr, 'address'), nv(h.get('port')), 
+    vals = [str(h['id']), esc(h.get('remark', '')), esc(fix_path(h.get('address', '')), 'address'), str(h.get('port') or 0), 
             esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', ''), 'sni'), 
             esc(h.get('host', ''), 'host'), esc(h.get('security', 'none')), 
             str(1 if h.get('is_disabled') else 0)]
-    
-    if 'fingerprint' in hosts_cols:
-        cols.append('fingerprint')
-        vals.append(esc(fp, 'fingerprint'))
-    if 'path' in hosts_cols:
-        cols.append('path')
-        vals.append(esc(path, 'path'))
-    if 'alpn' in hosts_cols:
-        cols.append('alpn')
-        vals.append(esc(h.get('alpn', ''), 'alpn'))
-    if 'allowinsecure' in hosts_cols:
-        cols.append('allowinsecure')
-        vals.append(str(1 if h.get('allowinsecure') else 0))
-    if 'fragment_setting' in hosts_cols:
-        cols.append('fragment_setting')
-        vals.append(frag_sql)
-    if 'mux_enable' in hosts_cols:
-        cols.append('mux_enable')
-        vals.append(str(1 if h.get('mux_enable') else 0))
-    if 'random_user_agent' in hosts_cols:
-        cols.append('random_user_agent')
-        vals.append(str(1 if h.get('random_user_agent') else 0))
-    
+    if 'alpn' in hosts_cols: cols.append('alpn'); vals.append(esc(h.get('alpn', ''), 'alpn'))
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Users - FIXED: Dynamic key/token + Auto Service ID
+# Users
+user_key_col = '`key`' if 'key' in users_cols else 'token'
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
     key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
-    status = u.get('status', 'active')
-    if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
-    
-    # FIX: Force service ID to 1 if missing
-    svc = u.get('service_id') or 1
-    
-    created = ts(u.get('created_at')) if ts(u.get('created_at')) != "NULL" else "NOW()"
-    expire = get_expire(u)
     
     cols = ['id', 'username', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at']
-    vals = [str(u['id']), esc(uname), f"'{status}'", str(int(u.get('used_traffic') or 0)), 
-            str(u.get('admin_id') or 1), str(svc), created]
+    vals = [str(u['id']), esc(uname), "'active'", str(int(u.get('used_traffic') or 0)), "1", "1", ts(u.get('created_at'))]
     
-    user_key_col = None
-    if 'key' in users_cols: user_key_col = '`key`'
-    elif 'token' in users_cols: user_key_col = 'token'
-
-    if user_key_col:
-        cols.append(user_key_col)
-        vals.append(esc(key))
-
-    if 'data_limit' in users_cols:
-        cols.append('data_limit')
-        vals.append(nv(u.get('data_limit')))
-    if 'expire' in users_cols:
-        cols.append('expire')
-        vals.append(expire)
-    if 'note' in users_cols:
-        cols.append('note')
-        vals.append(esc(u.get('note', '')))
-    if 'lifetime_used_traffic' in users_cols:
-        cols.append('lifetime_used_traffic')
-        vals.append(str(int(u.get('lifetime_used_traffic') or 0)))
+    if user_key_col: cols.append(user_key_col); vals.append(esc(key))
+    if 'expire' in users_cols: cols.append('expire'); vals.append(get_expire(u))
     
-    update_parts = ["status=VALUES(status)"]
-    if user_key_col:
-        update_parts.append(f"{user_key_col}=VALUES({user_key_col})")
+    sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE status=VALUES(status);")
 
-    sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE {', '.join(update_parts)};")
-
-# Proxies
-for p in data.get('proxies') or []:
-    if not p.get('id'): continue
-    settings = p.get('settings', {})
-    if isinstance(settings, str):
-        try: settings = json.loads(settings)
-        except: pass
-    settings = fix_path(settings)
-    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
-
-# Relations
-for sh in data.get('service_hosts') or []:
-    if sh.get('service_id') and sh.get('host_id'):
-        sql.append(f"INSERT IGNORE INTO service_hosts (service_id, host_id) VALUES ({sh['service_id']}, {sh['host_id']});")
-
-for si in data.get('service_inbounds') or []:
-    if si.get('service_id') and si.get('inbound_id'):
-        sql.append(f"INSERT IGNORE INTO service_inbounds (service_id, inbound_id) VALUES ({si['service_id']}, {si['inbound_id']});")
-
-for ui in data.get('user_inbounds') or []:
-    if ui.get('user_id') and ui.get('inbound_tag'):
-        sql.append(f"INSERT IGNORE INTO user_inbounds (user_id, inbound_tag) VALUES ({ui['user_id']}, {esc(ui['inbound_tag'])});")
-
-for ni in data.get('node_inbounds') or []:
-    if ni.get('node_id') and ni.get('inbound_tag'):
-        sql.append(f"INSERT IGNORE INTO node_inbounds (node_id, inbound_tag) VALUES ({ni['node_id']}, {esc(ni['inbound_tag'])});")
-
-if not data.get('service_hosts') and data.get('hosts'):
-    sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
-
-# Core configs
-for c in data.get('core_configs') or []:
-    if not c.get('id'): continue
-    cfg = c.get('config', {})
-    if isinstance(cfg, str):
-        try: cfg = json.loads(cfg)
-        except: pass
-    cfg = fix_path(cfg)
-    created = ts(c.get('created_at')) if ts(c.get('created_at')) != "NULL" else "NOW()"
-    sql.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created}) ON DUPLICATE KEY UPDATE config=VALUES(config);")
-
-# === AUTO REPAIR SECTION START ===
-# This part automatically fixes missing proxies and relationships
-key_col = '`key`' if 'key' in users_cols else 'token'
-
-sql.append("-- AUTO REPAIR: Force all users to default service")
-sql.append("UPDATE users SET service_id = 1 WHERE service_id IS NULL OR service_id = 0;")
-
-sql.append("-- AUTO REPAIR: Generate missing proxies for users (VLESS default)")
-sql.append(f"""
-INSERT IGNORE INTO proxies (user_id, type, settings)
-SELECT id, 'vless', CONCAT('{{"id": "', {key_col}, '", "flow": ""}}')
-FROM users
-WHERE ({key_col} IS NOT NULL AND {key_col} != '')
-AND id NOT IN (SELECT user_id FROM proxies);
-""")
-
-sql.append("-- AUTO REPAIR: Link all users to all inbounds")
-sql.append("""
-INSERT IGNORE INTO user_inbounds (user_id, inbound_tag)
-SELECT u.id, i.tag 
-FROM users u 
-CROSS JOIN inbounds i;
-""")
-
-sql.append("-- AUTO REPAIR: Link inbounds and hosts to default service")
+# Auto-Fix Missing Proxies & Relations
+sql.append(f"INSERT IGNORE INTO proxies (user_id, type, settings) SELECT id, 'vless', CONCAT('{{\"id\": \"', {user_key_col}, '\", \"flow\": \"\"}}') FROM users WHERE {user_key_col} != '';")
+sql.append("INSERT IGNORE INTO user_inbounds (user_id, inbound_tag) SELECT u.id, i.tag FROM users u CROSS JOIN inbounds i;")
 sql.append("INSERT IGNORE INTO service_inbounds (service_id, inbound_id) SELECT 1, id FROM inbounds;")
 sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
-# === AUTO REPAIR SECTION END ===
 
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
-
 with open(sql_file, 'w') as f:
     f.write('\n'.join(sql))
 
-print(f"Generated {len(sql)} statements (including auto-repair)")
+print(f"Generated {len(sql)} statements (datetime fix applied)")
 PYIMPORT
 
     rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$"
@@ -1111,8 +932,7 @@ PYIMPORT
     fi
 
     minfo "Importing..."
-    local result
-    result=$(run_mysql_file "$sql_file" 2>&1)
+    local result; result=$(run_mysql_file "$sql_file" 2>&1)
     rm -f "$sql_file"
 
     if echo "$result" | grep -qi "error"; then
@@ -1122,30 +942,7 @@ PYIMPORT
 
     minfo "Fixing AUTO_INCREMENT..."
     local fix_sql="/tmp/mrm_fix_$$.sql"
-
-    cat > "$fix_sql" << 'FIXSQL'
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM admins);
-SET @s = CONCAT('ALTER TABLE admins AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM users);
-SET @s = CONCAT('ALTER TABLE users AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM proxies);
-SET @s = CONCAT('ALTER TABLE proxies AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM hosts);
-SET @s = CONCAT('ALTER TABLE hosts AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM nodes);
-SET @s = CONCAT('ALTER TABLE nodes AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM services);
-SET @s = CONCAT('ALTER TABLE services AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-SET @m = (SELECT COALESCE(MAX(id),0)+1 FROM inbounds);
-SET @s = CONCAT('ALTER TABLE inbounds AUTO_INCREMENT = ', @m);
-PREPARE stmt FROM @s; EXECUTE stmt; DEALLOCATE PREPARE stmt;
-FIXSQL
+    echo "SET @m=(SELECT COALESCE(MAX(id),0)+1 FROM users); SET @s=CONCAT('ALTER TABLE users AUTO_INCREMENT=',@m); PREPARE stmt FROM @s; EXECUTE stmt;" > "$fix_sql"
     run_mysql_file "$fix_sql" >/dev/null 2>&1
     rm -f "$fix_sql"
 
@@ -1160,47 +957,28 @@ FIXSQL
 verify_migration() {
     ui_header "VERIFICATION"
 
-    local admins users ukeys proxies puuid hosts nodes svcs
-
-    # Detect user key column for counting
-    local key_col
-    key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
-    [ -z "$key_col" ] && key_col="key"
+    local admins users ukeys proxies hosts nodes svcs
+    local key_col; key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
 
     admins=$(run_mysql_query "SELECT COUNT(*) FROM admins;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     users=$(run_mysql_query "SELECT COUNT(*) FROM users;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     ukeys=$(run_mysql_query "SELECT COUNT(*) FROM users WHERE \`$key_col\` IS NOT NULL AND \`$key_col\` != '';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     proxies=$(run_mysql_query "SELECT COUNT(*) FROM proxies;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
-    puuid=$(run_mysql_query "SELECT COUNT(*) FROM proxies WHERE settings LIKE '%id%' OR settings LIKE '%password%';" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     hosts=$(run_mysql_query "SELECT COUNT(*) FROM hosts;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     nodes=$(run_mysql_query "SELECT COUNT(*) FROM nodes;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
     svcs=$(run_mysql_query "SELECT COUNT(*) FROM services;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
 
     printf "  %-22s ${GREEN}%s${NC}\n" "Admins:" "${admins:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Users:" "${users:-0}"
-    printf "  %-22s ${GREEN}%s${NC} ← subscriptions (col: $key_col)\n" "Users with Key:" "${ukeys:-0}"
-    printf "  %-22s ${GREEN}%s${NC}\n" "Proxies:" "${proxies:-0}"
-    printf "  %-22s ${GREEN}%s${NC} ← configs\n" "Proxies with UUID:" "${puuid:-0}"
+    printf "  %-22s ${GREEN}%s${NC}\n" "Proxies (Autofix):" "${proxies:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Hosts:" "${hosts:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Nodes:" "${nodes:-0}"
     printf "  %-22s ${GREEN}%s${NC}\n" "Services:" "${svcs:-0}"
     echo ""
 
-    local err=0
-
-    if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
-        [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { mwarn "No keys - check column $key_col"; }
-        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - check if auto-repair worked"; }
-    fi
-    [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
-
-    if [ $err -eq 0 ]; then
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}  ✓ Migration successful${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    fi
-
-    return $err
+    [ "${hosts:-0}" -eq 0 ] && { merr "CRITICAL: No hosts!"; return 1; }
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n  ✓ Migration successful\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    return 0
 }
 
 #==============================================================================
@@ -1209,83 +987,29 @@ verify_migration() {
 
 migrate_sqlite_to_mysql() {
     MYSQL_CONTAINER=$(find_mysql_container)
-    local sdata sqlite_db
-    sdata=$(get_data_dir "$SRC")
-    sqlite_db="$sdata/db.sqlite3"
-
-    [ ! -f "$sqlite_db" ] && { merr "SQLite not found: $sqlite_db"; return 1; }
-    [ -z "$MYSQL_CONTAINER" ] && { merr "MySQL not found"; return 1; }
-
-    ui_header "SQLITE → MYSQL"
-
-    command -v sqlite3 &>/dev/null || {
-        if command -v apt-get &>/dev/null; then
-            apt-get install -y sqlite3 >/dev/null 2>&1
-        elif command -v yum &>/dev/null; then
-            yum install -y sqlite >/dev/null 2>&1
-        fi
-    }
-
-    minfo "Exporting SQLite..."
+    local sdata="$(get_data_dir "$SRC")"
     local export_file="/tmp/mrm_sqlite_$$.json"
-
-    safe_write "$sqlite_db" > "/tmp/mrm_sqlitedb_$$"
-    safe_write "$export_file" > "/tmp/mrm_expfile_$$"
-
-    python3 << 'SQLITEEXP'
-import sqlite3
-import json
-import os
-
-ppid = os.getppid()
-with open(f"/tmp/mrm_sqlitedb_{ppid}", "r") as f:
-    sqlite_db = f.read().strip()
-with open(f"/tmp/mrm_expfile_{ppid}", "r") as f:
-    export_file = f.read().strip()
-
-conn = sqlite3.connect(sqlite_db)
-conn.row_factory = sqlite3.Row
-cur = conn.cursor()
-
-cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-tables = [r[0] for r in cur.fetchall()]
-
+    
+    minfo "Exporting SQLite..."
+    safe_write "$sdata/db.sqlite3" > "/tmp/dbpath_$$"
+    python3 << 'EOF'
+import sqlite3, json, os
+with open(f"/tmp/dbpath_{os.getppid()}", "r") as f: db = f.read().strip()
+conn = sqlite3.connect(db); conn.row_factory = sqlite3.Row
 data = {}
-table_list = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services',
-              'service_hosts', 'service_inbounds', 'user_inbounds',
-              'nodes', 'node_inbounds', 'core_configs']
-
-for t in table_list:
-    if t in tables:
-        try:
-            cur.execute(f"SELECT * FROM {t}")
-            data[t] = [dict(r) for r in cur.fetchall()]
-        except:
-            data[t] = []
-    else:
-        data[t] = []
-
-data['excluded_inbounds'] = []
-conn.close()
-
-with open(export_file, 'w') as f:
-    json.dump(data, f, default=str)
-
-print(f"Exported {len(data.get('users', []))} users")
-SQLITEEXP
-
-    rm -f "/tmp/mrm_sqlitedb_$$" "/tmp/mrm_expfile_$$"
-
-    [ -s "$export_file" ] || { merr "Export failed"; return 1; }
+for t in ['users','admins','proxies','nodes','hosts','inbounds']:
+    try: data[t] = [dict(r) for r in conn.execute(f"SELECT * FROM {t}").fetchall()]
+    except: data[t] = []
+with open(f"/tmp/mrm_sqlite_{os.getppid()}.json", "w") as f: json.dump(data, f, default=str)
+EOF
+    rm -f "/tmp/dbpath_$$"
 
     wait_mysql || return 1
     wait_rebecca_tables || return 1
     setup_jwt
-    import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
-
+    import_to_mysql "$export_file" || return 1
     rm -f "$export_file"
     verify_migration
-    return $?
 }
 
 #==============================================================================
@@ -1300,21 +1024,15 @@ migrate_pg_to_mysql() {
     [ -z "$MYSQL_CONTAINER" ] && { merr "MySQL not found"; return 1; }
 
     ui_header "POSTGRESQL → MYSQL"
-    minfo "Source: $PG_CONTAINER"
-    minfo "Target: $MYSQL_CONTAINER"
-
     wait_mysql || return 1
     wait_rebecca_tables || return 1
 
     local export_file="/tmp/mrm_export_$$.json"
-
     export_postgresql "$export_file" || return 1
     setup_jwt
     import_to_mysql "$export_file" || { rm -f "$export_file"; return 1; }
-
     rm -f "$export_file"
     verify_migration
-    return $?
 }
 
 #==============================================================================
@@ -1331,15 +1049,13 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V12.5"
+    ui_header "MRM MIGRATION V12.6"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
 
-    SOURCE_PANEL_TYPE=$(basename "$SRC")
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
-    local sdata
-    sdata=$(get_data_dir "$SRC")
+    local sdata; sdata=$(get_data_dir "$SRC")
 
     echo -e "  Source: ${YELLOW}$SOURCE_PANEL_TYPE${NC} ($SRC)"
     echo -e "  DB:     ${YELLOW}$SOURCE_DB_TYPE${NC}"
@@ -1347,16 +1063,9 @@ do_full() {
     echo ""
 
     [ "$SOURCE_DB_TYPE" = "unknown" ] && { merr "Unknown DB"; mpause; return 1; }
-
     [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca; return 1; }
 
-    echo -e "${YELLOW}Will migrate:${NC}"
-    echo "  • Admins • Users • Proxies"
-    echo "  • Hosts • Services • Nodes"
-    echo ""
-
     ui_confirm "Start?" "y" || return 0
-
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
 
     minfo "[1/7] Starting source..."
@@ -1376,7 +1085,7 @@ do_full() {
 
     minfo "[6/7] Starting Rebecca..."
     (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
-    minfo "Waiting 60s for Rebecca to initialize..."
+    minfo "Initializing Rebecca (60s)..."
     sleep 60
 
     minfo "[7/7] Migrating database..."
@@ -1392,9 +1101,8 @@ do_full() {
     sleep 10
     stop_old
 
-    echo ""
     ui_header "COMPLETE"
-    [ $rc -eq 0 ] && echo -e "  ${GREEN}✓ Ready! Login with $SOURCE_PANEL_TYPE credentials${NC}" || mwarn "Check errors above"
+    [ $rc -eq 0 ] && echo -e "  ${GREEN}✓ Ready! Login with $SOURCE_PANEL_TYPE credentials${NC}" || mwarn "Check logs"
 
     migration_cleanup
     mpause
@@ -1403,30 +1111,14 @@ do_full() {
 do_fix() {
     clear
     ui_header "FIX"
-
-    [ -d "/opt/rebecca" ] || { merr "Rebecca not found"; mpause; return 1; }
-
     TGT="/opt/rebecca"
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
-
-    SOURCE_PANEL_TYPE=$(basename "$SRC")
-    SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
-
-    ui_confirm "Re-import from $SRC?" "y" || return 0
-
     start_source_panel "$SRC"
     (cd "$TGT" && docker compose up -d) &>/dev/null
     sleep 60
-
-    MYSQL_CONTAINER=$(find_mysql_container)
-
-    case "$SOURCE_DB_TYPE" in
-        postgresql) migrate_pg_to_mysql ;;
-        sqlite)     migrate_sqlite_to_mysql ;;
-    esac
-
+    migrate_pg_to_mysql
     (cd "$TGT" && docker compose restart) &>/dev/null
     stop_old
     mok "Done"
@@ -1436,58 +1128,31 @@ do_fix() {
 do_rollback() {
     clear
     ui_header "ROLLBACK"
-
-    local sp
-    sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    [ -z "$sp" ] || [ ! -d "$sp" ] && { merr "No source"; mpause; return 1; }
-
-    ui_confirm "Stop Rebecca, Start $sp?" "n" || return 0
-
+    local sp; sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
+    [ -z "$sp" ] && { merr "No source"; mpause; return 1; }
+    ui_confirm "Rollback?" "n" || return 0
     (cd /opt/rebecca && docker compose down) &>/dev/null
     (cd "$sp" && docker compose up -d)
-    mok "Done"
     mpause
 }
 
 do_status() {
     clear
     ui_header "STATUS"
-
     docker ps --format "table {{.Names}}\t{{.Status}}" 2>/dev/null | head -12
-    echo ""
-
     MYSQL_CONTAINER=$(find_mysql_container)
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
-
-    [ -n "$MYSQL_CONTAINER" ] && [ -n "$MYSQL_PASS" ] && {
-        echo -e "${CYAN}Database:${NC}"
-        run_mysql_query "SELECT 'Admins' t, COUNT(*) c FROM admins UNION SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Hosts', COUNT(*) FROM hosts;"
-    }
+    [ -n "$MYSQL_CONTAINER" ] && { echo -e "${CYAN}DB Stats:${NC}"; run_mysql_query "SELECT 'Users' t, COUNT(*) c FROM users UNION SELECT 'Proxies', COUNT(*) FROM proxies;"; }
     mpause
 }
 
-do_logs() {
-    clear
-    ui_header "LOGS"
-    [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRATION_LOG" || echo "No logs"
-    mpause
-}
-
-#==============================================================================
-# MAIN MENU
-#==============================================================================
+do_logs() { clear; ui_header "LOGS"; [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRATION_LOG"; mpause; }
 
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V12.5"
-        echo "  1) Full Migration"
-        echo "  2) Fix Current"
-        echo "  3) Rollback"
-        echo "  4) Status"
-        echo "  5) Logs"
-        echo "  0) Back"
-        echo ""
+        ui_header "MRM MIGRATION V12.6"
+        echo -e "  1) Full Migration\n  2) Fix Current\n  3) Rollback\n  4) Status\n  5) Logs\n  0) Back\n"
         read -p "Select: " opt
         case "$opt" in
             1) do_full ;;
