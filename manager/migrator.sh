@@ -763,7 +763,7 @@ import_to_mysql() {
     safe_write "$hosts_cols" > "/tmp/mrm_hostscols_$$"
     safe_write "$users_cols" > "/tmp/mrm_userscols_$$"
 
-    python3 << 'PYIMPORT'
+        python3 << 'PYIMPORT'
 import json
 import os
 
@@ -782,9 +782,12 @@ nodes_cols = set(read_file("nodescols").split(',')) if read_file("nodescols") el
 hosts_cols = set(read_file("hostscols").split(',')) if read_file("hostscols") else set()
 users_cols = set(read_file("userscols").split(',')) if read_file("userscols") else set()
 
-def esc(v):
-    if v is None:
-        return "NULL"
+def esc(v, default=''):
+    """Escape value, use default if None/empty"""
+    if v is None or v == '':
+        if default == 'NULL':
+            return "NULL"
+        return f"'{default}'"
     if isinstance(v, bool):
         return "1" if v else "0"
     if isinstance(v, (int, float)):
@@ -824,11 +827,13 @@ def fix_path(v):
     return v
 
 def nv(v):
+    """Nullable value - returns NULL if empty"""
     if v is None or v == '' or str(v) == 'None':
         return "NULL"
     return str(v)
 
 def ts(v):
+    """Timestamp - returns NULL if empty, otherwise escaped string"""
     if v is None or v == '' or str(v) == 'None':
         return "NULL"
     return esc(str(v))
@@ -904,12 +909,11 @@ for s in svcs:
 if not svcs:
     sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
-# Nodes - SCHEMA AWARE (skip certificate if not exists)
+# Nodes
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
     
-    # Build dynamic INSERT based on available columns
     cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
     vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), nv(n.get('port')), esc(n.get('status', 'connected')), created]
     
@@ -921,54 +925,43 @@ for n in data.get('nodes') or []:
         vals.append(str(n.get('usage_coefficient', 1.0)))
     if 'xray_version' in nodes_cols:
         cols.append('xray_version')
-        vals.append(esc(n.get('xray_version')))
+        vals.append(esc(n.get('xray_version', ''), ''))
     if 'message' in nodes_cols:
         cols.append('message')
-        vals.append(esc(n.get('message')))
+        vals.append(esc(n.get('message', ''), 'NULL'))
     
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
-# Hosts
+# Hosts - Use empty string defaults for NOT NULL columns
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
-    addr = fix_path(h.get('address', ''))
-    path = fix_path(h.get('path', ''))
+    addr = fix_path(h.get('address', '')) or ''
+    path = fix_path(h.get('path', '')) or ''
     fp = h.get('fingerprint')
     if isinstance(fp, dict): fp = 'none'
     fp = fp or 'none'
     frag = h.get('fragment_setting')
     frag_sql = esc_json(frag) if frag else "NULL"
     
-    # Build dynamic INSERT
-    cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
-    vals = [str(h['id']), esc(h.get('remark', '')), esc(addr), nv(h.get('port')), 
-            esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', '')), 
-            esc(h.get('host', '')), esc(h.get('security', 'none')), 
-            str(1 if h.get('is_disabled') else 0)]
-    
-    if 'fingerprint' in hosts_cols:
-        cols.append('fingerprint')
-        vals.append(esc(fp))
-    if 'path' in hosts_cols:
-        cols.append('path')
-        vals.append(esc(path))
-    if 'alpn' in hosts_cols:
-        cols.append('alpn')
-        vals.append(esc(h.get('alpn', '')))
-    if 'allowinsecure' in hosts_cols:
-        cols.append('allowinsecure')
-        vals.append(str(1 if h.get('allowinsecure') else 0))
-    if 'fragment_setting' in hosts_cols:
-        cols.append('fragment_setting')
-        vals.append(frag_sql)
-    if 'mux_enable' in hosts_cols:
-        cols.append('mux_enable')
-        vals.append(str(1 if h.get('mux_enable') else 0))
-    if 'random_user_agent' in hosts_cols:
-        cols.append('random_user_agent')
-        vals.append(str(1 if h.get('random_user_agent') else 0))
-    
-    sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    # Base columns with NOT NULL defaults
+    sql.append(f"""INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent) VALUES (
+        {h['id']}, 
+        {esc(h.get('remark', ''))}, 
+        {esc(addr)}, 
+        {nv(h.get('port'))}, 
+        {esc(h.get('inbound_tag') or h.get('tag', ''))}, 
+        {esc(h.get('sni', ''))}, 
+        {esc(h.get('host', ''))}, 
+        {esc(h.get('security', 'none'))}, 
+        {esc(fp)}, 
+        {1 if h.get('is_disabled') else 0}, 
+        {esc(path)}, 
+        {esc(h.get('alpn', ''))}, 
+        {1 if h.get('allowinsecure') else 0}, 
+        {frag_sql}, 
+        {1 if h.get('mux_enable') else 0}, 
+        {1 if h.get('random_user_agent') else 0}
+    ) ON DUPLICATE KEY UPDATE address=VALUES(address);""".replace('\n', ' '))
 
 # Users
 for u in data.get('users') or []:
@@ -981,24 +974,20 @@ for u in data.get('users') or []:
     created = ts(u.get('created_at')) if ts(u.get('created_at')) != "NULL" else "NOW()"
     expire = get_expire(u)
     
-    cols = ['id', 'username', '`key`', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at']
-    vals = [str(u['id']), esc(uname), esc(key), f"'{status}'", str(int(u.get('used_traffic') or 0)), 
-            str(u.get('admin_id') or 1), str(svc), created]
-    
-    if 'data_limit' in users_cols:
-        cols.append('data_limit')
-        vals.append(nv(u.get('data_limit')))
-    if 'expire' in users_cols:
-        cols.append('expire')
-        vals.append(expire)
-    if 'note' in users_cols:
-        cols.append('note')
-        vals.append(esc(u.get('note', '')))
-    if 'lifetime_used_traffic' in users_cols:
-        cols.append('lifetime_used_traffic')
-        vals.append(str(int(u.get('lifetime_used_traffic') or 0)))
-    
-    sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);")
+    sql.append(f"""INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id, lifetime_used_traffic, created_at) VALUES (
+        {u['id']}, 
+        {esc(uname)}, 
+        {esc(key)}, 
+        '{status}', 
+        {int(u.get('used_traffic') or 0)}, 
+        {nv(u.get('data_limit'))}, 
+        {expire}, 
+        {u.get('admin_id') or 1}, 
+        {esc(u.get('note', ''))}, 
+        {svc}, 
+        {int(u.get('lifetime_used_traffic') or 0)}, 
+        {created}
+    ) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);""".replace('\n', ' '))
 
 # Proxies
 for p in data.get('proxies') or []:
@@ -1048,7 +1037,6 @@ with open(sql_file, 'w') as f:
 
 print(f"Generated {len(sql)} statements")
 PYIMPORT
-
     rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$"
 
     if [ ! -s "$sql_file" ]; then
