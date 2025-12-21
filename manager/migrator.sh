@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.1 (SCHEMA & VERIFICATION FIX)
+# MRM Migration Tool - V12.2 (FINAL STABLE FIX)
 #==============================================================================
 
 set -o pipefail
@@ -202,7 +202,7 @@ PYPARSE
 detect_source_panel() {
     for p in /opt/pasarguard /opt/marzban; do
         if [ -d "$p" ] && [ -f "$p/.env" ]; then
-            SOURCE_PANEL_TYPE=$(basename "$p")
+            # We print the path so the caller can capture it
             safe_writeln "$p"
             return 0
         fi
@@ -698,10 +698,9 @@ data['excluded_inbounds'] = []
 
 # Normalize
 def normalize_user(u):
-    if 'key' not in u and 'uuid' in u:
-        u['key'] = u['uuid']
-    if 'key' not in u and 'subscription_key' in u:
-        u['key'] = u['subscription_key']
+    # Ensure key is present
+    if not u.get('key'):
+        u['key'] = u.get('uuid') or u.get('subscription_key') or u.get('sub_id') or ''
     return u
 
 def normalize_admin(a):
@@ -974,7 +973,10 @@ for h in data.get('hosts') or []:
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username') or '').replace('@', '_at_').replace('.', '_dot_')
-    key = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
+    
+    # Extract the key correctly from multiple possible source columns
+    key = u.get('key') or u.get('uuid') or u.get('subscription_key') or u.get('sub_id') or ''
+    
     status = u.get('status', 'active')
     if status not in ['active', 'disabled', 'limited', 'expired', 'on_hold']: status = 'active'
     svc = u.get('service_id') or 1
@@ -1154,7 +1156,6 @@ verify_migration() {
             mwarn "No keys - check if users have subscription keys in column $user_key_col"
         fi
         if [ "${proxies:-0}" -eq 0 ] 2>/dev/null; then
-             # Try to see if proxies are actually present but not in proxies table
              mwarn "No proxies found in proxies table"
         fi
     fi
@@ -1302,6 +1303,8 @@ do_full() {
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
 
+    # Set panel type based on detected path
+    SOURCE_PANEL_TYPE=$(basename "$SRC")
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     local sdata
     sdata=$(get_data_dir "$SRC")
@@ -1375,10 +1378,11 @@ do_fix() {
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "Source not found"; mpause; return 1; }
 
+    SOURCE_PANEL_TYPE=$(basename "$SRC")
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
 
-    ui_confirm "Re-import from $SRC?" "y" || return 0
+    ui_confirm "Re-import from $SRC ($SOURCE_PANEL_TYPE)?" "y" || return 0
 
     start_source_panel "$SRC"
     (cd "$TGT" && docker compose up -d) &>/dev/null
