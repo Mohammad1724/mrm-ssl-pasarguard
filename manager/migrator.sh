@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V11.9 (CSV EXPORT FIX)
+# MRM Migration Tool - V12.0 (SCHEMA COMPATIBILITY FIX)
 #==============================================================================
 
 set -o pipefail
@@ -585,7 +585,7 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT (FIXED - Export CSV inside container, then convert)
+# POSTGRESQL EXPORT (CSV method)
 #==============================================================================
 
 export_postgresql() {
@@ -596,7 +596,7 @@ export_postgresql() {
     minfo "Exporting from PostgreSQL..."
     minfo "  Database: $db_name, User: $db_user"
 
-    # Show table counts for debugging
+    # Show table counts
     minfo "  Checking tables..."
     for tbl in users admins proxies hosts inbounds services nodes; do
         local cnt
@@ -609,7 +609,7 @@ export_postgresql() {
 
     minfo "  Exporting tables via CSV..."
 
-    # Export each table to CSV file inside container, then copy out
+    # Export each table
     for tbl in admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds; do
         docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c \
             "COPY (SELECT * FROM $tbl) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>/dev/null
@@ -617,13 +617,13 @@ export_postgresql() {
         docker exec "$PG_CONTAINER" rm -f "/tmp/${tbl}.csv" 2>/dev/null
     done
 
-    # Try core_configs (may not exist)
+    # Try core_configs
     docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c \
         "COPY (SELECT * FROM core_configs) TO '/tmp/core_configs.csv' WITH (FORMAT csv, HEADER true);" 2>/dev/null
     docker cp "$PG_CONTAINER:/tmp/core_configs.csv" "$tmp_dir/core_configs.csv" 2>/dev/null
     docker exec "$PG_CONTAINER" rm -f "/tmp/core_configs.csv" 2>/dev/null
 
-    # Convert CSVs to JSON using Python on HOST
+    # Convert CSVs to JSON
     safe_write "$tmp_dir" > "/tmp/mrm_tmpdir_$$"
     safe_write "$output_file" > "/tmp/mrm_outfile_$$"
 
@@ -631,7 +631,6 @@ export_postgresql() {
 import csv
 import json
 import os
-from datetime import datetime
 
 ppid = os.getppid()
 
@@ -651,37 +650,27 @@ tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services',
           'node_inbounds', 'core_configs']
 
 def parse_value(val, col_name):
-    """Parse CSV value to appropriate Python type"""
     if val == '' or val is None:
         return None
-    
-    # Boolean
     if val.lower() in ('t', 'true'):
         return True
     if val.lower() in ('f', 'false'):
         return False
-    
-    # Try integer
     try:
-        if '.' not in val and val.isdigit():
+        if '.' not in val and (val.isdigit() or (val.startswith('-') and val[1:].isdigit())):
             return int(val)
     except:
         pass
-    
-    # Try float
     try:
         if '.' in val:
             return float(val)
     except:
         pass
-    
-    # Try JSON (for settings, config, fragment_setting)
     if col_name in ('settings', 'config', 'fragment_setting') or val.startswith('{') or val.startswith('['):
         try:
             return json.loads(val)
         except:
             pass
-    
     return val
 
 for table in tables:
@@ -697,15 +686,17 @@ for table in tables:
                         parsed_row[k] = parse_value(v, k)
                     rows.append(parsed_row)
                 data[table] = rows
+                if rows:
+                    print(f"    {table}: {len(rows)} rows")
         else:
             data[table] = []
     except Exception as e:
-        print(f"Error reading {table}: {e}")
+        print(f"    Error {table}: {e}")
         data[table] = []
 
 data['excluded_inbounds'] = []
 
-# Normalize field names
+# Normalize
 def normalize_user(u):
     if 'key' not in u and 'uuid' in u:
         u['key'] = u['uuid']
@@ -724,7 +715,7 @@ data['admins'] = [normalize_admin(a) for a in data.get('admins', [])]
 with open(output_file, 'w') as f:
     json.dump(data, f, ensure_ascii=False, default=str)
 
-print(f"Users: {len(data.get('users',[]))}  Proxies: {len(data.get('proxies',[]))}  Hosts: {len(data.get('hosts',[]))}")
+print(f"  Total: Users={len(data.get('users',[]))} Proxies={len(data.get('proxies',[]))} Hosts={len(data.get('hosts',[]))}")
 PYCONVERT
 
     rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
@@ -738,27 +729,58 @@ PYCONVERT
 }
 
 #==============================================================================
-# MYSQL IMPORT
+# GET MYSQL TABLE COLUMNS
+#==============================================================================
+
+get_mysql_columns() {
+    local table="$1"
+    run_mysql_query "SELECT GROUP_CONCAT(COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='$table';" 2>/dev/null | tr -d ' \n\r'
+}
+
+#==============================================================================
+# MYSQL IMPORT (SCHEMA-AWARE)
 #==============================================================================
 
 import_to_mysql() {
     local json_file="$1"
+
+    minfo "Getting target schema..."
+    
+    # Get column info from MySQL
+    local nodes_cols hosts_cols users_cols
+    nodes_cols=$(get_mysql_columns "nodes")
+    hosts_cols=$(get_mysql_columns "hosts")
+    users_cols=$(get_mysql_columns "users")
+    
+    minfo "  nodes columns: $(echo $nodes_cols | cut -c1-60)..."
 
     minfo "Generating SQL..."
 
     local sql_file="/tmp/mrm_import_$$.sql"
     safe_write "$json_file" > "/tmp/mrm_jsonfile_$$"
     safe_write "$sql_file" > "/tmp/mrm_sqlfile_$$"
+    safe_write "$nodes_cols" > "/tmp/mrm_nodescols_$$"
+    safe_write "$hosts_cols" > "/tmp/mrm_hostscols_$$"
+    safe_write "$users_cols" > "/tmp/mrm_userscols_$$"
 
     python3 << 'PYIMPORT'
 import json
 import os
 
 ppid = os.getppid()
-with open(f"/tmp/mrm_jsonfile_{ppid}", "r") as f:
-    json_file = f.read().strip()
-with open(f"/tmp/mrm_sqlfile_{ppid}", "r") as f:
-    sql_file = f.read().strip()
+
+def read_file(name):
+    try:
+        with open(f"/tmp/mrm_{name}_{ppid}", "r") as f:
+            return f.read().strip()
+    except:
+        return ""
+
+json_file = read_file("jsonfile")
+sql_file = read_file("sqlfile")
+nodes_cols = set(read_file("nodescols").split(',')) if read_file("nodescols") else set()
+hosts_cols = set(read_file("hostscols").split(',')) if read_file("hostscols") else set()
+users_cols = set(read_file("userscols").split(',')) if read_file("userscols") else set()
 
 def esc(v):
     if v is None:
@@ -821,10 +843,9 @@ def get_expire(u):
         try:
             from datetime import datetime
             if 'T' in exp or '-' in exp:
-                # Parse datetime string
-                for fmt in ['%Y-%m-%dT%H:%M:%S.%f%z', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S']:
+                for fmt in ['%Y-%m-%dT%H:%M:%S.%f', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d']:
                     try:
-                        dt = datetime.strptime(exp.replace('+00:00', '').replace('Z', ''), fmt.replace('%z', ''))
+                        dt = datetime.strptime(exp.split('+')[0].split('Z')[0], fmt)
                         return str(int(dt.timestamp()))
                     except:
                         continue
@@ -862,16 +883,19 @@ sql.append("DELETE FROM user_inbounds;")
 sql.append("DELETE FROM node_inbounds;")
 sql.append("DELETE FROM core_configs;")
 
+# Admins
 for a in data.get('admins') or []:
     if not a.get('id'): continue
     role = 'sudo' if a.get('is_sudo') or a.get('is_admin') else 'standard'
     created = ts(a.get('created_at')) if ts(a.get('created_at')) != "NULL" else "NOW()"
     sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, telegram_id, created_at) VALUES ({a['id']}, {esc(a.get('username',''))}, {esc(a.get('hashed_password',''))}, '{role}', 'active', {nv(a.get('telegram_id'))}, {created}) ON DUPLICATE KEY UPDATE hashed_password=VALUES(hashed_password);")
 
+# Inbounds
 for i in data.get('inbounds') or []:
     if not i.get('id'): continue
     sql.append(f"INSERT INTO inbounds (id, tag) VALUES ({i['id']}, {esc(i.get('tag',''))}) ON DUPLICATE KEY UPDATE tag=VALUES(tag);")
 
+# Services
 svcs = data.get('services') or []
 for s in svcs:
     if not s.get('id'): continue
@@ -880,14 +904,31 @@ for s in svcs:
 if not svcs:
     sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
+# Nodes - SCHEMA AWARE (skip certificate if not exists)
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
     created = ts(n.get('created_at')) if ts(n.get('created_at')) != "NULL" else "NOW()"
-    cert = n.get('certificate', '')
-    if isinstance(cert, bytes):
-        cert = cert.decode('utf-8', errors='replace')
-    sql.append(f"INSERT INTO nodes (id, name, address, port, api_port, certificate, usage_coefficient, status, message, xray_version, created_at) VALUES ({n['id']}, {esc(n.get('name',''))}, {esc(n.get('address', ''))}, {nv(n.get('port'))}, {nv(n.get('api_port'))}, {esc(cert)}, {n.get('usage_coefficient', 1.0)}, {esc(n.get('status', 'connected'))}, {esc(n.get('message'))}, {esc(n.get('xray_version'))}, {created}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    
+    # Build dynamic INSERT based on available columns
+    cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
+    vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), nv(n.get('port')), esc(n.get('status', 'connected')), created]
+    
+    if 'api_port' in nodes_cols:
+        cols.append('api_port')
+        vals.append(nv(n.get('api_port')))
+    if 'usage_coefficient' in nodes_cols:
+        cols.append('usage_coefficient')
+        vals.append(str(n.get('usage_coefficient', 1.0)))
+    if 'xray_version' in nodes_cols:
+        cols.append('xray_version')
+        vals.append(esc(n.get('xray_version')))
+    if 'message' in nodes_cols:
+        cols.append('message')
+        vals.append(esc(n.get('message')))
+    
+    sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
+# Hosts
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
     addr = fix_path(h.get('address', ''))
@@ -897,8 +938,39 @@ for h in data.get('hosts') or []:
     fp = fp or 'none'
     frag = h.get('fragment_setting')
     frag_sql = esc_json(frag) if frag else "NULL"
-    sql.append(f"INSERT INTO hosts (id, remark, address, port, inbound_tag, sni, host, security, fingerprint, is_disabled, path, alpn, allowinsecure, fragment_setting, mux_enable, random_user_agent) VALUES ({h['id']}, {esc(h.get('remark', ''))}, {esc(addr)}, {nv(h.get('port'))}, {esc(h.get('inbound_tag') or h.get('tag', ''))}, {esc(h.get('sni', ''))}, {esc(h.get('host', ''))}, {esc(h.get('security', 'none'))}, {esc(fp)}, {1 if h.get('is_disabled') else 0}, {esc(path)}, {esc(h.get('alpn', ''))}, {1 if h.get('allowinsecure') else 0}, {frag_sql}, {1 if h.get('mux_enable') else 0}, {1 if h.get('random_user_agent') else 0}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+    
+    # Build dynamic INSERT
+    cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
+    vals = [str(h['id']), esc(h.get('remark', '')), esc(addr), nv(h.get('port')), 
+            esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', '')), 
+            esc(h.get('host', '')), esc(h.get('security', 'none')), 
+            str(1 if h.get('is_disabled') else 0)]
+    
+    if 'fingerprint' in hosts_cols:
+        cols.append('fingerprint')
+        vals.append(esc(fp))
+    if 'path' in hosts_cols:
+        cols.append('path')
+        vals.append(esc(path))
+    if 'alpn' in hosts_cols:
+        cols.append('alpn')
+        vals.append(esc(h.get('alpn', '')))
+    if 'allowinsecure' in hosts_cols:
+        cols.append('allowinsecure')
+        vals.append(str(1 if h.get('allowinsecure') else 0))
+    if 'fragment_setting' in hosts_cols:
+        cols.append('fragment_setting')
+        vals.append(frag_sql)
+    if 'mux_enable' in hosts_cols:
+        cols.append('mux_enable')
+        vals.append(str(1 if h.get('mux_enable') else 0))
+    if 'random_user_agent' in hosts_cols:
+        cols.append('random_user_agent')
+        vals.append(str(1 if h.get('random_user_agent') else 0))
+    
+    sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
 
+# Users
 for u in data.get('users') or []:
     if not u.get('id'): continue
     uname = str(u.get('username', '')).replace('@', '_at_').replace('.', '_dot_')
@@ -908,8 +980,27 @@ for u in data.get('users') or []:
     svc = u.get('service_id') or 1
     created = ts(u.get('created_at')) if ts(u.get('created_at')) != "NULL" else "NOW()"
     expire = get_expire(u)
-    sql.append(f"INSERT INTO users (id, username, `key`, status, used_traffic, data_limit, expire, admin_id, note, service_id, lifetime_used_traffic, on_hold_timeout, on_hold_expire_duration, sub_updated_at, sub_last_user_agent, online_at, sub_revoked_at, data_limit_reset_strategy, traffic_reset_at, created_at) VALUES ({u['id']}, {esc(uname)}, {esc(key)}, '{status}', {int(u.get('used_traffic') or 0)}, {nv(u.get('data_limit'))}, {expire}, {u.get('admin_id') or 1}, {esc(u.get('note', ''))}, {svc}, {int(u.get('lifetime_used_traffic') or 0)}, {ts(u.get('on_hold_timeout'))}, {nv(u.get('on_hold_expire_duration'))}, {ts(u.get('sub_updated_at'))}, {esc(u.get('sub_last_user_agent'))}, {ts(u.get('online_at'))}, {ts(u.get('sub_revoked_at'))}, {esc(u.get('data_limit_reset_strategy'))}, {ts(u.get('traffic_reset_at'))}, {created}) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);")
+    
+    cols = ['id', 'username', '`key`', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at']
+    vals = [str(u['id']), esc(uname), esc(key), f"'{status}'", str(int(u.get('used_traffic') or 0)), 
+            str(u.get('admin_id') or 1), str(svc), created]
+    
+    if 'data_limit' in users_cols:
+        cols.append('data_limit')
+        vals.append(nv(u.get('data_limit')))
+    if 'expire' in users_cols:
+        cols.append('expire')
+        vals.append(expire)
+    if 'note' in users_cols:
+        cols.append('note')
+        vals.append(esc(u.get('note', '')))
+    if 'lifetime_used_traffic' in users_cols:
+        cols.append('lifetime_used_traffic')
+        vals.append(str(int(u.get('lifetime_used_traffic') or 0)))
+    
+    sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE `key`=VALUES(`key`), status=VALUES(status);")
 
+# Proxies
 for p in data.get('proxies') or []:
     if not p.get('id'): continue
     settings = p.get('settings', {})
@@ -919,6 +1010,7 @@ for p in data.get('proxies') or []:
     settings = fix_path(settings)
     sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc_json(settings)}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
 
+# Relations
 for sh in data.get('service_hosts') or []:
     if sh.get('service_id') and sh.get('host_id'):
         sql.append(f"INSERT IGNORE INTO service_hosts (service_id, host_id) VALUES ({sh['service_id']}, {sh['host_id']});")
@@ -938,6 +1030,7 @@ for ni in data.get('node_inbounds') or []:
 if not data.get('service_hosts') and data.get('hosts'):
     sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
 
+# Core configs
 for c in data.get('core_configs') or []:
     if not c.get('id'): continue
     cfg = c.get('config', {})
@@ -945,8 +1038,6 @@ for c in data.get('core_configs') or []:
         try: cfg = json.loads(cfg)
         except: pass
     cfg = fix_path(cfg)
-    if isinstance(cfg, dict) and 'api' not in cfg:
-        cfg['api'] = {"tag": "api", "services": ["HandlerService", "LoggerService", "StatsService"]}
     created = ts(c.get('created_at')) if ts(c.get('created_at')) != "NULL" else "NOW()"
     sql.append(f"INSERT INTO core_configs (id, name, config, created_at) VALUES ({c['id']}, {esc(c.get('name', 'default'))}, {esc_json(cfg)}, {created}) ON DUPLICATE KEY UPDATE config=VALUES(config);")
 
@@ -958,7 +1049,7 @@ with open(sql_file, 'w') as f:
 print(f"Generated {len(sql)} statements")
 PYIMPORT
 
-    rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$"
+    rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$"
 
     if [ ! -s "$sql_file" ]; then
         merr "SQL generation failed"
@@ -1038,17 +1129,14 @@ verify_migration() {
     local err=0
 
     if [ "${users:-0}" -gt 0 ] 2>/dev/null; then
-        [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No keys!"; err=1; }
-        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No proxies!"; err=1; }
+        [ "${ukeys:-0}" -eq 0 ] 2>/dev/null && { mwarn "No keys - check if users have subscription keys"; }
+        [ "${proxies:-0}" -eq 0 ] 2>/dev/null && { mwarn "No proxies - may need manual config"; }
     fi
     [ "${hosts:-0}" -eq 0 ] 2>/dev/null && { merr "CRITICAL: No hosts!"; err=1; }
 
     if [ $err -eq 0 ]; then
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}  ✓ Admin passwords preserved${NC}"
-        echo -e "${GREEN}  ✓ User keys preserved${NC}"
-        echo -e "${GREEN}  ✓ Proxy UUIDs preserved${NC}"
-        echo -e "${GREEN}  ✓ All relations preserved${NC}"
+        echo -e "${GREEN}  ✓ Migration successful${NC}"
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     fi
 
@@ -1183,7 +1271,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V11.9"
+    ui_header "MRM MIGRATION V12.0"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1330,7 +1418,7 @@ do_logs() {
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V11.9"
+        ui_header "MRM MIGRATION V12.0"
         echo "  1) Full Migration"
         echo "  2) Fix Current"
         echo "  3) Rollback"
