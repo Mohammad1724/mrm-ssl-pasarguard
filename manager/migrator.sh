@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.9 (SCHEMA COMPATIBILITY FIX)
+# MRM Migration Tool - V12.10 (SCHEMA COMPATIBILITY FIX)
 #==============================================================================
 
 set -o pipefail
@@ -111,7 +111,7 @@ ui_header() {
 }
 
 #==============================================================================
-# SAFE ENV VAR READING (FIXED: Handles spaces around =)
+# SAFE ENV VAR READING
 #==============================================================================
 
 read_env_var() {
@@ -119,6 +119,7 @@ read_env_var() {
     [ -f "$file" ] || return 1
 
     local line value
+    # Regex updated to handle spaces around =
     line=$(grep -E "^${key}[[:space:]]*=" "$file" 2>/dev/null | grep -v "^[[:space:]]*#" | tail -1)
     [ -z "$line" ] && return 1
 
@@ -738,7 +739,7 @@ get_mysql_columns() {
 }
 
 #==============================================================================
-# MYSQL IMPORT (SCHEMA-AWARE + AUTO-FIX)
+# MYSQL IMPORT (SCHEMA-AWARE)
 #==============================================================================
 
 import_to_mysql() {
@@ -788,7 +789,9 @@ available_tables = set(read_file("tables").split('\n'))
 
 def esc(v, col_name=None):
     if v is None or str(v).lower() == 'none':
-        if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint'):
+        # FIXED: Ensure required columns in Rebecca have a default value
+        if col_name in ('alpn', 'sni', 'host', 'address', 'path', 'fingerprint', 'security'):
+            if col_name == 'security': return "'none'"
             return "''"
         return "NULL"
     if isinstance(v, bool):
@@ -800,10 +803,6 @@ def esc(v, col_name=None):
     v = str(v)
     v = v.replace('\\', '\\\\')
     v = v.replace("'", "''") # SQL standard escape
-    v = v.replace('\n', '\\n')
-    v = v.replace('\r', '\\r')
-    v = v.replace('\t', '\\t')
-    v = v.replace('\x00', '')
     return f"'{v}'"
 
 def fix_path(v):
@@ -858,16 +857,11 @@ sql.append("SET NAMES utf8mb4;")
 sql.append("SET FOREIGN_KEY_CHECKS=0;")
 sql.append("SET SQL_MODE='NO_AUTO_VALUE_ON_ZERO';")
 
-# Cleanup only if tables exist
-for t in ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 'core_configs']:
+# Cleanup existing only if tables exist
+for t in ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds', 'core_configs']:
     if t in available_tables:
         sql.append(f"DELETE FROM {t};")
 sql.append("DELETE FROM admins WHERE id > 0;")
-
-# Detect user key column (key or token)
-target_user_key_col = None
-if 'key' in users_cols: target_user_key_col = '`key`'
-elif 'token' in users_cols: target_user_key_col = 'token'
 
 # Admins
 for a in data.get('admins') or []:
@@ -886,8 +880,7 @@ sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Defau
 # Nodes
 for n in data.get('nodes') or []:
     if not n.get('id'): continue
-    cols = ['id', 'name', 'address', 'port', 'status', 'created_at']
-    vals = [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), str(n.get('port') or 0), esc(n.get('status', 'connected')), ts(n.get('created_at'))]
+    cols, vals = ['id', 'name', 'address', 'port', 'status', 'created_at'], [str(n['id']), esc(n.get('name','')), esc(n.get('address', '')), str(n.get('port') or 0), esc(n.get('status', 'connected')), ts(n.get('created_at'))]
     if 'uplink' in nodes_cols: cols.append('uplink'); vals.append(str(int(n.get('uplink') or 0)))
     if 'downlink' in nodes_cols: cols.append('downlink'); vals.append(str(int(n.get('downlink') or 0)))
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
@@ -895,13 +888,14 @@ for n in data.get('nodes') or []:
 # Hosts
 for h in data.get('hosts') or []:
     if not h.get('id'): continue
-    cols = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled']
-    vals = [str(h['id']), esc(h.get('remark', '')), esc(fix_path(h.get('address', '')), 'address'), str(h.get('port') or 0), 
-            esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', ''), 'sni'), 
-            esc(h.get('host', ''), 'host'), esc(h.get('security', 'none')), 
-            str(1 if h.get('is_disabled') else 0)]
+    cols, vals = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security', 'is_disabled'], [str(h['id']), esc(h.get('remark', '')), esc(fix_path(h.get('address', '')), 'address'), str(h.get('port') or 0), esc(h.get('inbound_tag') or h.get('tag', '')), esc(h.get('sni', ''), 'sni'), esc(h.get('host', ''), 'host'), esc(h.get('security', 'none'), 'security'), str(1 if h.get('is_disabled') else 0)]
     if 'alpn' in hosts_cols: cols.append('alpn'); vals.append(esc(h.get('alpn', ''), 'alpn'))
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)}) ON DUPLICATE KEY UPDATE address=VALUES(address);")
+
+# Detect Key/Token column in target
+target_user_key_col = None
+if 'key' in users_cols: target_user_key_col = '`key`'
+elif 'token' in users_cols: target_user_key_col = 'token'
 
 # Users
 for u in data.get('users') or []:
@@ -917,10 +911,9 @@ for u in data.get('users') or []:
 # Proxies
 for p in data.get('proxies') or []:
     if not p.get('id'): continue
-    settings = p.get('settings', {})
-    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc(fix_path(settings))}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
+    sql.append(f"INSERT INTO proxies (id, user_id, type, settings) VALUES ({p['id']}, {p.get('user_id',0)}, {esc(p.get('type',''))}, {esc(fix_path(p.get('settings', {})))}) ON DUPLICATE KEY UPDATE settings=VALUES(settings);")
 
-# Auto-Fix Missing Relations & Proxies (ONLY if table exists)
+# Auto-Fix Missing Relations & Proxies
 if 'proxies' in available_tables and target_user_key_col:
     sql.append(f"INSERT IGNORE INTO proxies (user_id, type, settings) SELECT id, 'vless', CONCAT('{{\"id\": \"', {target_user_key_col}, '\", \"flow\": \"\"}}') FROM users WHERE {target_user_key_col} != '';")
 if 'user_inbounds' in available_tables:
@@ -931,11 +924,7 @@ if 'service_hosts' in available_tables:
     sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
 
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
-
-with open(sql_file, 'w') as f:
-    f.write('\n'.join(sql))
-
-print(f"Generated {len(sql)} statements (advanced fix applied)")
+with open(sql_file, 'w') as f: f.write('\n'.join(sql))
 PYIMPORT
 
     rm -f "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
@@ -1052,8 +1041,10 @@ for t in ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 'nodes'
     except: data[t] = []
 with open(f"/tmp/mrm_sqlite_{ppid}.json", "w") as f: json.dump(data, f, default=str)
 EOF
-    rm -f "/tmp/mrm_sqlitedb_$$"
-    wait_mysql && wait_rebecca_tables && setup_jwt && import_to_mysql "$export_file"
+    wait_mysql || return 1
+    wait_rebecca_tables || return 1
+    setup_jwt
+    import_to_mysql "$export_file"
     rm -f "$export_file"
     verify_migration
 }
@@ -1073,7 +1064,6 @@ migrate_pg_to_mysql() {
     wait_mysql || return 1
     wait_rebecca_tables || return 1
     
-    # Pre-populate PG variables
     parse_pg_connection "$SRC"
 
     local export_file="/tmp/mrm_export_$$.json"
@@ -1098,7 +1088,7 @@ stop_old() {
 do_full() {
     migration_init
     clear
-    ui_header "MRM MIGRATION V12.9"
+    ui_header "MRM MIGRATION V12.10"
 
     SRC=$(detect_source_panel)
     [ -z "$SRC" ] && { merr "No source panel"; mpause; return 1; }
@@ -1201,7 +1191,7 @@ do_logs() { clear; ui_header "LOGS"; [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRA
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V12.9"
+        ui_header "MRM MIGRATION V12.10"
         echo -e "  1) Full Migration\n  2) Fix Current\n  3) Rollback\n  4) Status\n  5) Logs\n  0) Back\n"
         read -p "Select: " opt
         case "$opt" in
