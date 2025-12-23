@@ -654,12 +654,57 @@ JWTSQL
 }
 
 #==============================================================================
-# POSTGRESQL EXPORT
+# POSTGRESQL EXPORT (AUTO TABLE RESOLVE ACROSS SCHEMAS)
 #==============================================================================
 
-pg_table_exists() {
-    local tbl="$1"
-    docker exec "$PG_CONTAINER" psql -U "$PG_DB_USER" -d "$PG_DB_NAME" -tAc "SELECT to_regclass('public.$tbl') IS NOT NULL;" 2>/dev/null | tr -d ' \r\n'
+pg_list_tables() {
+    docker exec "$PG_CONTAINER" psql -U "$PG_DB_USER" -d "$PG_DB_NAME" -tAc "
+        SELECT table_schema||'.'||table_name
+        FROM information_schema.tables
+        WHERE table_type='BASE TABLE'
+          AND table_schema NOT IN ('pg_catalog','information_schema')
+        ORDER BY table_schema, table_name;
+    " 2>/dev/null | tr -d '\r'
+}
+
+pg_find_table() {
+    # Returns schema.table for the best match of a canonical name using candidates.
+    local canonical="$1"
+    local candidates=()
+
+    case "$canonical" in
+        admins)          candidates=(admins admin) ;;
+        inbounds)        candidates=(inbounds inbound) ;;
+        users)           candidates=(users user) ;;
+        proxies)         candidates=(proxies proxy) ;;
+        hosts)           candidates=(hosts host) ;;
+        services)        candidates=(services service) ;;
+        nodes)           candidates=(nodes node) ;;
+        service_hosts)   candidates=(service_hosts service_host servicehosts servicehost) ;;
+        service_inbounds)candidates=(service_inbounds service_inbound serviceinbounds serviceinbound) ;;
+        user_inbounds)   candidates=(user_inbounds user_inbound userinbounds userinbound) ;;
+        node_inbounds)   candidates=(node_inbounds node_inbound nodeinbounds nodeinbound) ;;
+        core_configs)    candidates=(core_configs core_config coreconfigs coreconfig configs config) ;;
+        *)               candidates=("$canonical") ;;
+    esac
+
+    local c out
+    for c in "${candidates[@]}"; do
+        out=$(docker exec "$PG_CONTAINER" psql -U "$PG_DB_USER" -d "$PG_DB_NAME" -tAc "
+            SELECT table_schema||'.'||table_name
+            FROM information_schema.tables
+            WHERE table_type='BASE TABLE'
+              AND table_schema NOT IN ('pg_catalog','information_schema')
+              AND lower(table_name)=lower('${c}')
+            ORDER BY (CASE WHEN lower(table_name)=lower('${canonical}') THEN 0 ELSE 1 END), table_schema
+            LIMIT 1;
+        " 2>/dev/null | tr -d ' \r\n')
+        if [ -n "$out" ]; then
+            echo "$out"
+            return 0
+        fi
+    done
+    return 1
 }
 
 export_postgresql() {
@@ -668,26 +713,41 @@ export_postgresql() {
     local db_user="$PG_DB_USER"
 
     minfo "Exporting from PostgreSQL..."
+
+    # Helpful log: list all tables once (first 200 lines) so we can see real names if needed
+    local all_tbls
+    all_tbls=$(pg_list_tables)
+    if [ -n "$all_tbls" ]; then
+        mlog "PG TABLES (first): $(echo "$all_tbls" | head -200 | tr '\n' ' ' | cut -c1-1500)"
+    else
+        mwarn "Could not list PostgreSQL tables (permission or connection issue?)"
+    fi
+
     local tmp_dir="/tmp/mrm_exp_$$"
     mkdir -p "$tmp_dir"
 
     local tables=(admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds core_configs)
 
     for tbl in "${tables[@]}"; do
-        local exists="false"
-        exists=$(pg_table_exists "$tbl")
-        if [ "$exists" != "t" ] && [ "$exists" != "true" ] && [ "$exists" != "True" ] && [ "$exists" != "1" ]; then
-            mwarn "PG table not found, skipping: $tbl"
+        local real
+        real=$(pg_find_table "$tbl" 2>/dev/null)
+
+        if [ -z "$real" ]; then
+            mwarn "PG table not found (any schema), skipping: $tbl"
             continue
         fi
 
+        minfo "  Export $tbl <= $real"
+
         local out rc
-        out=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c "COPY (SELECT * FROM $tbl) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>&1)
+        out=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c \
+            "COPY (SELECT * FROM ${real}) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>&1)
         rc=$?
+
         if [ $rc -ne 0 ]; then
-            mwarn "PG export failed for table $tbl:"
-            echo "$out" | head -5
-            mlog "PG EXPORT ERROR ($tbl): $(echo "$out" | tr '\n' ' ' | cut -c1-500)"
+            mwarn "PG export failed for $real (as $tbl):"
+            echo "$out" | head -10
+            mlog "PG EXPORT ERROR ($real): $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
             continue
         fi
 
@@ -703,6 +763,7 @@ import csv, json, os
 ppid = os.getppid()
 with open(f"/tmp/mrm_tmpdir_{ppid}", "r") as f: tmp_dir = f.read().strip()
 with open(f"/tmp/mrm_outfile_{ppid}", "r") as f: output_file = f.read().strip()
+
 data = {}
 def parse_v(val, col):
     if val == '' or val is None: return None
@@ -713,7 +774,9 @@ def parse_v(val, col):
         except: pass
     return val
 
-tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds', 'core_configs']
+tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 'nodes',
+          'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds', 'core_configs']
+
 for table in tables:
     p = os.path.join(tmp_dir, f"{table}.csv")
     if os.path.exists(p) and os.path.getsize(p) > 0:
@@ -729,6 +792,7 @@ PYCONVERT
 
     local py_rc=$?
     rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
+
     if [ $py_rc -ne 0 ]; then
         merr "PostgreSQL export conversion failed"
         return 1
@@ -738,10 +802,10 @@ PYCONVERT
         merr "PostgreSQL export output JSON is empty"
         return 1
     fi
+
     mok "PostgreSQL export ready: $output_file"
     return 0
 }
-
 #==============================================================================
 # SQLITE EXPORT
 #==============================================================================
