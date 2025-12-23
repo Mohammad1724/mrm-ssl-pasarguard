@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.11 (FINAL AUTOMATED REPAIR) - FIXED BUILD
+# MRM Migration Tool - V12.11 (FINAL AUTOMATED REPAIR) - FIXED BUILD (STABLE)
 #==============================================================================
 
 set -o pipefail
@@ -137,6 +137,22 @@ read_env_var() {
 }
 
 #==============================================================================
+# LOAD MYSQL PASSWORD SAFELY
+#==============================================================================
+
+load_mysql_pass() {
+    # Keeps existing MYSQL_PASS if already set, otherwise tries to load from target env.
+    if [ -z "$MYSQL_PASS" ] && [ -f "/opt/rebecca/.env" ]; then
+        MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
+    fi
+    # Fallback: if still empty, try reading from target dir env (if set)
+    if [ -z "$MYSQL_PASS" ] && [ -n "$TGT" ] && [ -f "$TGT/.env" ]; then
+        MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
+    fi
+    return 0
+}
+
+#==============================================================================
 # PARSE POSTGRESQL URL
 #==============================================================================
 
@@ -260,11 +276,17 @@ find_mysql_container() {
 }
 
 #==============================================================================
-# SAFE MYSQL EXECUTION
+# SAFE MYSQL EXECUTION (EXIT CODE + OUTPUT VISIBLE)
 #==============================================================================
 
 run_mysql_query() {
     local query="$1"
+    load_mysql_pass
+
+    if [ -z "$MYSQL_CONTAINER" ]; then
+        merr "MySQL container not found"
+        return 1
+    fi
 
     local cnf="/tmp/mrm_cnf_$$"
     {
@@ -282,11 +304,17 @@ run_mysql_query() {
     docker cp "$qfile" "$MYSQL_CONTAINER:/tmp/.q.sql" 2>/dev/null
     rm -f "$cnf" "$qfile"
 
-    docker exec "$MYSQL_CONTAINER" bash -c 'r=$(mysql --defaults-file=/tmp/.my.cnf rebecca -N < /tmp/.q.sql 2>&1); rm -f /tmp/.my.cnf /tmp/.q.sql; echo "$r"'
+    docker exec "$MYSQL_CONTAINER" bash -c 'mysql --defaults-file=/tmp/.my.cnf rebecca -N < /tmp/.q.sql 2>&1; rc=$?; rm -f /tmp/.my.cnf /tmp/.q.sql; exit $rc'
 }
 
 run_mysql_file() {
     local sql_file="$1"
+    load_mysql_pass
+
+    if [ -z "$MYSQL_CONTAINER" ]; then
+        merr "MySQL container not found"
+        return 1
+    fi
 
     local cnf="/tmp/mrm_cnf_$$"
     {
@@ -301,12 +329,18 @@ run_mysql_file() {
     docker cp "$sql_file" "$MYSQL_CONTAINER:/tmp/import.sql" 2>/dev/null
     rm -f "$cnf"
 
-    docker exec "$MYSQL_CONTAINER" bash -c 'r=$(mysql --defaults-file=/tmp/.my.cnf rebecca < /tmp/import.sql 2>&1); rm -f /tmp/.my.cnf /tmp/import.sql; echo "$r"'
+    docker exec "$MYSQL_CONTAINER" bash -c 'mysql --defaults-file=/tmp/.my.cnf rebecca < /tmp/import.sql 2>&1; rc=$?; rm -f /tmp/.my.cnf /tmp/import.sql; exit $rc'
 }
 
 wait_mysql() {
     minfo "Waiting for MySQL..."
     local waited=0
+    load_mysql_pass
+
+    if [ -z "$MYSQL_CONTAINER" ]; then
+        merr "MySQL container not found"
+        return 1
+    fi
 
     local cnf="/tmp/mrm_cnf_$$"
     {
@@ -339,12 +373,24 @@ wait_rebecca_tables() {
     local max_wait=120
 
     while [ $waited -lt $max_wait ]; do
+        local out rc
+        out=$(run_mysql_query "SHOW TABLES LIKE 'users';" 2>&1)
+        rc=$?
+        if [ $rc -ne 0 ]; then
+            mwarn "MySQL query failed while waiting for tables:"
+            echo "$out" | head -20
+            mlog "MYSQL WAIT ERROR: $(echo "$out" | tr '\n' ' ' | cut -c1-500)"
+            return 1
+        fi
+
         local tables
-        tables=$(run_mysql_query "SHOW TABLES LIKE 'users';" 2>/dev/null | grep -c "users")
+        tables=$(echo "$out" | grep -c "users" 2>/dev/null)
+
         if [ "$tables" -gt 0 ] 2>/dev/null; then
             mok "Rebecca tables ready"
             return 0
         fi
+
         sleep 5
         waited=$((waited + 5))
         echo -n "."
@@ -552,8 +598,17 @@ install_rebecca() {
 setup_jwt() {
     minfo "Setting up JWT..."
 
+    local out rc
+    out=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        merr "JWT check failed:"
+        echo "$out" | head -20
+        return 1
+    fi
+
     local result
-    result=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
+    result=$(echo "$out" | grep -oE '^[0-9]+' | head -1)
 
     if [ "${result:-0}" -gt 0 ] 2>/dev/null; then
         mok "JWT exists"
@@ -571,8 +626,14 @@ CREATE TABLE IF NOT EXISTS jwt (
     vless_mask VARCHAR(64)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 JWTSQL
-    run_mysql_file "$jwt_sql"
+
+    out=$(run_mysql_file "$jwt_sql" 2>&1); rc=$?
     rm -f "$jwt_sql"
+    if [ $rc -ne 0 ]; then
+        merr "JWT table create failed:"
+        echo "$out" | head -30
+        return 1
+    fi
 
     local SK SSK ASK VM VL
     SK=$(openssl rand -hex 64)
@@ -581,7 +642,14 @@ JWTSQL
     VM=$(openssl rand -hex 16)
     VL=$(openssl rand -hex 16)
 
-    run_mysql_query "INSERT INTO jwt (secret_key,subscription_secret_key,admin_secret_key,vmess_mask,vless_mask) VALUES ('$SK','$SSK','$ASK','$VM','$VL');"
+    out=$(run_mysql_query "INSERT INTO jwt (secret_key,subscription_secret_key,admin_secret_key,vmess_mask,vless_mask) VALUES ('$SK','$SSK','$ASK','$VM','$VL');" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        merr "JWT insert failed:"
+        echo "$out" | head -30
+        return 1
+    fi
+
     mok "JWT configured"
 }
 
@@ -589,19 +657,40 @@ JWTSQL
 # POSTGRESQL EXPORT
 #==============================================================================
 
+pg_table_exists() {
+    local tbl="$1"
+    docker exec "$PG_CONTAINER" psql -U "$PG_DB_USER" -d "$PG_DB_NAME" -tAc "SELECT to_regclass('public.$tbl') IS NOT NULL;" 2>/dev/null | tr -d ' \r\n'
+}
+
 export_postgresql() {
     local output_file="$1"
     local db_name="$PG_DB_NAME"
     local db_user="$PG_DB_USER"
 
     minfo "Exporting from PostgreSQL..."
-    for tbl in admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds core_configs; do
-        docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c "COPY (SELECT * FROM $tbl) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>/dev/null
-    done
-
     local tmp_dir="/tmp/mrm_exp_$$"
     mkdir -p "$tmp_dir"
-    for tbl in admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds core_configs; do
+
+    local tables=(admins inbounds users proxies hosts services nodes service_hosts service_inbounds user_inbounds node_inbounds core_configs)
+
+    for tbl in "${tables[@]}"; do
+        local exists="false"
+        exists=$(pg_table_exists "$tbl")
+        if [ "$exists" != "t" ] && [ "$exists" != "true" ] && [ "$exists" != "True" ] && [ "$exists" != "1" ]; then
+            mwarn "PG table not found, skipping: $tbl"
+            continue
+        fi
+
+        local out rc
+        out=$(docker exec "$PG_CONTAINER" psql -U "$db_user" -d "$db_name" -c "COPY (SELECT * FROM $tbl) TO '/tmp/${tbl}.csv' WITH (FORMAT csv, HEADER true);" 2>&1)
+        rc=$?
+        if [ $rc -ne 0 ]; then
+            mwarn "PG export failed for table $tbl:"
+            echo "$out" | head -5
+            mlog "PG EXPORT ERROR ($tbl): $(echo "$out" | tr '\n' ' ' | cut -c1-500)"
+            continue
+        fi
+
         docker cp "$PG_CONTAINER:/tmp/${tbl}.csv" "$tmp_dir/${tbl}.csv" 2>/dev/null
         docker exec "$PG_CONTAINER" rm -f "/tmp/${tbl}.csv" 2>/dev/null
     done
@@ -617,8 +706,8 @@ with open(f"/tmp/mrm_outfile_{ppid}", "r") as f: output_file = f.read().strip()
 data = {}
 def parse_v(val, col):
     if val == '' or val is None: return None
-    if val.lower() in ('t', 'true'): return True
-    if val.lower() in ('f', 'false'): return False
+    if isinstance(val, str) and val.lower() in ('t', 'true'): return True
+    if isinstance(val, str) and val.lower() in ('f', 'false'): return False
     if col in ('settings', 'config', 'fragment_setting'):
         try: return json.loads(val)
         except: pass
@@ -631,14 +720,25 @@ for table in tables:
         with open(p, 'r', encoding='utf-8', errors='replace') as f:
             reader = csv.DictReader(f)
             data[table] = [{k: parse_v(v, k) for k, v in row.items()} for row in reader]
-    else: data[table] = []
+    else:
+        data[table] = []
 
-with open(output_file, 'w') as f: json.dump(data, f, default=str)
+with open(output_file, 'w') as f:
+    json.dump(data, f, default=str)
 PYCONVERT
 
     local py_rc=$?
     rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
-    [ $py_rc -ne 0 ] && { merr "PostgreSQL export conversion failed"; return 1; }
+    if [ $py_rc -ne 0 ]; then
+        merr "PostgreSQL export conversion failed"
+        return 1
+    fi
+
+    if [ ! -s "$output_file" ]; then
+        merr "PostgreSQL export output JSON is empty"
+        return 1
+    fi
+    mok "PostgreSQL export ready: $output_file"
     return 0
 }
 
@@ -704,7 +804,10 @@ PYSQLITE
 
     local py_rc=$?
     rm -f "/tmp/mrm_sqlitedb_$$" "/tmp/mrm_sqliteout_$$"
-    [ $py_rc -ne 0 ] && { merr "SQLite export failed"; return 1; }
+    if [ $py_rc -ne 0 ]; then
+        merr "SQLite export failed"
+        return 1
+    fi
     mok "SQLite exported: $output_file"
     return 0
 }
@@ -715,7 +818,15 @@ PYSQLITE
 
 get_mysql_columns() {
     local table="$1"
-    run_mysql_query "SELECT GROUP_CONCAT(COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='$table';" 2>/dev/null | tr -d ' \n\r'
+    local out rc
+    out=$(run_mysql_query "SELECT GROUP_CONCAT(COLUMN_NAME) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='$table';" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        mwarn "Failed to read columns for $table:"
+        echo "$out" | head -5
+        return 0
+    fi
+    echo "$out" | tr -d ' \n\r'
 }
 
 #==============================================================================
@@ -725,7 +836,13 @@ get_mysql_columns() {
 import_to_mysql() {
     local json_file="$1"
 
-    local target_tables; target_tables=$(run_mysql_query "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='rebecca';" 2>/dev/null | tr -d '\r')
+    if [ ! -f "$json_file" ] || [ ! -s "$json_file" ]; then
+        merr "JSON import file missing/empty: $json_file"
+        return 1
+    fi
+
+    local target_tables
+    target_tables=$(run_mysql_query "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='rebecca';" 2>/dev/null | tr -d '\r')
     local nodes_cols; nodes_cols=$(get_mysql_columns "nodes")
     local hosts_cols; hosts_cols=$(get_mysql_columns "hosts")
     local users_cols; users_cols=$(get_mysql_columns "users")
@@ -757,7 +874,6 @@ def esc(v, col=None):
             return "''"
         return "NULL"
     s = str(v)
-    # Proper SQL escaping:
     s = s.replace("\\", "\\\\").replace("'", "''")
     return f"'{s}'"
 
@@ -805,14 +921,14 @@ for h in data.get('hosts', []):
     if 'alpn' in h_cols: cols.append('alpn'); vals.append(esc(h.get('alpn'),'alpn'))
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-# Users (Crucial Fix: Extract key from uuid or key)
+# Users
 for u in data.get('users', []):
     ukey = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     cols, vals = ['id', 'username', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at'], [str(u['id']), esc(u.get('username')), "'active'", str(int(u.get('used_traffic') or 0)), "1", "1", ts(u.get('created_at'))]
     if k_col: cols.append(k_col); vals.append(esc(ukey))
     sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-# RELATIONS & PROXIES REPAIR (The "Users disappear" Fix)
+# RELATIONS & PROXIES REPAIR
 if 'proxies' in available_tables and k_col:
     sql.append(f"INSERT IGNORE INTO proxies (user_id, type, settings) SELECT id, 'vless', CONCAT('{{\"id\": \"', {k_col}, '\", \"flow\": \"\"}}') FROM users WHERE {k_col} != '';")
 if 'user_inbounds' in available_tables:
@@ -839,8 +955,26 @@ PYIMPORT
         return 1
     fi
 
-    run_mysql_file "$sql_file" >/dev/null 2>&1
+    minfo "Importing into MySQL..."
+    local out rc
+    out=$(run_mysql_file "$sql_file" 2>&1)
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        merr "MySQL import failed (see below):"
+        echo "$out" | head -80
+        mlog "MYSQL IMPORT ERROR: $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
+        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        return 1
+    fi
+
+    if echo "$out" | grep -qiE 'ERROR|Unknown column|doesn.t exist|Access denied|Cannot add or update'; then
+        mwarn "MySQL output contains warnings/errors:"
+        echo "$out" | head -80
+        mlog "MYSQL IMPORT OUTPUT: $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
+    fi
+
     rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+    mok "MySQL import done"
 }
 
 #==============================================================================
@@ -850,7 +984,8 @@ PYIMPORT
 verify_migration() {
     ui_header "VERIFICATION"
     local admins users ukeys proxies hosts nodes svcs
-    local key_col; key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" | tr -d ' \n\r')
+    local key_col
+    key_col=$(run_mysql_query "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='rebecca' AND TABLE_NAME='users' AND COLUMN_NAME IN ('key', 'token') LIMIT 1;" 2>/dev/null | tr -d ' \n\r')
     [ -z "$key_col" ] && key_col="key"
 
     admins=$(run_mysql_query "SELECT COUNT(*) FROM admins;" 2>/dev/null | grep -oE '^[0-9]+' | head -1)
@@ -933,22 +1068,40 @@ do_full() {
 }
 
 do_fix() {
-    clear; ui_header "FIX"; TGT="/opt/rebecca"; SRC=$(detect_source_panel) || true
+    clear; ui_header "FIX"
+    TGT="/opt/rebecca"
+    SRC=$(detect_source_panel) || true
     if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
         merr "Source panel not found in /opt/pasarguard or /opt/marzban"
         mpause
         return 1
     fi
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
-    migrate_pg_to_mysql; mpause
+
+    # Ensure rebecca is up (tables might not exist if stack is down)
+    if [ -d "$TGT" ]; then
+        (cd "$TGT" && docker compose up -d) &>/dev/null
+        minfo "Initializing Rebecca (30s)..."; sleep 30
+    fi
+
+    migrate_pg_to_mysql
+    mpause
 }
 
 do_rollback() {
-    clear; ui_header "ROLLBACK"; sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null); (cd /opt/rebecca && docker compose down); (cd "$sp" && docker compose up -d); mpause
+    clear; ui_header "ROLLBACK"
+    sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
+    (cd /opt/rebecca && docker compose down)
+    (cd "$sp" && docker compose up -d)
+    mpause
 }
 
 do_status() {
-    clear; ui_header "STATUS"; MYSQL_CONTAINER=$(find_mysql_container); run_mysql_query "SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Proxies', COUNT(*) FROM proxies;"; mpause
+    clear; ui_header "STATUS"
+    MYSQL_CONTAINER=$(find_mysql_container)
+    load_mysql_pass
+    run_mysql_query "SELECT 'Users', COUNT(*) FROM users UNION SELECT 'Proxies', COUNT(*) FROM proxies;"
+    mpause
 }
 
 do_logs() { clear; ui_header "LOGS"; [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRATION_LOG"; mpause; }
