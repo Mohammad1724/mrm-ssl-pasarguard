@@ -34,13 +34,8 @@ GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/dow
 # SAFE WRITE FUNCTIONS
 #==============================================================================
 
-safe_write() {
-    printf '%s' "$1"
-}
-
-safe_writeln() {
-    printf '%s\n' "$1"
-}
+safe_write() { printf '%s' "$1"; }
+safe_writeln() { printf '%s\n' "$1"; }
 
 #==============================================================================
 # DEPENDENCY CHECK
@@ -141,11 +136,9 @@ read_env_var() {
 #==============================================================================
 
 load_mysql_pass() {
-    # Keeps existing MYSQL_PASS if already set, otherwise tries to load from target env.
     if [ -z "$MYSQL_PASS" ] && [ -f "/opt/rebecca/.env" ]; then
         MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "/opt/rebecca/.env")
     fi
-    # Fallback: if still empty, try reading from target dir env (if set)
     if [ -z "$MYSQL_PASS" ] && [ -n "$TGT" ] && [ -f "$TGT/.env" ]; then
         MYSQL_PASS=$(read_env_var "MYSQL_ROOT_PASSWORD" "$TGT/.env")
     fi
@@ -423,7 +416,7 @@ start_source_panel() {
             minfo "  DB User: $PG_DB_USER, DB Name: $PG_DB_NAME"
 
             waited=0
-            while ! docker exec "$PG_CONTAINER" pg_isready -U "$PG_DB_USER" &>/dev/null && [ $waited -lt 60 ]; do
+            while ! docker exec "$PG_CONTAINER" pg_isready -U "$PG_DB_USER" -d "$PG_DB_NAME" &>/dev/null && [ $waited -lt 60 ]; do
                 sleep 2
                 waited=$((waited + 2))
             done
@@ -483,14 +476,9 @@ generate_env() {
     [ -z "$MYSQL_PASS" ] && MYSQL_PASS=$(openssl rand -hex 16)
 
     local PORT SUSER SPASS TG_TOKEN TG_ADMIN CERT KEY XJSON SUBURL
-    PORT=$(read_env_var "UVICORN_PORT" "$se")
-    [ -z "$PORT" ] && PORT="8000"
-
-    SUSER=$(read_env_var "SUDO_USERNAME" "$se")
-    [ -z "$SUSER" ] && SUSER="admin"
-
-    SPASS=$(read_env_var "SUDO_PASSWORD" "$se")
-    [ -z "$SPASS" ] && SPASS="admin"
+    PORT=$(read_env_var "UVICORN_PORT" "$se"); [ -z "$PORT" ] && PORT="8000"
+    SUSER=$(read_env_var "SUDO_USERNAME" "$se"); [ -z "$SUSER" ] && SUSER="admin"
+    SPASS=$(read_env_var "SUDO_PASSWORD" "$se"); [ -z "$SPASS" ] && SPASS="admin"
 
     TG_TOKEN=$(read_env_var "TELEGRAM_API_TOKEN" "$se")
     TG_ADMIN=$(read_env_var "TELEGRAM_ADMIN_ID" "$se")
@@ -499,12 +487,9 @@ generate_env() {
     XJSON=$(read_env_var "XRAY_JSON" "$se")
     SUBURL=$(read_env_var "XRAY_SUBSCRIPTION_URL_PREFIX" "$se")
 
-    CERT="${CERT//pasarguard/rebecca}"
-    CERT="${CERT//marzban/rebecca}"
-    KEY="${KEY//pasarguard/rebecca}"
-    KEY="${KEY//marzban/rebecca}"
-    XJSON="${XJSON//pasarguard/rebecca}"
-    XJSON="${XJSON//marzban/rebecca}"
+    CERT="${CERT//pasarguard/rebecca}"; CERT="${CERT//marzban/rebecca}"
+    KEY="${KEY//pasarguard/rebecca}";   KEY="${KEY//marzban/rebecca}"
+    XJSON="${XJSON//pasarguard/rebecca}"; XJSON="${XJSON//marzban/rebecca}"
     [ -z "$XJSON" ] && XJSON="/var/lib/rebecca/xray_config.json"
 
     local tmpdir="/tmp/mrm_env_$$"
@@ -523,9 +508,7 @@ generate_env() {
     safe_write "$tmpdir" > "/tmp/mrm_envdir_$$"
 
     python3 << 'PYENV'
-import urllib.parse
-import secrets
-import os
+import urllib.parse, secrets, os
 
 ppid = os.getppid()
 with open(f"/tmp/mrm_envdir_{ppid}", "r") as f:
@@ -571,7 +554,6 @@ XRAY_ASSETS_PATH="/var/lib/rebecca/assets"
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440
 SECRET_KEY="{secret_key}"
 '''
-
 with open(target, 'w') as f:
     f.write(content)
 PYENV
@@ -599,8 +581,7 @@ setup_jwt() {
     minfo "Setting up JWT..."
 
     local out rc
-    out=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>&1)
-    rc=$?
+    out=$(run_mysql_query "SELECT COUNT(*) FROM jwt;" 2>&1); rc=$?
     if [ $rc -ne 0 ]; then
         merr "JWT check failed:"
         echo "$out" | head -20
@@ -668,24 +649,23 @@ pg_list_tables() {
 }
 
 pg_find_table() {
-    # Returns schema.table for the best match of a canonical name using candidates.
     local canonical="$1"
     local candidates=()
 
     case "$canonical" in
-        admins)          candidates=(admins admin) ;;
-        inbounds)        candidates=(inbounds inbound) ;;
-        users)           candidates=(users user) ;;
-        proxies)         candidates=(proxies proxy) ;;
-        hosts)           candidates=(hosts host) ;;
-        services)        candidates=(services service) ;;
-        nodes)           candidates=(nodes node) ;;
-        service_hosts)   candidates=(service_hosts service_host servicehosts servicehost) ;;
-        service_inbounds)candidates=(service_inbounds service_inbound serviceinbounds serviceinbound) ;;
-        user_inbounds)   candidates=(user_inbounds user_inbound userinbounds userinbound) ;;
-        node_inbounds)   candidates=(node_inbounds node_inbound nodeinbounds nodeinbound) ;;
-        core_configs)    candidates=(core_configs core_config coreconfigs coreconfig configs config) ;;
-        *)               candidates=("$canonical") ;;
+        admins)           candidates=(admins admin) ;;
+        inbounds)         candidates=(inbounds inbound) ;;
+        users)            candidates=(users user) ;;
+        proxies)          candidates=(proxies proxy) ;;
+        hosts)            candidates=(hosts host) ;;
+        services)         candidates=(services service) ;;
+        nodes)            candidates=(nodes node) ;;
+        service_hosts)    candidates=(service_hosts service_host servicehosts servicehost) ;;
+        service_inbounds) candidates=(service_inbounds service_inbound serviceinbounds serviceinbound) ;;
+        user_inbounds)    candidates=(user_inbounds user_inbound userinbounds userinbound) ;;
+        node_inbounds)    candidates=(node_inbounds node_inbound nodeinbounds nodeinbound) ;;
+        core_configs)     candidates=(core_configs core_config coreconfigs coreconfig configs config) ;;
+        *)                candidates=("$canonical") ;;
     esac
 
     local c out
@@ -714,7 +694,6 @@ export_postgresql() {
 
     minfo "Exporting from PostgreSQL..."
 
-    # Helpful log: list all tables once (first 200 lines) so we can see real names if needed
     local all_tbls
     all_tbls=$(pg_list_tables)
     if [ -n "$all_tbls" ]; then
@@ -806,6 +785,7 @@ PYCONVERT
     mok "PostgreSQL export ready: $output_file"
     return 0
 }
+
 #==============================================================================
 # SQLITE EXPORT
 #==============================================================================
@@ -949,50 +929,41 @@ def ts(v):
 with open(json_f, 'r') as f: data = json.load(f)
 sql = ["SET NAMES utf8mb4;", "SET FOREIGN_KEY_CHECKS=0;"]
 
-# Cleanup
 for t in ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 'core_configs']:
     if t in available_tables: sql.append(f"DELETE FROM {t};")
 sql.append("DELETE FROM admins WHERE id > 0;")
 
-# Key detection
 k_col = None
 for p in ['key', 'token', 'uuid']:
     if p in u_cols:
         k_col = f"`{p}`" if p == 'key' else p
         break
 
-# Admins
 for a in data.get('admins', []):
     sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, created_at) VALUES ({a['id']}, {esc(a.get('username'))}, {esc(a.get('hashed_password'))}, 'sudo', 'active', {ts(a.get('created_at'))});")
 
-# Inbounds
 for i in data.get('inbounds', []):
     sql.append(f"INSERT IGNORE INTO inbounds (id, tag, protocol) VALUES ({i['id']}, {esc(i.get('tag'))}, {esc(i.get('protocol'))});")
 
-# Services
 sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
 
-# Nodes
 for n in data.get('nodes', []):
     cols, vals = ['id', 'name', 'address', 'port', 'status', 'created_at'], [str(n['id']), esc(n.get('name')), esc(n.get('address')), str(n.get('port') or 0), "'connected'", ts(n.get('created_at'))]
     if 'uplink' in n_cols: cols.append('uplink'); vals.append(str(int(n.get('uplink') or 0)))
     if 'downlink' in n_cols: cols.append('downlink'); vals.append(str(int(n.get('downlink') or 0)))
     sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-# Hosts
 for h in data.get('hosts', []):
     cols, vals = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security'], [str(h['id']), esc(h.get('remark')), esc(h.get('address')), str(h.get('port') or 0), esc(h.get('inbound_tag') or h.get('tag')), esc(h.get('sni'),'sni'), esc(h.get('host'),'host'), esc(h.get('security', 'none'), 'security')]
     if 'alpn' in h_cols: cols.append('alpn'); vals.append(esc(h.get('alpn'),'alpn'))
     sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-# Users
 for u in data.get('users', []):
     ukey = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
     cols, vals = ['id', 'username', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at'], [str(u['id']), esc(u.get('username')), "'active'", str(int(u.get('used_traffic') or 0)), "1", "1", ts(u.get('created_at'))]
     if k_col: cols.append(k_col); vals.append(esc(ukey))
     sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-# RELATIONS & PROXIES REPAIR
 if 'proxies' in available_tables and k_col:
     sql.append(f"INSERT IGNORE INTO proxies (user_id, type, settings) SELECT id, 'vless', CONCAT('{{\"id\": \"', {k_col}, '\", \"flow\": \"\"}}') FROM users WHERE {k_col} != '';")
 if 'user_inbounds' in available_tables:
@@ -1029,12 +1000,6 @@ PYIMPORT
         mlog "MYSQL IMPORT ERROR: $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
         rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
         return 1
-    fi
-
-    if echo "$out" | grep -qiE 'ERROR|Unknown column|doesn.t exist|Access denied|Cannot add or update'; then
-        mwarn "MySQL output contains warnings/errors:"
-        echo "$out" | head -80
-        mlog "MYSQL IMPORT OUTPUT: $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
     fi
 
     rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
@@ -1093,11 +1058,33 @@ migrate_sqlite_to_mysql() {
 #==============================================================================
 
 migrate_pg_to_mysql() {
-    PG_CONTAINER=$(find_pg_container "$SRC"); MYSQL_CONTAINER=$(find_mysql_container)
+    PG_CONTAINER=$(find_pg_container "$SRC")
+    MYSQL_CONTAINER=$(find_mysql_container)
+
+    [ -z "$PG_CONTAINER" ] && { merr "PostgreSQL container not found"; return 1; }
+
+    # Fix mode doesn't call start_source_panel; ensure these are set.
+    if [ -z "$PG_DB_USER" ] || [ -z "$PG_DB_NAME" ]; then
+        parse_pg_connection "$SRC" || true
+    fi
+    [ -z "$PG_DB_USER" ] && PG_DB_USER="${SOURCE_PANEL_TYPE:-postgres}"
+    [ -z "$PG_DB_NAME" ] && PG_DB_NAME="${SOURCE_PANEL_TYPE:-postgres}"
+    minfo "  DB User: $PG_DB_USER, DB Name: $PG_DB_NAME"
+
+    local waited=0
+    while ! docker exec "$PG_CONTAINER" pg_isready -U "$PG_DB_USER" -d "$PG_DB_NAME" &>/dev/null && [ $waited -lt 60 ]; do
+        sleep 2
+        waited=$((waited + 2))
+    done
+
     wait_mysql || return 1
     wait_rebecca_tables || return 1
+
     local export_file="/tmp/mrm_export_$$.json"
-    export_postgresql "$export_file" && setup_jwt && import_to_mysql "$export_file" && verify_migration
+    export_postgresql "$export_file" || return 1
+    setup_jwt || return 1
+    import_to_mysql "$export_file" || return 1
+    verify_migration
 }
 
 #==============================================================================
@@ -1142,7 +1129,10 @@ do_fix() {
     fi
     SOURCE_DB_TYPE=$(detect_db_type "$SRC")
 
-    # Ensure rebecca is up (tables might not exist if stack is down)
+    # Ensure source stack is running and PG_DB_* is set
+    start_source_panel "$SRC" || { mpause; return 1; }
+
+    # Ensure rebecca is up
     if [ -d "$TGT" ]; then
         (cd "$TGT" && docker compose up -d) &>/dev/null
         minfo "Initializing Rebecca (30s)..."; sleep 30
