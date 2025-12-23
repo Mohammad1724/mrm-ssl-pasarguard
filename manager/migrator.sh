@@ -887,29 +887,62 @@ import_to_mysql() {
 
     local target_tables
     target_tables=$(run_mysql_query "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='rebecca';" 2>/dev/null | tr -d '\r')
+
+    # Read columns for schema-aware inserts
+    local admins_cols; admins_cols=$(get_mysql_columns "admins")
+    local inbounds_cols; inbounds_cols=$(get_mysql_columns "inbounds")
+    local services_cols; services_cols=$(get_mysql_columns "services")
+    local proxies_cols; proxies_cols=$(get_mysql_columns "proxies")
     local nodes_cols; nodes_cols=$(get_mysql_columns "nodes")
     local hosts_cols; hosts_cols=$(get_mysql_columns "hosts")
     local users_cols; users_cols=$(get_mysql_columns "users")
+    local user_inbounds_cols; user_inbounds_cols=$(get_mysql_columns "user_inbounds")
+    local service_inbounds_cols; service_inbounds_cols=$(get_mysql_columns "service_inbounds")
+    local service_hosts_cols; service_hosts_cols=$(get_mysql_columns "service_hosts")
 
     local sql_file="/tmp/mrm_import_$$.sql"
     safe_write "$json_file" > "/tmp/mrm_jsonfile_$$"
     safe_write "$sql_file" > "/tmp/mrm_sqlfile_$$"
+    safe_write "$admins_cols" > "/tmp/mrm_adminscols_$$"
+    safe_write "$inbounds_cols" > "/tmp/mrm_inboundscols_$$"
+    safe_write "$services_cols" > "/tmp/mrm_servicescols_$$"
+    safe_write "$proxies_cols" > "/tmp/mrm_proxiescols_$$"
     safe_write "$nodes_cols" > "/tmp/mrm_nodescols_$$"
     safe_write "$hosts_cols" > "/tmp/mrm_hostscols_$$"
     safe_write "$users_cols" > "/tmp/mrm_userscols_$$"
+    safe_write "$user_inbounds_cols" > "/tmp/mrm_userinboundscols_$$"
+    safe_write "$service_inbounds_cols" > "/tmp/mrm_serviceinboundscols_$$"
+    safe_write "$service_hosts_cols" > "/tmp/mrm_servicehostscols_$$"
     safe_write "$target_tables" > "/tmp/mrm_tables_$$"
 
     python3 << 'PYIMPORT'
 import json, os
 ppid = os.getppid()
+
 def r_f(n):
     try:
-        with open(f"/tmp/mrm_{n}_{ppid}", "r") as f: return f.read().strip()
-    except: return ""
+        with open(f"/tmp/mrm_{n}_{ppid}", "r") as f:
+            return f.read().strip()
+    except:
+        return ""
+
+def colset(s: str):
+    return set([x for x in (s or "").split(",") if x])
 
 json_f, sql_f = r_f("jsonfile"), r_f("sqlfile")
-n_cols, h_cols, u_cols = set(r_f("nodescols").split(',')), set(r_f("hostscols").split(',')), set(r_f("userscols").split(','))
-available_tables = set(r_f("tables").split('\n'))
+
+a_cols  = colset(r_f("adminscols"))
+i_cols  = colset(r_f("inboundscols"))
+sv_cols = colset(r_f("servicescols"))
+p_cols  = colset(r_f("proxiescols"))
+n_cols  = colset(r_f("nodescols"))
+h_cols  = colset(r_f("hostscols"))
+u_cols  = colset(r_f("userscols"))
+ui_cols = colset(r_f("userinboundscols"))
+si_cols = colset(r_f("serviceinboundscols"))
+sh_cols = colset(r_f("servicehostscols"))
+
+available_tables = set([x for x in (r_f("tables") or "").split("\n") if x])
 
 def esc(v, col=None):
     if v is None or str(v).lower() == 'none':
@@ -922,71 +955,246 @@ def esc(v, col=None):
     return f"'{s}'"
 
 def ts(v):
-    if v is None or v == '' or str(v).lower() == 'none': return "NOW()"
+    if v is None or v == '' or str(v).lower() == 'none':
+        return "NOW()"
     clean = str(v).replace('T', ' ').replace('Z', '').split('+')[0].split('.')[0].strip()
     return f"'{clean}'"
 
-with open(json_f, 'r') as f: data = json.load(f)
+def bt(col):
+    # always safe to backtick
+    return f"`{col}`"
+
+def add(cols_list, vals_list, cols_set, colname, value_sql):
+    if colname in cols_set:
+        cols_list.append(bt(colname))
+        vals_list.append(value_sql)
+        return True
+    return False
+
+# Load JSON
+with open(json_f, 'r') as f:
+    data = json.load(f)
+
 sql = ["SET NAMES utf8mb4;", "SET FOREIGN_KEY_CHECKS=0;"]
 
-for t in ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes', 'service_hosts', 'service_inbounds', 'user_inbounds', 'core_configs']:
-    if t in available_tables: sql.append(f"DELETE FROM {t};")
-sql.append("DELETE FROM admins WHERE id > 0;")
+# Cleanup (only if table exists)
+for t in ['proxies', 'users', 'hosts', 'inbounds', 'services', 'nodes',
+          'service_hosts', 'service_inbounds', 'user_inbounds', 'core_configs']:
+    if t in available_tables:
+        sql.append(f"DELETE FROM {t};")
+if 'admins' in available_tables:
+    sql.append("DELETE FROM admins WHERE id > 0;")
 
+# Detect key column on users
 k_col = None
 for p in ['key', 'token', 'uuid']:
     if p in u_cols:
-        k_col = f"`{p}`" if p == 'key' else p
+        k_col = bt(p)
         break
 
-for a in data.get('admins', []):
-    sql.append(f"INSERT INTO admins (id, username, hashed_password, role, status, created_at) VALUES ({a['id']}, {esc(a.get('username'))}, {esc(a.get('hashed_password'))}, 'sudo', 'active', {ts(a.get('created_at'))});")
+# -------------------------
+# Admins (schema-aware)
+# -------------------------
+if 'admins' in available_tables:
+    for a in data.get('admins', []):
+        cols, vals = [], []
+        add(cols, vals, a_cols, 'id', str(a.get('id', 0)))
+        # username
+        if 'username' in a_cols:
+            add(cols, vals, a_cols, 'username', esc(a.get('username')))
+        elif 'user_name' in a_cols:
+            add(cols, vals, a_cols, 'user_name', esc(a.get('username')))
+        # password
+        if 'hashed_password' in a_cols:
+            add(cols, vals, a_cols, 'hashed_password', esc(a.get('hashed_password')))
+        elif 'password' in a_cols:
+            add(cols, vals, a_cols, 'password', esc(a.get('hashed_password') or a.get('password')))
+        # role/status/created_at if exist
+        add(cols, vals, a_cols, 'role', "'sudo'")
+        add(cols, vals, a_cols, 'status', "'active'")
+        add(cols, vals, a_cols, 'created_at', ts(a.get('created_at')))
 
-for i in data.get('inbounds', []):
-    sql.append(f"INSERT IGNORE INTO inbounds (id, tag, protocol) VALUES ({i['id']}, {esc(i.get('tag'))}, {esc(i.get('protocol'))});")
+        if cols:
+            sql.append(f"INSERT INTO admins ({','.join(cols)}) VALUES ({','.join(vals)});")
 
-sql.append("INSERT IGNORE INTO services (id, name, created_at) VALUES (1, 'Default', NOW());")
+# -------------------------
+# Inbounds (schema-aware)  ✅ FIX HERE
+# -------------------------
+inb_tag_col = None
+for c in ['tag', 'inbound_tag', 'name']:
+    if c in i_cols:
+        inb_tag_col = c
+        break
 
-for n in data.get('nodes', []):
-    cols, vals = ['id', 'name', 'address', 'port', 'status', 'created_at'], [str(n['id']), esc(n.get('name')), esc(n.get('address')), str(n.get('port') or 0), "'connected'", ts(n.get('created_at'))]
-    if 'uplink' in n_cols: cols.append('uplink'); vals.append(str(int(n.get('uplink') or 0)))
-    if 'downlink' in n_cols: cols.append('downlink'); vals.append(str(int(n.get('downlink') or 0)))
-    sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)});")
+inb_proto_col = None
+for c in ['protocol', 'type', 'proto']:
+    if c in i_cols:
+        inb_proto_col = c
+        break
 
-for h in data.get('hosts', []):
-    cols, vals = ['id', 'remark', 'address', 'port', 'inbound_tag', 'sni', 'host', 'security'], [str(h['id']), esc(h.get('remark')), esc(h.get('address')), str(h.get('port') or 0), esc(h.get('inbound_tag') or h.get('tag')), esc(h.get('sni'),'sni'), esc(h.get('host'),'host'), esc(h.get('security', 'none'), 'security')]
-    if 'alpn' in h_cols: cols.append('alpn'); vals.append(esc(h.get('alpn'),'alpn'))
-    sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)});")
+if 'inbounds' in available_tables:
+    for i in data.get('inbounds', []):
+        cols, vals = [], []
+        add(cols, vals, i_cols, 'id', str(i.get('id', 0)))
 
-for u in data.get('users', []):
-    ukey = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
-    cols, vals = ['id', 'username', 'status', 'used_traffic', 'admin_id', 'service_id', 'created_at'], [str(u['id']), esc(u.get('username')), "'active'", str(int(u.get('used_traffic') or 0)), "1", "1", ts(u.get('created_at'))]
-    if k_col: cols.append(k_col); vals.append(esc(ukey))
-    sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)});")
+        if inb_tag_col:
+            add(cols, vals, i_cols, inb_tag_col, esc(i.get('tag') or i.get(inb_tag_col)))
+        if inb_proto_col:
+            # source might have protocol; map it into whatever exists
+            add(cols, vals, i_cols, inb_proto_col, esc(i.get('protocol') or i.get('type') or i.get(inb_proto_col)))
 
+        if cols:
+            sql.append(f"INSERT IGNORE INTO inbounds ({','.join(cols)}) VALUES ({','.join(vals)});")
+
+# -------------------------
+# Services (schema-aware default)
+# -------------------------
+if 'services' in available_tables:
+    cols, vals = [], []
+    add(cols, vals, sv_cols, 'id', "1")
+    if 'name' in sv_cols:
+        add(cols, vals, sv_cols, 'name', esc("Default"))
+    elif 'title' in sv_cols:
+        add(cols, vals, sv_cols, 'title', esc("Default"))
+    add(cols, vals, sv_cols, 'created_at', "NOW()")
+    if cols:
+        sql.append(f"INSERT IGNORE INTO services ({','.join(cols)}) VALUES ({','.join(vals)});")
+
+# -------------------------
+# Nodes (schema-aware)
+# -------------------------
+if 'nodes' in available_tables:
+    for n in data.get('nodes', []):
+        cols, vals = [], []
+        add(cols, vals, n_cols, 'id', str(n.get('id', 0)))
+        add(cols, vals, n_cols, 'name', esc(n.get('name')))
+        add(cols, vals, n_cols, 'address', esc(n.get('address'), 'address'))
+        add(cols, vals, n_cols, 'port', str(n.get('port') or 0))
+        add(cols, vals, n_cols, 'status', esc('connected'))
+        add(cols, vals, n_cols, 'created_at', ts(n.get('created_at')))
+        if 'uplink' in n_cols:
+            add(cols, vals, n_cols, 'uplink', str(int(n.get('uplink') or 0)))
+        if 'downlink' in n_cols:
+            add(cols, vals, n_cols, 'downlink', str(int(n.get('downlink') or 0)))
+
+        if cols:
+            sql.append(f"INSERT INTO nodes ({','.join(cols)}) VALUES ({','.join(vals)});")
+
+# -------------------------
+# Hosts (schema-aware)
+# -------------------------
+if 'hosts' in available_tables:
+    for h in data.get('hosts', []):
+        cols, vals = [], []
+        add(cols, vals, h_cols, 'id', str(h.get('id', 0)))
+        add(cols, vals, h_cols, 'remark', esc(h.get('remark')))
+        add(cols, vals, h_cols, 'address', esc(h.get('address'), 'address'))
+        add(cols, vals, h_cols, 'port', str(h.get('port') or 0))
+        add(cols, vals, h_cols, 'inbound_tag', esc(h.get('inbound_tag') or h.get('tag')))
+        add(cols, vals, h_cols, 'sni', esc(h.get('sni'),'sni'))
+        add(cols, vals, h_cols, 'host', esc(h.get('host'),'host'))
+        add(cols, vals, h_cols, 'security', esc(h.get('security', 'none'), 'security'))
+        add(cols, vals, h_cols, 'alpn', esc(h.get('alpn'),'alpn'))
+
+        if cols:
+            sql.append(f"INSERT INTO hosts ({','.join(cols)}) VALUES ({','.join(vals)});")
+
+# -------------------------
+# Users (schema-aware)
+# -------------------------
+if 'users' in available_tables:
+    for u in data.get('users', []):
+        ukey = u.get('key') or u.get('uuid') or u.get('subscription_key') or ''
+        cols, vals = [], []
+        add(cols, vals, u_cols, 'id', str(u.get('id', 0)))
+        add(cols, vals, u_cols, 'username', esc(u.get('username')))
+        add(cols, vals, u_cols, 'status', esc('active'))
+        # traffic
+        if 'used_traffic' in u_cols:
+            add(cols, vals, u_cols, 'used_traffic', str(int(u.get('used_traffic') or 0)))
+        elif 'traffic' in u_cols:
+            add(cols, vals, u_cols, 'traffic', str(int(u.get('used_traffic') or u.get('traffic') or 0)))
+        # relations
+        add(cols, vals, u_cols, 'admin_id', "1")
+        add(cols, vals, u_cols, 'service_id', "1")
+        add(cols, vals, u_cols, 'created_at', ts(u.get('created_at')))
+        # key/token/uuid column
+        if k_col:
+            # k_col is already backticked string like `key`
+            raw = k_col.strip('`')
+            if raw in u_cols:
+                cols.append(k_col)
+                vals.append(esc(ukey))
+        if cols:
+            sql.append(f"INSERT INTO users ({','.join(cols)}) VALUES ({','.join(vals)});")
+
+# -------------------------
+# RELATIONS & PROXIES REPAIR (schema-aware)
+# -------------------------
+# Proxies: need user_id + type/protocol + settings/config
 if 'proxies' in available_tables and k_col:
-    sql.append(f"INSERT IGNORE INTO proxies (user_id, type, settings) SELECT id, 'vless', CONCAT('{{\"id\": \"', {k_col}, '\", \"flow\": \"\"}}') FROM users WHERE {k_col} != '';")
+    type_col = None
+    for c in ['type', 'protocol']:
+        if c in p_cols:
+            type_col = bt(c); break
+    settings_col = None
+    for c in ['settings', 'config']:
+        if c in p_cols:
+            settings_col = bt(c); break
+
+    if ('user_id' in p_cols) and type_col and settings_col:
+        sql.append(
+            f"INSERT IGNORE INTO proxies (`user_id`, {type_col}, {settings_col}) "
+            f"SELECT id, 'vless', CONCAT('{{\"id\": \"', {k_col}, '\", \"flow\": \"\"}}') "
+            f"FROM users WHERE {k_col} != '';"
+        )
+
+# user_inbounds: prefer inbound_tag else inbound_id
 if 'user_inbounds' in available_tables:
-    sql.append("INSERT IGNORE INTO user_inbounds (user_id, inbound_tag) SELECT u.id, i.tag FROM users u CROSS JOIN inbounds i;")
+    if ('user_id' in ui_cols) and ('inbound_tag' in ui_cols) and inb_tag_col:
+        sql.append(
+            f"INSERT IGNORE INTO user_inbounds (`user_id`, `inbound_tag`) "
+            f"SELECT u.id, i.{bt(inb_tag_col)} FROM users u CROSS JOIN inbounds i;"
+        )
+    elif ('user_id' in ui_cols) and ('inbound_id' in ui_cols):
+        sql.append(
+            "INSERT IGNORE INTO user_inbounds (`user_id`, `inbound_id`) "
+            "SELECT u.id, i.id FROM users u CROSS JOIN inbounds i;"
+        )
+
+# service_inbounds
 if 'service_inbounds' in available_tables:
-    sql.append("INSERT IGNORE INTO service_inbounds (service_id, inbound_id) SELECT 1, id FROM inbounds;")
+    if ('service_id' in si_cols) and ('inbound_id' in si_cols):
+        sql.append("INSERT IGNORE INTO service_inbounds (`service_id`, `inbound_id`) SELECT 1, id FROM inbounds;")
+
+# service_hosts
 if 'service_hosts' in available_tables:
-    sql.append("INSERT IGNORE INTO service_hosts (service_id, host_id) SELECT 1, id FROM hosts;")
+    if ('service_id' in sh_cols) and ('host_id' in sh_cols):
+        sql.append("INSERT IGNORE INTO service_hosts (`service_id`, `host_id`) SELECT 1, id FROM hosts;")
 
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
-with open(sql_f, 'w') as f: f.write('\n'.join(sql))
+with open(sql_f, 'w') as f:
+    f.write('\n'.join(sql))
 PYIMPORT
 
     local py_rc=$?
     if [ $py_rc -ne 0 ]; then
         merr "Python import generator failed"
-        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        rm -f "$sql_file" \
+            "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_tables_$$" \
+            "/tmp/mrm_adminscols_$$" "/tmp/mrm_inboundscols_$$" "/tmp/mrm_servicescols_$$" \
+            "/tmp/mrm_proxiescols_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" \
+            "/tmp/mrm_userinboundscols_$$" "/tmp/mrm_serviceinboundscols_$$" "/tmp/mrm_servicehostscols_$$"
         return 1
     fi
 
     if [ ! -s "$sql_file" ]; then
         merr "Generated SQL file is empty"
-        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        rm -f "$sql_file" \
+            "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_tables_$$" \
+            "/tmp/mrm_adminscols_$$" "/tmp/mrm_inboundscols_$$" "/tmp/mrm_servicescols_$$" \
+            "/tmp/mrm_proxiescols_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" \
+            "/tmp/mrm_userinboundscols_$$" "/tmp/mrm_serviceinboundscols_$$" "/tmp/mrm_servicehostscols_$$"
         return 1
     fi
 
@@ -996,16 +1204,24 @@ PYIMPORT
     rc=$?
     if [ $rc -ne 0 ]; then
         merr "MySQL import failed (see below):"
-        echo "$out" | head -80
-        mlog "MYSQL IMPORT ERROR: $(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
-        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        echo "$out" | head -120
+        mlog "MYSQL IMPORT ERROR: $(echo "$out" | tr '\n' ' ' | cut -c1-2000)"
+        rm -f "$sql_file" \
+            "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_tables_$$" \
+            "/tmp/mrm_adminscols_$$" "/tmp/mrm_inboundscols_$$" "/tmp/mrm_servicescols_$$" \
+            "/tmp/mrm_proxiescols_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" \
+            "/tmp/mrm_userinboundscols_$$" "/tmp/mrm_serviceinboundscols_$$" "/tmp/mrm_servicehostscols_$$"
         return 1
     fi
 
-    rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+    rm -f "$sql_file" \
+        "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_tables_$$" \
+        "/tmp/mrm_adminscols_$$" "/tmp/mrm_inboundscols_$$" "/tmp/mrm_servicescols_$$" \
+        "/tmp/mrm_proxiescols_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" \
+        "/tmp/mrm_userinboundscols_$$" "/tmp/mrm_serviceinboundscols_$$" "/tmp/mrm_servicehostscols_$$"
+
     mok "MySQL import done"
 }
-
 #==============================================================================
 # VERIFICATION
 #==============================================================================
