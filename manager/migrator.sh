@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.11 (FINAL AUTOMATED REPAIR)
+# MRM Migration Tool - V12.11 (FINAL AUTOMATED REPAIR) - FIXED BUILD
 #==============================================================================
 
 set -o pipefail
@@ -54,15 +54,16 @@ check_dependencies() {
     command -v openssl &>/dev/null || missing="$missing openssl"
     command -v curl &>/dev/null || missing="$missing curl"
     command -v unzip &>/dev/null || missing="$missing unzip"
+    command -v wget &>/dev/null || missing="$missing wget"
 
     if [ -n "$missing" ]; then
         echo -e "${YELLOW}Installing:$missing${NC}"
         if command -v apt-get &>/dev/null; then
-            apt-get update -qq && apt-get install -y python3 docker.io openssl curl unzip &>/dev/null
+            apt-get update -qq && apt-get install -y python3 docker.io openssl curl unzip wget &>/dev/null
         elif command -v yum &>/dev/null; then
-            yum install -y python3 docker openssl curl unzip &>/dev/null
+            yum install -y python3 docker openssl curl unzip wget &>/dev/null
         elif command -v dnf &>/dev/null; then
-            dnf install -y python3 docker openssl curl unzip &>/dev/null
+            dnf install -y python3 docker openssl curl unzip wget &>/dev/null
         fi
     fi
     return 0
@@ -229,7 +230,7 @@ detect_db_type() {
         *postgres*|*timescale*) echo "postgresql" ;;
         *mysql*|*mariadb*)      echo "mysql" ;;
         *sqlite*)               echo "sqlite" ;;
-        "") 
+        "")
             [ -f "$(get_data_dir "$1")/db.sqlite3" ] && echo "sqlite" || echo "unknown"
             ;;
         *) echo "unknown" ;;
@@ -634,7 +635,78 @@ for table in tables:
 
 with open(output_file, 'w') as f: json.dump(data, f, default=str)
 PYCONVERT
+
+    local py_rc=$?
     rm -rf "$tmp_dir" "/tmp/mrm_tmpdir_$$" "/tmp/mrm_outfile_$$"
+    [ $py_rc -ne 0 ] && { merr "PostgreSQL export conversion failed"; return 1; }
+    return 0
+}
+
+#==============================================================================
+# SQLITE EXPORT
+#==============================================================================
+
+export_sqlite() {
+    local sqlite_db="$1"
+    local output_file="$2"
+
+    [ -f "$sqlite_db" ] || { merr "SQLite DB not found: $sqlite_db"; return 1; }
+
+    safe_write "$sqlite_db" > "/tmp/mrm_sqlitedb_$$"
+    safe_write "$output_file" > "/tmp/mrm_sqliteout_$$"
+
+    python3 << 'PYSQLITE'
+import os, json, sqlite3
+
+ppid = os.getppid()
+with open(f"/tmp/mrm_sqlitedb_{ppid}", "r") as f: db = f.read().strip()
+with open(f"/tmp/mrm_sqliteout_{ppid}", "r") as f: out = f.read().strip()
+
+tables = ['admins', 'inbounds', 'users', 'proxies', 'hosts', 'services', 'nodes',
+          'service_hosts', 'service_inbounds', 'user_inbounds', 'node_inbounds', 'core_configs']
+
+def maybe_json(col, val):
+    if val is None:
+        return None
+    if col in ('settings','config','fragment_setting'):
+        if isinstance(val, (bytes, bytearray)):
+            try:
+                val = val.decode('utf-8', 'replace')
+            except Exception:
+                return str(val)
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except Exception:
+                return val
+    if isinstance(val, (bytes, bytearray)):
+        try:
+            return val.decode('utf-8', 'replace')
+        except Exception:
+            return str(val)
+    return val
+
+con = sqlite3.connect(db)
+con.row_factory = sqlite3.Row
+data = {}
+for t in tables:
+    try:
+        cur = con.execute(f"SELECT * FROM {t}")
+        rows = cur.fetchall()
+        data[t] = [{k: maybe_json(k, r[k]) for k in r.keys()} for r in rows]
+    except Exception:
+        data[t] = []
+
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, default=str)
+con.close()
+PYSQLITE
+
+    local py_rc=$?
+    rm -f "/tmp/mrm_sqlitedb_$$" "/tmp/mrm_sqliteout_$$"
+    [ $py_rc -ne 0 ] && { merr "SQLite export failed"; return 1; }
+    mok "SQLite exported: $output_file"
+    return 0
 }
 
 #==============================================================================
@@ -652,7 +724,7 @@ get_mysql_columns() {
 
 import_to_mysql() {
     local json_file="$1"
-    
+
     local target_tables; target_tables=$(run_mysql_query "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='rebecca';" 2>/dev/null | tr -d '\r')
     local nodes_cols; nodes_cols=$(get_mysql_columns "nodes")
     local hosts_cols; hosts_cols=$(get_mysql_columns "hosts")
@@ -684,7 +756,10 @@ def esc(v, col=None):
             if col == 'security': return "'none'"
             return "''"
         return "NULL"
-    return f"'{str(v).replace('\\', '\\\\').replace(\"'\", \"\\'\")}'"
+    s = str(v)
+    # Proper SQL escaping:
+    s = s.replace("\\", "\\\\").replace("'", "''")
+    return f"'{s}'"
 
 def ts(v):
     if v is None or v == '' or str(v).lower() == 'none': return "NOW()"
@@ -750,6 +825,20 @@ if 'service_hosts' in available_tables:
 sql.append("SET FOREIGN_KEY_CHECKS=1;")
 with open(sql_f, 'w') as f: f.write('\n'.join(sql))
 PYIMPORT
+
+    local py_rc=$?
+    if [ $py_rc -ne 0 ]; then
+        merr "Python import generator failed"
+        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        return 1
+    fi
+
+    if [ ! -s "$sql_file" ]; then
+        merr "Generated SQL file is empty"
+        rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
+        return 1
+    fi
+
     run_mysql_file "$sql_file" >/dev/null 2>&1
     rm -f "$sql_file" "/tmp/mrm_jsonfile_$$" "/tmp/mrm_sqlfile_$$" "/tmp/mrm_nodescols_$$" "/tmp/mrm_hostscols_$$" "/tmp/mrm_userscols_$$" "/tmp/mrm_tables_$$"
 }
@@ -791,7 +880,13 @@ verify_migration() {
 
 migrate_sqlite_to_mysql() {
     MYSQL_CONTAINER=$(find_mysql_container); local sdata=$(get_data_dir "$SRC"); local export_file="/tmp/mrm_sqlite_$$.json"
-    wait_mysql && wait_rebecca_tables && setup_jwt && import_to_mysql "$export_file"
+    local sqlite_db="$sdata/db.sqlite3"
+    wait_mysql || return 1
+    wait_rebecca_tables || return 1
+    export_sqlite "$sqlite_db" "$export_file" || return 1
+    setup_jwt || return 1
+    import_to_mysql "$export_file" || return 1
+    verify_migration
 }
 
 #==============================================================================
@@ -816,7 +911,13 @@ stop_old() {
 
 do_full() {
     migration_init; clear; ui_header "MRM MIGRATION V12.11"
-    SRC=$(detect_source_panel); SOURCE_DB_TYPE=$(detect_db_type "$SRC")
+    SRC=$(detect_source_panel) || true
+    if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+        merr "Source panel not found in /opt/pasarguard or /opt/marzban"
+        mpause
+        return 1
+    fi
+    SOURCE_DB_TYPE=$(detect_db_type "$SRC")
     [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca; return 1; }
     ui_confirm "Start?" "y" || return 0
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
@@ -832,7 +933,14 @@ do_full() {
 }
 
 do_fix() {
-    clear; ui_header "FIX"; TGT="/opt/rebecca"; SRC=$(detect_source_panel); migrate_pg_to_mysql; mpause
+    clear; ui_header "FIX"; TGT="/opt/rebecca"; SRC=$(detect_source_panel) || true
+    if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
+        merr "Source panel not found in /opt/pasarguard or /opt/marzban"
+        mpause
+        return 1
+    fi
+    SOURCE_DB_TYPE=$(detect_db_type "$SRC")
+    migrate_pg_to_mysql; mpause
 }
 
 do_rollback() {
