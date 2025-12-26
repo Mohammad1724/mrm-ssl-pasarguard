@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #==============================================================================
-# MRM Migration Tool - V12.11 (FINAL AUTOMATED REPAIR) - FIXED BUILD (STABLE)
+# MRM Migration Tool - V12.12 (FIXED & STABLE)
 #==============================================================================
 
 set -o pipefail
@@ -45,7 +45,10 @@ check_dependencies() {
     local missing=""
 
     command -v python3 &>/dev/null || missing="$missing python3"
-    command -v docker &>/dev/null || missing="$missing docker"
+    # Check for docker or docker-compose
+    if ! command -v docker &>/dev/null; then
+        missing="$missing docker"
+    fi
     command -v openssl &>/dev/null || missing="$missing openssl"
     command -v curl &>/dev/null || missing="$missing curl"
     command -v unzip &>/dev/null || missing="$missing unzip"
@@ -54,7 +57,7 @@ check_dependencies() {
     if [ -n "$missing" ]; then
         echo -e "${YELLOW}Installing:$missing${NC}"
         if command -v apt-get &>/dev/null; then
-            apt-get update -qq && apt-get install -y python3 docker.io openssl curl unzip wget &>/dev/null
+            apt-get update -qq && apt-get install -y python3 docker.io docker-compose openssl curl unzip wget &>/dev/null
         elif command -v yum &>/dev/null; then
             yum install -y python3 docker openssl curl unzip wget &>/dev/null
         elif command -v dnf &>/dev/null; then
@@ -285,8 +288,8 @@ run_mysql_query() {
     {
         safe_writeln "[client]"
         safe_writeln "user=root"
-        safe_write "password="
-        safe_writeln "$MYSQL_PASS"
+        # FIX: Quote password to handle special chars like # or ;
+        safe_writeln "password=\"${MYSQL_PASS}\""
     } > "$cnf"
     chmod 600 "$cnf"
 
@@ -313,8 +316,8 @@ run_mysql_file() {
     {
         safe_writeln "[client]"
         safe_writeln "user=root"
-        safe_write "password="
-        safe_writeln "$MYSQL_PASS"
+        # FIX: Quote password
+        safe_writeln "password=\"${MYSQL_PASS}\""
     } > "$cnf"
     chmod 600 "$cnf"
 
@@ -339,8 +342,8 @@ wait_mysql() {
     {
         safe_writeln "[client]"
         safe_writeln "user=root"
-        safe_write "password="
-        safe_writeln "$MYSQL_PASS"
+        # FIX: Quote password
+        safe_writeln "password=\"${MYSQL_PASS}\""
     } > "$cnf"
     chmod 600 "$cnf"
     docker cp "$cnf" "$MYSQL_CONTAINER:/tmp/.my.cnf" 2>/dev/null
@@ -401,7 +404,12 @@ start_source_panel() {
     local src="$1"
     minfo "Starting source panel..."
 
-    (cd "$src" && docker compose up -d) &>/dev/null
+    # FIX: Handle both docker-compose and docker compose
+    if command -v docker-compose &>/dev/null; then
+        (cd "$src" && docker-compose up -d) &>/dev/null
+    else
+        (cd "$src" && docker compose up -d) &>/dev/null
+    fi
 
     if [ "$SOURCE_DB_TYPE" = "postgresql" ]; then
         local waited=0
@@ -521,8 +529,17 @@ def read_val(name):
     except:
         return ""
 
+def escape_env_var(val):
+    # Escape backslashes and double quotes for .env file safety
+    if not val: return ""
+    return val.replace("\\", "\\\\").replace('"', '\\"')
+
 mysql_pass = read_val("mysql_pass")
+# Password for URL needs encoding
 mysql_pass_enc = urllib.parse.quote(mysql_pass, safe='')
+# Password for plain env var needs escaping
+mysql_pass_escaped = escape_env_var(mysql_pass)
+
 port = read_val("port")
 suser = read_val("suser")
 spass = read_val("spass")
@@ -537,7 +554,7 @@ target = read_val("target")
 secret_key = secrets.token_hex(32)
 
 content = f'''SQLALCHEMY_DATABASE_URL="mysql+pymysql://root:{mysql_pass_enc}@127.0.0.1:3306/rebecca"
-MYSQL_ROOT_PASSWORD="{mysql_pass}"
+MYSQL_ROOT_PASSWORD="{mysql_pass_escaped}"
 MYSQL_DATABASE="rebecca"
 UVICORN_HOST="0.0.0.0"
 UVICORN_PORT="{port}"
@@ -1312,7 +1329,7 @@ stop_old() {
 }
 
 do_full() {
-    migration_init; clear; ui_header "MRM MIGRATION V12.11"
+    migration_init; clear; ui_header "MRM MIGRATION V12.12"
     SRC=$(detect_source_panel) || true
     if [ -z "$SRC" ] || [ ! -d "$SRC" ]; then
         merr "Source panel not found in /opt/pasarguard or /opt/marzban"
@@ -1323,12 +1340,19 @@ do_full() {
     [ -d "/opt/rebecca" ] && TGT="/opt/rebecca" || { install_rebecca; return 1; }
     ui_confirm "Start?" "y" || return 0
     safe_writeln "$SRC" > "$BACKUP_ROOT/.last_source"
-    start_source_panel "$SRC" && (cd "$TGT" && docker compose down) &>/dev/null
+    
+    # Use docker-compose or docker compose based on availability
+    local compose_cmd="docker compose"
+    if command -v docker-compose &>/dev/null; then
+        compose_cmd="docker-compose"
+    fi
+
+    start_source_panel "$SRC" && (cd "$TGT" && $compose_cmd down) &>/dev/null
     copy_data "$(get_data_dir "$SRC")" "/var/lib/rebecca" && install_xray "/var/lib/rebecca" "$(get_data_dir "$SRC")" && generate_env "$SRC" "$TGT"
-    (cd "$TGT" && docker compose up -d --force-recreate) &>/dev/null
+    (cd "$TGT" && $compose_cmd up -d --force-recreate) &>/dev/null
     minfo "Initializing Rebecca (60s)..."; sleep 60
     [ "$SOURCE_DB_TYPE" = "postgresql" ] && migrate_pg_to_mysql || migrate_sqlite_to_mysql
-    (cd "$TGT" && docker compose restart) &>/dev/null; sleep 10; stop_old
+    (cd "$TGT" && $compose_cmd restart) &>/dev/null; sleep 10; stop_old
     ui_header "COMPLETE"
     echo -e "  ${GREEN}✓ Ready! Login with $SOURCE_PANEL_TYPE credentials${NC}"
     migration_cleanup; mpause
@@ -1348,9 +1372,14 @@ do_fix() {
     # Ensure source stack is running and PG_DB_* is set
     start_source_panel "$SRC" || { mpause; return 1; }
 
+    local compose_cmd="docker compose"
+    if command -v docker-compose &>/dev/null; then
+        compose_cmd="docker-compose"
+    fi
+
     # Ensure rebecca is up
     if [ -d "$TGT" ]; then
-        (cd "$TGT" && docker compose up -d) &>/dev/null
+        (cd "$TGT" && $compose_cmd up -d) &>/dev/null
         minfo "Initializing Rebecca (30s)..."; sleep 30
     fi
 
@@ -1361,8 +1390,14 @@ do_fix() {
 do_rollback() {
     clear; ui_header "ROLLBACK"
     sp=$(cat "$BACKUP_ROOT/.last_source" 2>/dev/null)
-    (cd /opt/rebecca && docker compose down)
-    (cd "$sp" && docker compose up -d)
+    
+    local compose_cmd="docker compose"
+    if command -v docker-compose &>/dev/null; then
+        compose_cmd="docker-compose"
+    fi
+
+    (cd /opt/rebecca && $compose_cmd down)
+    (cd "$sp" && $compose_cmd up -d)
     mpause
 }
 
@@ -1379,7 +1414,7 @@ do_logs() { clear; ui_header "LOGS"; [ -f "$MIGRATION_LOG" ] && tail -50 "$MIGRA
 migrator_menu() {
     while true; do
         clear
-        ui_header "MRM MIGRATION V12.11"
+        ui_header "MRM MIGRATION V12.12"
         echo -e "  1) Full Migration\n  2) Fix Current\n  3) Rollback\n  4) Status\n  5) Logs\n  0) Back\n"
         read -p "Select: " opt
         case "$opt" in 1) do_full ;; 2) do_fix ;; 3) do_rollback ;; 4) do_status ;; 5) do_logs ;; 0) migration_cleanup; exit 0 ;; esac
