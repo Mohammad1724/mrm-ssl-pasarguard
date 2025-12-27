@@ -24,7 +24,7 @@
             --glass-border: rgba(255, 255, 255, 0.08);
 
             /* Neon Glows (The Lamps) */
-            --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4);
+            --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4); 
             --lamp-purple: 0 25px 60px -15px rgba(112, 0, 255, 0.4);
             --lamp-success: 0 25px 60px -15px rgba(10, 255, 0, 0.4);
 
@@ -34,8 +34,9 @@
             --text-neon: #ffffff;
             --text-dim: #6b7280;
 
-            --radius-hud: 4px; /* Techy sharp corners */
-            --radius-panel: 16px; /* Slightly rounded */
+            /* UI Accents */
+            --radius-hud: 4px; 
+            --radius-panel: 16px;
         }
 
         :root.light {
@@ -122,7 +123,6 @@
             padding: 30px;
             position: relative;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            /* Tech Corner Accents */
         }
         .panel::before {
             content: '';
@@ -179,7 +179,6 @@
             box-shadow: var(--lamp-cyan);
             border: 1px solid rgba(255,255,255,0.3);
         }
-        /* Holographic Pulse */
         .avatar::after {
             content: '';
             position: absolute;
@@ -218,7 +217,7 @@
         .btn-tech {
             width: 100%;
             height: 56px;
-            border-radius: 8px; /* Rectangular tech feel */
+            border-radius: 8px; 
             border: 1px solid var(--glass-border);
             background: var(--glass-hud);
             color: var(--text-neon);
@@ -233,16 +232,12 @@
             text-transform: uppercase;
             letter-spacing: 1px;
         }
-
-        /* The Lamp Underneath */
         .btn-cyan { border-color: rgba(0, 242, 255, 0.3); box-shadow: var(--lamp-cyan); }
         .btn-cyan:hover { background: rgba(0, 242, 255, 0.1); color: #fff; border-color: var(--neon-cyan); }
         .btn-cyan:active { transform: translateY(2px); box-shadow: none; }
-
         .btn-purple { border-color: rgba(112, 0, 255, 0.3); box-shadow: var(--lamp-purple); }
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
-
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
         /* --- STATS CHIPS --- */
@@ -254,18 +249,15 @@
         }
         .chip {
             background: var(--glass-hud);
-            padding: 20px;
-            border-radius: var(--radius-hud);
+            padding: 20px; border-radius: var(--radius-hud);
             border: 1px solid var(--glass-border);
             text-align: center;
             position: relative;
         }
-        /* Tech accents on chips */
         .chip::before {
             content: ''; position: absolute; top: 0; right: 0; width: 8px; height: 8px;
             border-top: 1px solid var(--neon-cyan); border-right: 1px solid var(--neon-cyan);
         }
-        
         .chip-label { font-family: var(--font-tech); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 20px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
 
@@ -275,9 +267,8 @@
         .e-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .e-lbl { font-family: var(--font-tech); font-size: 12px; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 1px; }
         .e-pct { font-family: var(--font-tech); font-size: 28px; font-weight: 900; color: var(--text-neon); letter-spacing: -1px; }
-        
         .track { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; position: relative; }
-        .track::after { /* Grid texture on track */ content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
+        .track::after { content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
         .fill { height: 100%; border-radius: 2px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px currentColor; }
         .fill.cyan { background: var(--neon-cyan); color: var(--neon-cyan); }
         .fill.green { background: var(--neon-success); color: var(--neon-success); }
@@ -296,7 +287,6 @@
         }
         .dl-hud:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); }
         .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
-        
         .dl-icon { font-size: 28px; margin-bottom: 8px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
         .dl-txt { font-family: var(--font-tech); font-size: 11px; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 1px; }
 
@@ -308,7 +298,7 @@
             padding-top: 20px;
         }
 
-        /* --- MODALS (Terminal Style) --- */
+        /* --- MODALS --- */
         .mod {
             position: fixed; inset: 0; z-index: 1000;
             background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
@@ -323,7 +313,6 @@
             box-shadow: 0 0 50px var(--lamp-cyan);
             position: relative;
         }
-        /* Scanline on modal */
         .mbox::before {
             content: '';
             position: absolute;
@@ -352,7 +341,7 @@
         .app-opt:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); color: var(--neon-cyan); }
         .app-opt:active { background: var(--neon-cyan); color: #000; }
 
-        /* --- TOAST (Tech Alert) --- */
+        /* --- TOAST --- */
         .tst {
             position: fixed; bottom: 60px; left: 50%;
             transform: translateX(-50%) translateY(20px);
