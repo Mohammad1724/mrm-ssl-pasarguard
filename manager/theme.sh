@@ -2,6 +2,9 @@
 
 if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
+# ✅ اطمینان از تشخیص پنل و تنظیم DATA_DIR
+detect_active_panel > /dev/null
+
 # ==========================================
 # 1. INSTALL / UPDATE
 # ==========================================
@@ -11,19 +14,30 @@ install_theme_wizard() {
     echo -e "${YELLOW}      THEME INSTALLATION WIZARD              ${NC}"
     echo -e "${CYAN}=============================================${NC}"
 
+    # ✅ تشخیص مجدد پنل برای اطمینان
+    detect_active_panel > /dev/null
+
     if ! command -v python3 &> /dev/null; then
         echo -e "${RED}Python3 is required but not installed.${NC}"
         pause; return
     fi
 
-    # FIX: Use dynamic DATA_DIR
+    # ✅ بررسی DATA_DIR
+    if [ -z "$DATA_DIR" ]; then
+        echo -e "${RED}ERROR: DATA_DIR is not set!${NC}"
+        pause; return
+    fi
+
     TEMPLATE_FILE="$DATA_DIR/templates/subscription/index.html"
     TEMPLATE_DIR=$(dirname "$TEMPLATE_FILE")
     mkdir -p "$TEMPLATE_DIR"
 
+    echo -e "${BLUE}Template Path: $TEMPLATE_FILE${NC}"
+
     # 1. Backup old file
     if [ -s "$TEMPLATE_FILE" ]; then
         cp "$TEMPLATE_FILE" "/tmp/index_old.html"
+        echo -e "${GREEN}✔ Backup created.${NC}"
     else
         echo "" > "/tmp/index_old.html"
     fi
@@ -39,19 +53,32 @@ install_theme_wizard() {
         echo -e "${GREEN}✔ Found local index.html in /opt/mrm-manager. Using it.${NC}"
         cp "/opt/mrm-manager/index.html" "$TEMP_DL"
     else
-        echo -e "${BLUE}No local index.html found. Downloading from GitHub...${NC}"
+        echo -e "${BLUE}Downloading from GitHub...${NC}"
+        echo -e "${BLUE}URL: $THEME_HTML_URL${NC}"
+        
+        # ✅ بررسی موفقیت دانلود
         if curl -sL -o "$TEMP_DL" "$THEME_HTML_URL"; then
-             echo -e "${GREEN}✔ Downloaded.${NC}"
+            # بررسی اینکه فایل 404 نباشد
+            if grep -q "404: Not Found" "$TEMP_DL" 2>/dev/null; then
+                echo -e "${RED}✘ Download failed: 404 Not Found${NC}"
+                echo -e "${YELLOW}Please check THEME_HTML_URL in utils.sh${NC}"
+                pause; return
+            fi
+            echo -e "${GREEN}✔ Downloaded successfully.${NC}"
         else
-             echo -e "${RED}✘ Download failed!${NC}"
-             pause; return
+            echo -e "${RED}✘ Download failed!${NC}"
+            pause; return
         fi
     fi
 
-    if [ ! -s "$TEMP_DL" ]; then
-        echo -e "${RED}✘ Source file is empty.${NC}"
+    # ✅ بررسی سایز فایل
+    local FILE_SIZE=$(stat -c%s "$TEMP_DL" 2>/dev/null || echo "0")
+    if [ "$FILE_SIZE" -lt 1000 ]; then
+        echo -e "${RED}✘ Downloaded file is too small ($FILE_SIZE bytes). Something went wrong.${NC}"
+        cat "$TEMP_DL"
         pause; return
     fi
+    echo -e "${GREEN}✔ File size OK: $FILE_SIZE bytes${NC}"
 
     # 3. Processing
     echo -e "${BLUE}Processing configuration...${NC}"
@@ -137,43 +164,69 @@ PYEOF
     rm -f /tmp/mrm_theme_logic.py
 
     if [ $PY_EXIT_CODE -eq 0 ]; then
+        # ✅ بررسی فایل نهایی
+        if [ ! -s "$TEMPLATE_FILE" ]; then
+            echo -e "${RED}✘ Final file is empty!${NC}"
+            pause; return
+        fi
+
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-        
-        # FIX: Use dynamic path
+
         echo "CUSTOM_TEMPLATES_DIRECTORY=\"$DATA_DIR/templates/\"" >> "$PANEL_ENV"
         echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
 
-        restart_service "panel"
-        echo -e "${GREEN}✔ Theme Updated & Restarted.${NC}"
+        # ✅ نمایش تنظیمات نهایی
+        echo ""
+        echo -e "${CYAN}=== Final Configuration ===${NC}"
+        echo -e "Template: $TEMPLATE_FILE"
+        echo -e "File Size: $(stat -c%s "$TEMPLATE_FILE") bytes"
+        grep -E "CUSTOM_TEMPLATES|SUBSCRIPTION_PAGE" "$PANEL_ENV"
+        echo ""
+
+        # ✅ استفاده از down/up به جای restart
+        echo -e "${BLUE}Restarting panel (down/up)...${NC}"
+        cd "$PANEL_DIR" && docker compose down && docker compose up -d
+        
+        echo -e "${GREEN}✔ Theme Updated & Panel Restarted.${NC}"
         rm -f "/tmp/index_old.html" "/tmp/index_dl.html"
     else
-        echo -e "${RED}✘ Script Failed.${NC}"
+        echo -e "${RED}✘ Python Script Failed.${NC}"
     fi
     pause
 }
 
 activate_theme() {
     clear
+    detect_active_panel > /dev/null
+    
     local T_FILE="$DATA_DIR/templates/subscription/index.html"
-    if [ ! -s "$T_FILE" ]; then echo -e "${RED}Theme file missing. Install first.${NC}"; pause; return; fi
+    if [ ! -s "$T_FILE" ]; then 
+        echo -e "${RED}Theme file missing or empty. Install first.${NC}"
+        echo -e "${YELLOW}Expected path: $T_FILE${NC}"
+        pause; return
+    fi
+    
     if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
     sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
     sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
     echo "CUSTOM_TEMPLATES_DIRECTORY=\"$DATA_DIR/templates/\"" >> "$PANEL_ENV"
     echo 'SUBSCRIPTION_PAGE_TEMPLATE="subscription/index.html"' >> "$PANEL_ENV"
-    restart_service "panel"
+    
+    cd "$PANEL_DIR" && docker compose down && docker compose up -d
     echo -e "${GREEN}✔ Theme Activated.${NC}"
     pause
 }
 
 deactivate_theme() {
     clear
+    detect_active_panel > /dev/null
+    
     if [ -f "$PANEL_ENV" ]; then
         sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
         sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-        restart_service "panel"
+        cd "$PANEL_DIR" && docker compose down && docker compose up -d
         echo -e "${GREEN}✔ Theme Deactivated.${NC}"
     fi
     pause
@@ -181,13 +234,15 @@ deactivate_theme() {
 
 uninstall_theme() {
     clear
+    detect_active_panel > /dev/null
+    
     read -p "Delete theme files? (y/n): " CONFIRM
     if [[ "$CONFIRM" == "y" ]]; then
         rm -rf "$DATA_DIR/templates/subscription"
         if [ -f "$PANEL_ENV" ]; then
             sed -i '/CUSTOM_TEMPLATES_DIRECTORY/d' "$PANEL_ENV"
             sed -i '/SUBSCRIPTION_PAGE_TEMPLATE/d' "$PANEL_ENV"
-            restart_service "panel"
+            cd "$PANEL_DIR" && docker compose down && docker compose up -d
         fi
         echo -e "${GREEN}✔ Theme removed & deactivated.${NC}"
     fi
@@ -202,16 +257,24 @@ is_theme_active() {
 theme_menu() {
     while true; do
         clear
+        detect_active_panel > /dev/null
+        
         echo -e "${BLUE}===========================================${NC}"
         echo -e "${YELLOW}      THEME MANAGER                        ${NC}"
         echo -e "${BLUE}===========================================${NC}"
-        if is_theme_active; then echo -e "Status: ${GREEN}● Active${NC}"; else echo -e "Status: ${RED}● Inactive${NC}"; fi
+        echo -e "Panel: ${CYAN}$PANEL_DIR${NC}"
+        echo -e "Data:  ${CYAN}$DATA_DIR${NC}"
+        if is_theme_active; then 
+            echo -e "Status: ${GREEN}● Active${NC}"
+        else 
+            echo -e "Status: ${RED}● Inactive${NC}"
+        fi
         echo ""
-        echo "1) Install / Update Theme (Local/Web)"
+        echo "1) Install / Update Theme"
         echo "2) Activate Theme"
         echo "3) Deactivate Theme"
         echo "4) Uninstall Theme"
-        echo "5) Back"
+        echo "0) Back"
         echo -e "${BLUE}===========================================${NC}"
         read -p "Select: " T_OPT
         case $T_OPT in
@@ -219,7 +282,7 @@ theme_menu() {
             2) activate_theme ;;
             3) deactivate_theme ;;
             4) uninstall_theme ;;
-            5) return ;;
+            0) return ;;
             *) ;;
         esac
     done
