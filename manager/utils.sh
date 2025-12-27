@@ -1,15 +1,16 @@
 #!/bin/bash
 
 # --- Configuration & Paths ---
-export PANEL_DIR="/opt/pasarguard"  # Default, auto-detected later
+export PANEL_DIR="/opt/pasarguard"
 export PANEL_ENV="$PANEL_DIR/.env"
 export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+export DATA_DIR="/var/lib/pasarguard"  # ✅ اضافه شد
 
 export NODE_DIR="/opt/pg-node"
 export NODE_ENV="$NODE_DIR/.env"
 export NODE_DEF_CERTS="/var/lib/pg-node/certs"
 
-export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
+export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager/index.html"
 
 # --- Colors ---
 export RED='\033[0;31m'
@@ -66,16 +67,19 @@ detect_active_panel() {
         export PANEL_DIR="/opt/rebecca"
         export PANEL_ENV="/opt/rebecca/.env"
         export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
+        export DATA_DIR="/var/lib/rebecca"  # ✅ اضافه شد
     elif [ -d "/opt/pasarguard" ]; then
         echo "pasarguard"
         export PANEL_DIR="/opt/pasarguard"
         export PANEL_ENV="/opt/pasarguard/.env"
         export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+        export DATA_DIR="/var/lib/pasarguard"  # ✅ اضافه شد
     else
         echo "marzban"
         export PANEL_DIR="/opt/marzban"
         export PANEL_ENV="/opt/marzban/.env"
         export PANEL_DEF_CERTS="/var/lib/marzban/certs"
+        export DATA_DIR="/var/lib/marzban"  # ✅ اضافه شد
     fi
 }
 
@@ -115,7 +119,6 @@ admin_create() {
     [ "$panel" == "rebecca" ] && cli="rebecca-cli"
     [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
 
-    # Try finding CLI in container
     local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
 
     if [ -z "$cid" ]; then
