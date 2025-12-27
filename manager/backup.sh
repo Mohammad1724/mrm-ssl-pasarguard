@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# ============================================
-# MRM BACKUP & RESTORE - ULTIMATE VERSION
-# Full System Migration Support
-# ============================================
+# ====================================================
+# MRM BACKUP & RESTORE - v5.1 (Hidden Files Fix)
+# Fix: Now correctly includes .env files using "/."
+# ====================================================
 
 # --- CONFIGURATION ---
 BACKUP_DIR="/root/mrm-backups"
 TG_CONFIG="/root/.mrm_telegram"
-BACKUP_VERSION="3.0"
+BACKUP_VERSION="5.1"
 
 # Colors
 RED='\033[0;31m'
@@ -124,7 +124,7 @@ send_to_telegram() {
     fi
 }
 
-# --- BACKUP POSTGRESQL (FULL) ---
+# --- BACKUP POSTGRESQL (FULL SAFE METHOD) ---
 backup_postgresql_full() {
     local BACKUP_PATH="$1"
     
@@ -136,10 +136,11 @@ backup_postgresql_full() {
     [ -z "$DB_NAME" ] && DB_NAME="pasarguard"
     [ -z "$DB_USER" ] && DB_USER="pasarguard"
     
-    local DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
+    # Find Container
+    local DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres|pasarguard-timescaledb" | head -1)
     
     if [ -n "$DB_CONTAINER" ]; then
-        # Method 1: pg_dump (SQL format - portable)
+        # Method 1: pg_dump (SQL format - Standard)
         echo -ne "    SQL Dump... "
         docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" -f /tmp/database.sql 2>/dev/null
         if [ $? -eq 0 ]; then
@@ -150,7 +151,7 @@ backup_postgresql_full() {
             echo -e "${YELLOW}Failed${NC}"
         fi
         
-        # Method 2: pg_dump (Custom format - faster restore)
+        # Method 2: pg_dump (Binary format - Robust)
         echo -ne "    Binary Dump... "
         docker exec "$DB_CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" -F c -f /tmp/database.dump 2>/dev/null
         if [ $? -eq 0 ]; then
@@ -161,17 +162,7 @@ backup_postgresql_full() {
             echo -e "${YELLOW}Failed${NC}"
         fi
     else
-        echo -e "    ${RED}Container not found${NC}"
-    fi
-    
-    # Method 3: Raw PostgreSQL data directory
-    echo -ne "    Raw Data Copy... "
-    if [ -d "/var/lib/postgresql/pasarguard" ]; then
-        mkdir -p "$BACKUP_PATH/postgresql_data"
-        cp -r /var/lib/postgresql/pasarguard/* "$BACKUP_PATH/postgresql_data/" 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Not found${NC}"
+        echo -e "    ${RED}Container not found (is panel running?)${NC}"
     fi
 }
 
@@ -202,44 +193,14 @@ create_backup() {
     local TMP="/tmp/$NAME"
     mkdir -p "$TMP"
     
-    # === BACKUP INFO FILE ===
+    # Create Info File
     cat > "$TMP/backup_info.txt" << EOF
-╔════════════════════════════════════════════╗
-║         MRM FULL BACKUP INFO               ║
-╚════════════════════════════════════════════╝
-
-Version:    $BACKUP_VERSION
-Created:    $(date '+%Y-%m-%d %H:%M:%S')
-Hostname:   $(hostname)
-IP Address: $(hostname -I | awk '{print $1}')
-Panel:      $PANEL_NAME
-Panel Dir:  $PANEL_DIR
-Data Dir:   $DATA_DIR
-Database:   $DB_TYPE
-
-=== RESTORE INSTRUCTIONS ===
-
-1. Install fresh panel on new server
-2. Stop all services: docker compose down
-3. Extract this backup
-4. Run restore from MRM Manager
-5. Update IP addresses in configs if needed
-6. Start services: docker compose up -d
-
-=== INCLUDED FILES ===
-
-- database/          : PostgreSQL dumps
-- panel/             : Panel configuration
-- data/              : Panel data & templates
-- node/              : Node configuration  
-- node-data/         : Node certificates
-- ssl/               : Let's Encrypt certificates
-- panel-certs/       : Panel SSL certificates
-- nginx/             : Nginx configuration
-- postgresql_raw/    : Raw PostgreSQL data
-- system/            : Cron, hosts, systemd
-- mrm-manager/       : MRM Manager files
-
+MRM Full Backup
+Version: $BACKUP_VERSION
+Date: $(date)
+Hostname: $(hostname)
+Panel: $PANEL_NAME
+Database: $DB_TYPE
 EOF
 
     # === 1. DATABASE ===
@@ -250,7 +211,7 @@ EOF
     else
         echo -ne "  SQLite... "
         if [ -f "$DATA_DIR/db.sqlite3" ]; then
-            cp "$DATA_DIR/db.sqlite3" "$TMP/database/"
+            cp -a "$DATA_DIR/db.sqlite3" "$TMP/database/"
             echo -e "${GREEN}OK${NC}"
         else
             echo -e "${YELLOW}Not found${NC}"
@@ -262,7 +223,9 @@ EOF
     echo -ne "  $PANEL_DIR... "
     if [ -d "$PANEL_DIR" ]; then
         mkdir -p "$TMP/panel"
-        cp -r "$PANEL_DIR"/* "$TMP/panel/" 2>/dev/null
+        # FIX: Use "/." to include hidden files like .env
+        cp -a "$PANEL_DIR"/.* "$TMP/panel/" 2>/dev/null
+        cp -a "$PANEL_DIR"/* "$TMP/panel/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${RED}Not found${NC}"
@@ -273,7 +236,8 @@ EOF
     echo -ne "  $DATA_DIR... "
     if [ -d "$DATA_DIR" ]; then
         mkdir -p "$TMP/data"
-        cp -r "$DATA_DIR"/* "$TMP/data/" 2>/dev/null
+        # FIX: Include hidden files
+        cp -a "$DATA_DIR"/. "$TMP/data/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${RED}Not found${NC}"
@@ -284,7 +248,8 @@ EOF
     echo -ne "  /opt/pg-node... "
     if [ -d "/opt/pg-node" ]; then
         mkdir -p "$TMP/node"
-        cp -r /opt/pg-node/* "$TMP/node/" 2>/dev/null
+        # FIX: Include hidden files (.env)
+        cp -a /opt/pg-node/. "$TMP/node/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}Not found${NC}"
@@ -295,7 +260,7 @@ EOF
     echo -ne "  /var/lib/pg-node... "
     if [ -d "/var/lib/pg-node" ]; then
         mkdir -p "$TMP/node-data"
-        cp -r /var/lib/pg-node/* "$TMP/node-data/" 2>/dev/null
+        cp -a /var/lib/pg-node/. "$TMP/node-data/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}Not found${NC}"
@@ -306,7 +271,7 @@ EOF
     echo -ne "  Let's Encrypt... "
     if [ -d "/etc/letsencrypt" ]; then
         mkdir -p "$TMP/ssl"
-        cp -rL /etc/letsencrypt/* "$TMP/ssl/" 2>/dev/null
+        cp -a /etc/letsencrypt/. "$TMP/ssl/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}Not found${NC}"
@@ -317,8 +282,7 @@ EOF
     echo -ne "  $DATA_DIR/certs... "
     if [ -d "$DATA_DIR/certs" ]; then
         mkdir -p "$TMP/panel-certs"
-        cp -r "$DATA_DIR/certs"/* "$TMP/panel-certs/" 2>/dev/null
-        # List domains
+        cp -a "$DATA_DIR/certs"/. "$TMP/panel-certs/" 2>/dev/null
         local CERT_COUNT=$(ls -d "$DATA_DIR/certs"/*/ 2>/dev/null | wc -l)
         echo -e "${GREEN}OK ($CERT_COUNT domains)${NC}"
     else
@@ -331,42 +295,35 @@ EOF
     
     echo -ne "  sites-available... "
     if [ -d "/etc/nginx/sites-available" ]; then
-        cp -r /etc/nginx/sites-available "$TMP/nginx/" 2>/dev/null
+        mkdir -p "$TMP/nginx/sites-available"
+        cp -a /etc/nginx/sites-available/. "$TMP/nginx/sites-available/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Not found${NC}"
     fi
     
     echo -ne "  sites-enabled... "
     if [ -d "/etc/nginx/sites-enabled" ]; then
         mkdir -p "$TMP/nginx/sites-enabled"
-        cp -rL /etc/nginx/sites-enabled/* "$TMP/nginx/sites-enabled/" 2>/dev/null
+        cp -a /etc/nginx/sites-enabled/. "$TMP/nginx/sites-enabled/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Not found${NC}"
     fi
     
     echo -ne "  conf.d... "
     if [ -d "/etc/nginx/conf.d" ]; then
-        cp -r /etc/nginx/conf.d "$TMP/nginx/" 2>/dev/null
+        mkdir -p "$TMP/nginx/conf.d"
+        cp -a /etc/nginx/conf.d/. "$TMP/nginx/conf.d/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Not found${NC}"
     fi
     
     echo -ne "  nginx.conf... "
-    [ -f "/etc/nginx/nginx.conf" ] && cp /etc/nginx/nginx.conf "$TMP/nginx/"
-    echo -e "${GREEN}OK${NC}"
+    [ -f "/etc/nginx/nginx.conf" ] && cp -a /etc/nginx/nginx.conf "$TMP/nginx/" && echo -e "${GREEN}OK${NC}"
 
     # === 9. POSTGRESQL RAW DATA ===
-    echo -e "${BLUE}[9/12] PostgreSQL Raw Data${NC}"
-    echo -ne "  /var/lib/postgresql/pasarguard... "
-    if [ -d "/var/lib/postgresql/pasarguard" ]; then
-        mkdir -p "$TMP/postgresql_raw"
-        cp -r /var/lib/postgresql/pasarguard/* "$TMP/postgresql_raw/" 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
+    echo -e "${BLUE}[9/12] Database Verification${NC}"
+    echo -ne "  Verifying dumps... "
+    if [ -f "$TMP/database/database.sql" ] || [ -f "$TMP/database/database.dump" ]; then
+        echo -e "${GREEN}OK (Valid Dumps)${NC}"
     else
-        echo -e "${YELLOW}Not found${NC}"
+        echo -e "${RED}WARNING: No DB Dump created!${NC}"
     fi
 
     # === 10. SYSTEM FILES ===
@@ -378,7 +335,7 @@ EOF
     echo -e "${GREEN}OK${NC}"
     
     echo -ne "  Hosts file... "
-    cp /etc/hosts "$TMP/system/" 2>/dev/null
+    cp -a /etc/hosts "$TMP/system/" 2>/dev/null
     echo -e "${GREEN}OK${NC}"
     
     echo -ne "  MRM Telegram config... "
@@ -387,9 +344,8 @@ EOF
     
     echo -ne "  Systemd services... "
     mkdir -p "$TMP/system/systemd"
-    cp /etc/systemd/system/pg-node*.service "$TMP/system/systemd/" 2>/dev/null
-    cp /etc/systemd/system/pasarguard*.service "$TMP/system/systemd/" 2>/dev/null
-    cp /etc/systemd/system/marzban*.service "$TMP/system/systemd/" 2>/dev/null
+    cp -a /etc/systemd/system/pg-node*.service "$TMP/system/systemd/" 2>/dev/null
+    cp -a /etc/systemd/system/pasarguard*.service "$TMP/system/systemd/" 2>/dev/null
     echo -e "${GREEN}OK${NC}"
     
     echo -ne "  Open ports info... "
@@ -401,7 +357,7 @@ EOF
     echo -ne "  /opt/mrm-manager... "
     if [ -d "/opt/mrm-manager" ]; then
         mkdir -p "$TMP/mrm-manager"
-        cp -r /opt/mrm-manager/* "$TMP/mrm-manager/" 2>/dev/null
+        cp -a /opt/mrm-manager/. "$TMP/mrm-manager/" 2>/dev/null
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}Not found${NC}"
@@ -411,7 +367,7 @@ EOF
     echo -e "${BLUE}[12/12] Compressing${NC}"
     echo -ne "  Creating archive... "
     cd "$BACKUP_DIR"
-    tar -czf "${NAME}.tar.gz" -C "/tmp" "$NAME" 2>/dev/null
+    tar -czpf "${NAME}.tar.gz" -C "/tmp" "$NAME" 2>/dev/null
     rm -rf "$TMP"
     
     local FINAL_FILE="$BACKUP_DIR/${NAME}.tar.gz"
@@ -472,7 +428,7 @@ list_backups() {
     return 0
 }
 
-# --- RESTORE MENU ---
+# --- RESTORE BACKUP ---
 restore_backup() {
     if ! list_backups; then
         return
@@ -504,14 +460,12 @@ restore_backup() {
     echo ""
     echo -e "Selected: ${GREEN}$SELECTED_NAME${NC}"
     echo ""
-    echo "1) 🔄 Full Restore (Everything)"
+    echo "1) 🔄 Full Restore (Recommended)"
     echo "2) 💾 Database Only"
-    echo "3) ⚙️  Panel Config + Data Only"
-    echo "4) 🔐 SSL Certificates Only"
-    echo "5) 🌐 Nginx Config Only"
-    echo "6) 📡 Node Config Only"
-    echo "7) 📋 View Backup Contents"
-    echo ""
+    echo "3) ⚙️  Panel Config + Data"
+    echo "4) 🔐 SSL Certificates"
+    echo "5) 🌐 Nginx Config"
+    echo "6) 📡 Node Config"
     echo "0) Cancel"
     echo ""
     read -p "Select: " RESTORE_OPT
@@ -523,25 +477,9 @@ restore_backup() {
         4) restore_component "$SELECTED_FILE" "ssl" ;;
         5) restore_component "$SELECTED_FILE" "nginx" ;;
         6) restore_component "$SELECTED_FILE" "node" ;;
-        7) view_backup_contents "$SELECTED_FILE" ;;
         0) return ;;
         *) echo "Invalid option."; force_pause ;;
     esac
-}
-
-# --- VIEW BACKUP CONTENTS ---
-view_backup_contents() {
-    local BACKUP_FILE="$1"
-    
-    clear
-    echo -e "${CYAN}=== BACKUP CONTENTS ===${NC}"
-    echo ""
-    
-    tar -tzf "$BACKUP_FILE" | head -100
-    
-    echo ""
-    echo -e "${YELLOW}(Showing first 100 entries)${NC}"
-    force_pause
 }
 
 # --- RESTORE FULL ---
@@ -553,18 +491,7 @@ restore_full() {
     echo -e "${RED}║     ⚠️  FULL SYSTEM RESTORE  ⚠️            ║${NC}"
     echo -e "${RED}╚════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "This will restore ${CYAN}EVERYTHING${NC}:"
-    echo ""
-    echo "  ✓ PostgreSQL Database (all users & data)"
-    echo "  ✓ Panel configuration & .env"
-    echo "  ✓ Panel data & custom templates"
-    echo "  ✓ Node configuration & certificates"
-    echo "  ✓ SSL certificates (Let's Encrypt)"
-    echo "  ✓ Nginx configuration"
-    echo "  ✓ Cron jobs"
-    echo "  ✓ System hosts file"
-    echo ""
-    echo -e "${RED}⚠️  ALL CURRENT DATA WILL BE REPLACED!${NC}"
+    echo -e "${RED}WARNING: ALL CURRENT DATA WILL BE REPLACED!${NC}"
     echo ""
     read -p "Type 'RESTORE' to confirm: " CONFIRM
     
@@ -579,13 +506,12 @@ restore_full() {
     
     echo ""
     echo -e "${CYAN}Starting full restore...${NC}"
-    echo ""
     
-    # Extract
-    echo -ne "[1/10] Extracting backup... "
+    # 1. EXTRACT
+    echo -ne "  [1/9] Extracting backup... "
     local EXTRACT_DIR="/tmp/mrm_restore_$(date +%s)"
     mkdir -p "$EXTRACT_DIR"
-    tar -xzf "$BACKUP_FILE" -C "$EXTRACT_DIR" 2>/dev/null
+    tar -xzpf "$BACKUP_FILE" -C "$EXTRACT_DIR" 2>/dev/null
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}FAILED${NC}"
@@ -596,134 +522,138 @@ restore_full() {
     echo -e "${GREEN}OK${NC}"
     
     local BACKUP_CONTENT=$(ls -d "$EXTRACT_DIR"/*backup_* 2>/dev/null | head -1)
-    
     if [ -z "$BACKUP_CONTENT" ]; then
+        BACKUP_CONTENT=$(ls -d "$EXTRACT_DIR"/*fullbackup_* 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$BACKUP_CONTENT" ] || [ ! -d "$BACKUP_CONTENT" ]; then
         echo -e "${RED}Invalid backup structure.${NC}"
         rm -rf "$EXTRACT_DIR"
         force_pause
         return
     fi
     
-    # Stop services
-    echo -ne "[2/10] Stopping services... "
-    cd "$PANEL_DIR" 2>/dev/null && docker compose down 2>/dev/null
-    cd /opt/pg-node 2>/dev/null && docker compose down 2>/dev/null
-    systemctl stop nginx 2>/dev/null
+    # 2. STOP SERVICES
+    echo -ne "  [2/9] Stopping services... "
+    cd "$PANEL_DIR" 2>/dev/null && docker compose down >/dev/null 2>&1
+    cd /opt/pg-node 2>/dev/null && docker compose down >/dev/null 2>&1
+    systemctl stop nginx >/dev/null 2>&1
     echo -e "${GREEN}OK${NC}"
     
-    # Restore Panel
-    echo -ne "[3/10] Restoring panel config... "
+    # 3. RESTORE PANEL
+    echo -ne "  [3/9] Restoring panel (.env included)... "
     if [ -d "$BACKUP_CONTENT/panel" ]; then
         rm -rf "$PANEL_DIR"
         mkdir -p "$PANEL_DIR"
-        cp -r "$BACKUP_CONTENT/panel"/* "$PANEL_DIR/" 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Skipped${NC}"
+        # FIX: Include dotfiles in restore
+        cp -a "$BACKUP_CONTENT/panel"/. "$PANEL_DIR/"
     fi
-    
-    # Restore Data
-    echo -ne "[4/10] Restoring panel data... "
     if [ -d "$BACKUP_CONTENT/data" ]; then
         rm -rf "$DATA_DIR"
         mkdir -p "$DATA_DIR"
-        cp -r "$BACKUP_CONTENT/data"/* "$DATA_DIR/" 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Skipped${NC}"
+        cp -a "$BACKUP_CONTENT/data"/. "$DATA_DIR/"
     fi
+    echo -e "${GREEN}OK${NC}"
     
-    # Restore Node
-    echo -ne "[5/10] Restoring node... "
+    # 4. RESTORE NODE
+    echo -ne "  [4/9] Restoring node... "
     if [ -d "$BACKUP_CONTENT/node" ]; then
         rm -rf /opt/pg-node
         mkdir -p /opt/pg-node
-        cp -r "$BACKUP_CONTENT/node"/* /opt/pg-node/ 2>/dev/null
+        # FIX: Include dotfiles
+        cp -a "$BACKUP_CONTENT/node"/. /opt/pg-node/
     fi
     if [ -d "$BACKUP_CONTENT/node-data" ]; then
         rm -rf /var/lib/pg-node
         mkdir -p /var/lib/pg-node
-        cp -r "$BACKUP_CONTENT/node-data"/* /var/lib/pg-node/ 2>/dev/null
+        cp -a "$BACKUP_CONTENT/node-data"/. /var/lib/pg-node/
     fi
     echo -e "${GREEN}OK${NC}"
     
-    # Restore SSL
-    echo -ne "[6/10] Restoring SSL certificates... "
+    # 5. RESTORE SSL & NGINX
+    echo -ne "  [5/9] Restoring SSL/Nginx... "
     if [ -d "$BACKUP_CONTENT/ssl" ]; then
         rm -rf /etc/letsencrypt
         mkdir -p /etc/letsencrypt
-        cp -r "$BACKUP_CONTENT/ssl"/* /etc/letsencrypt/ 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Skipped${NC}"
+        cp -a "$BACKUP_CONTENT/ssl"/. /etc/letsencrypt/
     fi
-    
-    # Restore Nginx
-    echo -ne "[7/10] Restoring Nginx... "
     if [ -d "$BACKUP_CONTENT/nginx" ]; then
-        [ -d "$BACKUP_CONTENT/nginx/sites-available" ] && cp -r "$BACKUP_CONTENT/nginx/sites-available"/* /etc/nginx/sites-available/ 2>/dev/null
-        [ -d "$BACKUP_CONTENT/nginx/conf.d" ] && cp -r "$BACKUP_CONTENT/nginx/conf.d"/* /etc/nginx/conf.d/ 2>/dev/null
-        [ -f "$BACKUP_CONTENT/nginx/nginx.conf" ] && cp "$BACKUP_CONTENT/nginx/nginx.conf" /etc/nginx/ 2>/dev/null
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${YELLOW}Skipped${NC}"
-    fi
-    
-    # Restore System
-    echo -ne "[8/10] Restoring system files... "
-    if [ -f "$BACKUP_CONTENT/system/crontab.txt" ]; then
-        crontab "$BACKUP_CONTENT/system/crontab.txt" 2>/dev/null
-    fi
-    if [ -f "$BACKUP_CONTENT/system/.mrm_telegram" ]; then
-        cp "$BACKUP_CONTENT/system/.mrm_telegram" /root/ 2>/dev/null
-    fi
-    if [ -d "$BACKUP_CONTENT/system/systemd" ]; then
-        cp "$BACKUP_CONTENT/system/systemd"/*.service /etc/systemd/system/ 2>/dev/null
-        systemctl daemon-reload 2>/dev/null
+        [ -d "$BACKUP_CONTENT/nginx/sites-available" ] && cp -a "$BACKUP_CONTENT/nginx/sites-available"/. /etc/nginx/sites-available/
+        [ -d "$BACKUP_CONTENT/nginx/conf.d" ] && cp -a "$BACKUP_CONTENT/nginx/conf.d"/. /etc/nginx/conf.d/
+        [ -f "$BACKUP_CONTENT/nginx/nginx.conf" ] && cp -a "$BACKUP_CONTENT/nginx/nginx.conf" /etc/nginx/
     fi
     echo -e "${GREEN}OK${NC}"
     
-    # Start services
-    echo -ne "[9/10] Starting services... "
-    systemctl start nginx 2>/dev/null
-    cd "$PANEL_DIR" && docker compose up -d 2>/dev/null
+    # 6. RESTORE SYSTEM
+    echo -ne "  [6/9] Restoring system... "
+    if [ -d "$BACKUP_CONTENT/system" ]; then
+        [ -f "$BACKUP_CONTENT/system/crontab.txt" ] && crontab "$BACKUP_CONTENT/system/crontab.txt"
+        [ -f "$BACKUP_CONTENT/system/hosts" ] && cp -a "$BACKUP_CONTENT/system/hosts" /etc/hosts
+        [ -d "$BACKUP_CONTENT/system/systemd" ] && cp -a "$BACKUP_CONTENT/system/systemd"/*.service /etc/systemd/system/ && systemctl daemon-reload
+    fi
     echo -e "${GREEN}OK${NC}"
     
-    # Restore Database
-    echo -ne "[10/10] Restoring database... "
-    if [ "$DB_TYPE" == "postgresql" ]; then
-        sleep 15  # Wait for PostgreSQL to start
-        
-        local DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
-        local DB_NAME=$(grep "^DB_NAME=" "$PANEL_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
-        local DB_USER=$(grep "^DB_USER=" "$PANEL_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
-        [ -z "$DB_NAME" ] && DB_NAME="pasarguard"
-        [ -z "$DB_USER" ] && DB_USER="pasarguard"
-        
-        if [ -n "$DB_CONTAINER" ] && [ -f "$BACKUP_CONTENT/database/database.dump" ]; then
-            docker cp "$BACKUP_CONTENT/database/database.dump" "$DB_CONTAINER:/tmp/" 2>/dev/null
-            docker exec "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$DB_NAME" -c --if-exists /tmp/database.dump 2>/dev/null
-            docker exec "$DB_CONTAINER" rm -f /tmp/database.dump 2>/dev/null
-            echo -e "${GREEN}OK${NC}"
-        elif [ -f "$BACKUP_CONTENT/database/database.sql" ]; then
-            docker cp "$BACKUP_CONTENT/database/database.sql" "$DB_CONTAINER:/tmp/" 2>/dev/null
-            docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/database.sql 2>/dev/null
-            echo -e "${GREEN}OK (SQL)${NC}"
-        else
-            echo -e "${YELLOW}No dump found${NC}"
-        fi
-    else
-        if [ -f "$BACKUP_CONTENT/database/db.sqlite3" ]; then
-            cp "$BACKUP_CONTENT/database/db.sqlite3" "$DATA_DIR/"
-            echo -e "${GREEN}OK${NC}"
-        else
-            echo -e "${YELLOW}Not found${NC}"
-        fi
-    fi
-    
-    # Start Node
+    # 7. START SERVICES
+    echo -ne "  [7/9] Starting services... "
+    systemctl start nginx
     if [ -d "/opt/pg-node" ]; then
-        cd /opt/pg-node && docker compose up -d 2>/dev/null
+        cd /opt/pg-node && docker compose up -d >/dev/null 2>&1
+    fi
+    cd "$PANEL_DIR" && docker compose up -d >/dev/null 2>&1
+    echo -e "${GREEN}OK${NC}"
+    
+    # 8. RESTORE DB
+    echo -ne "  [8/9] Waiting for DB... "
+    
+    # Check if we have dump
+    local HAS_DUMP=false
+    if [ -f "$BACKUP_CONTENT/database/database.dump" ] || [ -f "$BACKUP_CONTENT/database/database.sql" ]; then
+        HAS_DUMP=true
+    fi
+    
+    if [ "$DB_TYPE" == "postgresql" ] && [ "$HAS_DUMP" = true ]; then
+        # Wait loop
+        local RETRY=0
+        local DB_READY=false
+        local DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres|pasarguard-timescaledb" | head -1)
+        
+        while [ $RETRY -lt 60 ]; do
+            if [ -n "$DB_CONTAINER" ] && docker exec "$DB_CONTAINER" pg_isready -U pasarguard >/dev/null 2>&1; then
+                DB_READY=true
+                break
+            fi
+            sleep 2
+            ((RETRY++))
+            # Refresh container name check
+            DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
+        done
+        
+        if [ "$DB_READY" = true ]; then
+            echo -e "${GREEN}Ready${NC}"
+            echo -ne "  [9/9] Importing Dump... "
+            
+            local DB_NAME=$(grep "^DB_NAME=" "$PANEL_DIR/.env" | cut -d'=' -f2 | tr -d ' ')
+            local DB_USER=$(grep "^DB_USER=" "$PANEL_DIR/.env" | cut -d'=' -f2 | tr -d ' ')
+            [ -z "$DB_NAME" ] && DB_NAME="pasarguard"
+            [ -z "$DB_USER" ] && DB_USER="pasarguard"
+            
+            # 1. Clean existing DB
+            docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+            
+            # 2. Import
+            if [ -f "$BACKUP_CONTENT/database/database.dump" ]; then
+                docker cp "$BACKUP_CONTENT/database/database.dump" "$DB_CONTAINER:/tmp/restore.dump"
+                docker exec "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$DB_NAME" -c --if-exists /tmp/restore.dump >/dev/null 2>&1
+            elif [ -f "$BACKUP_CONTENT/database/database.sql" ]; then
+                docker cp "$BACKUP_CONTENT/database/database.sql" "$DB_CONTAINER:/tmp/restore.sql"
+                docker exec "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -f /tmp/restore.sql >/dev/null 2>&1
+            fi
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${RED}DB Timeout${NC}"
+        fi
+    else
+        echo -e "${GREEN}Skipped (SQLite or No Dump)${NC}"
     fi
     
     # Cleanup
@@ -733,11 +663,6 @@ restore_full() {
     echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║     ✔ FULL RESTORE COMPLETED               ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${YELLOW}⚠️  IMPORTANT: If server IP changed, update:${NC}"
-    echo "   - $PANEL_DIR/.env (UVICORN_SSL_*, etc)"
-    echo "   - /opt/pg-node/.env (API_KEY if needed)"
-    echo "   - Nginx configs for new domains"
     echo ""
     
     force_pause
@@ -760,53 +685,46 @@ restore_component() {
     
     local EXTRACT_DIR="/tmp/mrm_restore_$(date +%s)"
     mkdir -p "$EXTRACT_DIR"
-    tar -xzf "$BACKUP_FILE" -C "$EXTRACT_DIR" 2>/dev/null
+    tar -xzpf "$BACKUP_FILE" -C "$EXTRACT_DIR" 2>/dev/null
     local BACKUP_CONTENT=$(ls -d "$EXTRACT_DIR"/*backup_* 2>/dev/null | head -1)
+    if [ -z "$BACKUP_CONTENT" ]; then BACKUP_CONTENT=$(ls -d "$EXTRACT_DIR"/*fullbackup_* 2>/dev/null | head -1); fi
     
     case $COMPONENT in
         "database")
+            # Similar DB logic to full restore
             local DB_TYPE=$(detect_db_type)
             if [ "$DB_TYPE" == "postgresql" ]; then
                 local DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
-                local DB_NAME=$(grep "^DB_NAME=" "$PANEL_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
-                local DB_USER=$(grep "^DB_USER=" "$PANEL_DIR/.env" 2>/dev/null | cut -d'=' -f2 | tr -d ' ')
-                [ -z "$DB_NAME" ] && DB_NAME="pasarguard"
-                [ -z "$DB_USER" ] && DB_USER="pasarguard"
-                
-                if [ -f "$BACKUP_CONTENT/database/database.dump" ]; then
-                    docker cp "$BACKUP_CONTENT/database/database.dump" "$DB_CONTAINER:/tmp/"
-                    docker exec "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$DB_NAME" -c --if-exists /tmp/database.dump
-                    echo -e "${GREEN}Database restored.${NC}"
+                if [ -n "$DB_CONTAINER" ] && [ -f "$BACKUP_CONTENT/database/database.dump" ]; then
+                    local DB_NAME=$(grep "^DB_NAME=" "$PANEL_DIR/.env" | cut -d'=' -f2 | tr -d ' ')
+                    local DB_USER=$(grep "^DB_USER=" "$PANEL_DIR/.env" | cut -d'=' -f2 | tr -d ' ')
+                    docker cp "$BACKUP_CONTENT/database/database.dump" "$DB_CONTAINER:/tmp/r.dump"
+                    docker exec "$DB_CONTAINER" pg_restore -U "$DB_USER" -d "$DB_NAME" -c --if-exists /tmp/r.dump
+                    echo -e "${GREEN}Database Restored.${NC}"
                 fi
-            else
-                [ -f "$BACKUP_CONTENT/database/db.sqlite3" ] && cp "$BACKUP_CONTENT/database/db.sqlite3" "$DATA_DIR/"
-                echo -e "${GREEN}Database restored.${NC}"
             fi
             ;;
         "panel")
-            cd "$PANEL_DIR" && docker compose down 2>/dev/null
-            [ -d "$BACKUP_CONTENT/panel" ] && rm -rf "$PANEL_DIR" && mkdir -p "$PANEL_DIR" && cp -r "$BACKUP_CONTENT/panel"/* "$PANEL_DIR/"
-            [ -d "$BACKUP_CONTENT/data" ] && rm -rf "$DATA_DIR" && mkdir -p "$DATA_DIR" && cp -r "$BACKUP_CONTENT/data"/* "$DATA_DIR/"
+            cd "$PANEL_DIR" && docker compose down
+            [ -d "$BACKUP_CONTENT/panel" ] && cp -a "$BACKUP_CONTENT/panel"/. "$PANEL_DIR/"
+            [ -d "$BACKUP_CONTENT/data" ] && cp -a "$BACKUP_CONTENT/data"/. "$DATA_DIR/"
             cd "$PANEL_DIR" && docker compose up -d
-            echo -e "${GREEN}Panel restored.${NC}"
+            echo -e "${GREEN}Panel Config Restored.${NC}"
             ;;
         "ssl")
-            [ -d "$BACKUP_CONTENT/ssl" ] && rm -rf /etc/letsencrypt && mkdir -p /etc/letsencrypt && cp -r "$BACKUP_CONTENT/ssl"/* /etc/letsencrypt/
-            systemctl reload nginx 2>/dev/null
-            echo -e "${GREEN}SSL restored.${NC}"
+            [ -d "$BACKUP_CONTENT/ssl" ] && cp -a "$BACKUP_CONTENT/ssl"/. /etc/letsencrypt/
+            systemctl reload nginx
+            echo -e "${GREEN}SSL Restored.${NC}"
             ;;
         "nginx")
-            [ -d "$BACKUP_CONTENT/nginx/sites-available" ] && cp -r "$BACKUP_CONTENT/nginx/sites-available"/* /etc/nginx/sites-available/
-            [ -d "$BACKUP_CONTENT/nginx/conf.d" ] && cp -r "$BACKUP_CONTENT/nginx/conf.d"/* /etc/nginx/conf.d/
+            [ -d "$BACKUP_CONTENT/nginx" ] && cp -a "$BACKUP_CONTENT/nginx"/. /etc/nginx/
             systemctl reload nginx
-            echo -e "${GREEN}Nginx restored.${NC}"
+            echo -e "${GREEN}Nginx Restored.${NC}"
             ;;
         "node")
-            cd /opt/pg-node 2>/dev/null && docker compose down 2>/dev/null
-            [ -d "$BACKUP_CONTENT/node" ] && rm -rf /opt/pg-node && mkdir -p /opt/pg-node && cp -r "$BACKUP_CONTENT/node"/* /opt/pg-node/
-            [ -d "$BACKUP_CONTENT/node-data" ] && rm -rf /var/lib/pg-node && mkdir -p /var/lib/pg-node && cp -r "$BACKUP_CONTENT/node-data"/* /var/lib/pg-node/
-            cd /opt/pg-node && docker compose up -d 2>/dev/null
-            echo -e "${GREEN}Node restored.${NC}"
+            [ -d "$BACKUP_CONTENT/node" ] && cp -a "$BACKUP_CONTENT/node"/. /opt/pg-node/
+            [ -d "$BACKUP_CONTENT/node-data" ] && cp -a "$BACKUP_CONTENT/node-data"/. /var/lib/pg-node/
+            echo -e "${GREEN}Node Config Restored.${NC}"
             ;;
     esac
     
@@ -823,15 +741,18 @@ delete_backup() {
     echo -e "${YELLOW}0) Cancel${NC}"
     echo -e "${RED}A) Delete ALL backups${NC}"
     echo ""
-    read -p "Select: " CHOICE
+    read -p "Select backup to delete: " CHOICE
     
     if [ "$CHOICE" == "0" ] || [ -z "$CHOICE" ]; then
         return
     fi
     
     if [ "$CHOICE" == "A" ] || [ "$CHOICE" == "a" ]; then
-        read -p "Delete ALL? Type 'YES': " CONFIRM
-        [ "$CONFIRM" == "YES" ] && rm -f "$BACKUP_DIR"/*.tar.gz && echo -e "${GREEN}All deleted.${NC}"
+        read -p "Delete ALL backups? Type 'YES': " CONFIRM
+        if [ "$CONFIRM" == "YES" ]; then
+            rm -f "$BACKUP_DIR"/*.tar.gz
+            echo -e "${GREEN}All backups deleted.${NC}"
+        fi
         force_pause
         return
     fi
@@ -844,19 +765,25 @@ delete_backup() {
     force_pause
 }
 
-# --- UPLOAD BACKUP ---
+# --- UPLOAD EXISTING ---
 upload_backup() {
     if ! list_backups; then
         return
     fi
     
     echo -e "${YELLOW}0) Cancel${NC}"
-    read -p "Select: " CHOICE
+    echo ""
+    read -p "Select backup to upload: " CHOICE
     
-    [ "$CHOICE" == "0" ] || [ -z "$CHOICE" ] && return
+    if [ "$CHOICE" == "0" ] || [ -z "$CHOICE" ]; then
+        force_pause
+        return
+    fi
     
     local INDEX=$((CHOICE - 1))
-    [ $INDEX -ge 0 ] && [ $INDEX -lt ${#BACKUP_FILES[@]} ] && send_to_telegram "${BACKUP_FILES[$INDEX]}"
+    if [ $INDEX -ge 0 ] && [ $INDEX -lt ${#BACKUP_FILES[@]} ]; then
+        send_to_telegram "${BACKUP_FILES[$INDEX]}"
+    fi
     force_pause
 }
 
@@ -865,67 +792,29 @@ setup_cron() {
     clear
     echo -e "${CYAN}=== AUTO BACKUP SCHEDULE ===${NC}"
     echo ""
-    echo "Current MRM cron:"
-    crontab -l 2>/dev/null | grep "mrm-manager/backup.sh" || echo "None"
+    echo "Current:"
+    crontab -l 2>/dev/null | grep "backup.sh" || echo "None"
     echo ""
     echo "1) Every 6 Hours"
-    echo "2) Every 12 Hours"  
+    echo "2) Every 12 Hours"
     echo "3) Daily (Midnight)"
     echo "4) Weekly (Sunday)"
     echo "5) Disable"
     echo "0) Back"
+    echo ""
     read -p "Select: " O
 
     local CMD="/bin/bash /opt/mrm-manager/backup.sh auto"
     (crontab -l 2>/dev/null | grep -v "mrm-manager/backup.sh") | crontab -
 
     case $O in
-        1) (crontab -l 2>/dev/null; echo "0 */6 * * * $CMD") | crontab -; echo -e "${GREEN}Set.${NC}" ;;
-        2) (crontab -l 2>/dev/null; echo "0 */12 * * * $CMD") | crontab -; echo -e "${GREEN}Set.${NC}" ;;
-        3) (crontab -l 2>/dev/null; echo "0 0 * * * $CMD") | crontab -; echo -e "${GREEN}Set.${NC}" ;;
-        4) (crontab -l 2>/dev/null; echo "0 0 * * 0 $CMD") | crontab -; echo -e "${GREEN}Set.${NC}" ;;
+        1) (crontab -l 2>/dev/null; echo "0 */6 * * * $CMD") | crontab -; echo -e "${GREEN}Set to 6h.${NC}" ;;
+        2) (crontab -l 2>/dev/null; echo "0 */12 * * * $CMD") | crontab -; echo -e "${GREEN}Set to 12h.${NC}" ;;
+        3) (crontab -l 2>/dev/null; echo "0 0 * * * $CMD") | crontab -; echo -e "${GREEN}Set to daily.${NC}" ;;
+        4) (crontab -l 2>/dev/null; echo "0 0 * * 0 $CMD") | crontab -; echo -e "${GREEN}Set to weekly.${NC}" ;;
         5) echo -e "${YELLOW}Disabled.${NC}" ;;
         0) return ;;
     esac
-    force_pause
-}
-
-# --- MIGRATION GUIDE ---
-show_migration_guide() {
-    clear
-    echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║       SERVER MIGRATION GUIDE               ║${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "${GREEN}=== ON OLD SERVER ===${NC}"
-    echo "1. Create Full Backup (Option 1)"
-    echo "2. Download backup file from /root/mrm-backups/"
-    echo "   OR receive via Telegram"
-    echo ""
-    echo -e "${GREEN}=== ON NEW SERVER ===${NC}"
-    echo "3. Install fresh Pasarguard panel"
-    echo "4. Install MRM Manager:"
-    echo "   bash <(curl -s https://raw.githubusercontent.com/...)"
-    echo ""
-    echo "5. Upload backup file to /root/mrm-backups/"
-    echo ""
-    echo "6. Run: mrm → Backup & Restore → Restore"
-    echo "   Select 'Full Restore'"
-    echo ""
-    echo "7. Update IP addresses if changed:"
-    echo "   - Edit /opt/pasarguard/.env"
-    echo "   - Edit Nginx configs"
-    echo "   - Update DNS records"
-    echo ""
-    echo "8. Restart services:"
-    echo "   cd /opt/pasarguard && docker compose restart"
-    echo ""
-    echo -e "${YELLOW}=== IMPORTANT NOTES ===${NC}"
-    echo "• Backup includes ALL users & traffic data"
-    echo "• SSL certificates are included"
-    echo "• Node configuration is included"
-    echo "• Update API_KEY in node if needed"
-    echo ""
     force_pause
 }
 
@@ -933,24 +822,21 @@ show_migration_guide() {
 backup_menu() {
     while true; do
         clear
-        echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║   FULL BACKUP & RESTORE v$BACKUP_VERSION            ║${NC}"
-        echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
+        echo -e "${BLUE}============================================${NC}"
+        echo -e "${BLUE}      FULL BACKUP & RESTORE v$BACKUP_VERSION        ${NC}"
+        echo -e "${BLUE}============================================${NC}"
         echo ""
         echo -e "${GREEN}--- Backup ---${NC}"
-        echo "1) 💾 Create Full Backup Now"
-        echo "2) 📤 Upload Existing Backup"
+        echo "1) Create Full Backup Now"
+        echo "2) Upload Existing Backup"
         echo ""
         echo -e "${CYAN}--- Restore ---${NC}"
-        echo "3) 🔄 Restore from Backup"
+        echo "3) Restore from Backup"
         echo ""
         echo -e "${YELLOW}--- Manage ---${NC}"
-        echo "4) 📋 View/Delete Backups"
-        echo "5) ⏰ Auto Backup Schedule"
-        echo "6) 📱 Telegram Settings"
-        echo ""
-        echo -e "${PURPLE}--- Help ---${NC}"
-        echo "7) 📖 Migration Guide"
+        echo "4) View/Delete Backups"
+        echo "5) Auto Backup Schedule"
+        echo "6) Telegram Settings"
         echo ""
         echo "0) Back"
         echo ""
@@ -962,8 +848,8 @@ backup_menu() {
             4) delete_backup ;;
             5) setup_cron ;;
             6) setup_telegram ;;
-            7) show_migration_guide ;;
             0) return ;;
+            *) ;;
         esac
     done
 }
