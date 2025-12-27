@@ -17,7 +17,7 @@
             --neon-cyan: #00f2ff;
             --neon-purple: #7000ff;
             --neon-success: #0aff00;
-            
+
             /* Glass Materials */
             --glass-hud: rgba(20, 20, 30, 0.5);
             --glass-panel: rgba(10, 10, 15, 0.7);
@@ -162,19 +162,6 @@
             box-shadow: var(--lamp-cyan);
             border: 1px solid rgba(255,255,255,0.3);
         }
-        .avatar::after {
-            content: '';
-            position: absolute;
-            inset: -2px;
-            border: 1px solid var(--neon-cyan);
-            border-radius: 14px;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.5; }
-            100% { transform: scale(1); opacity: 1; }
-        }
 
         .hud-info h2 { 
             font-family: var(--font-tech); 
@@ -204,7 +191,7 @@
             border: 1px solid var(--glass-border);
             background: var(--glass-hud);
             color: var(--text-neon);
-            font-family: var(--font-tech);
+            font-family: var(--font-main);
             font-size: 14px; font-weight: 700;
             cursor: pointer;
             display: flex; align-items: center; justify-content: center;
@@ -212,7 +199,6 @@
             position: relative;
             overflow: hidden;
             transition: all 0.3s;
-            text-transform: uppercase;
             letter-spacing: 1px;
         }
         .btn-cyan { border-color: rgba(0, 242, 255, 0.3); box-shadow: var(--lamp-cyan); }
@@ -221,7 +207,7 @@
         .btn-purple { border-color: rgba(112, 0, 255, 0.3); box-shadow: var(--lamp-purple); }
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
         /* --- STATS CHIPS --- */
         .stats-row {
@@ -241,14 +227,14 @@
             content: ''; position: absolute; top: 0; right: 0; width: 8px; height: 8px;
             border-top: 1px solid var(--neon-cyan); border-right: 1px solid var(--neon-cyan);
         }
-        .chip-label { font-family: var(--font-tech); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 20px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
 
         /* --- ENERGY BARS --- */
         .energy-block { margin-bottom: 30px; }
         .energy-block:last-child { margin-bottom: 0; }
         .e-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .e-lbl { font-family: var(--font-tech); font-size: 12px; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 1px; }
+        .e-lbl { font-family: var(--font-main); font-size: 12px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
         .e-pct { font-family: var(--font-tech); font-size: 28px; font-weight: 900; color: var(--text-neon); letter-spacing: -1px; }
         .track { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; position: relative; }
         .track::after { content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
@@ -271,12 +257,12 @@
         .dl-hud:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); }
         .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
         .dl-icon { font-size: 28px; margin-bottom: 8px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
-        .dl-txt { font-family: var(--font-tech); font-size: 11px; font-weight: 700; color: var(--neon-cyan); text-transform: uppercase; letter-spacing: 1px; }
+        .dl-txt { font-family: var(--font-main); font-size: 11px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
 
         /* --- FOOTER --- */
         .footer-hud {
             display: flex; justify-content: space-between; align-items: center;
-            font-family: var(--font-tech); font-size: 11px; font-weight: 700; color: var(--text-dim);
+            font-family: var(--font-main); font-size: 11px; font-weight: 700; color: var(--text-dim);
             border-top: 1px solid var(--glass-border);
             padding-top: 20px;
         }
@@ -304,11 +290,10 @@
             box-shadow: 0 0 10px var(--neon-cyan);
         }
         .mtitle { 
-            font-family: var(--font-tech); 
+            font-family: var(--font-main); 
             font-size: 20px; font-weight: 900; 
             margin-bottom: 24px; 
             color: var(--neon-cyan); 
-            text-transform: uppercase; 
             letter-spacing: 2px; 
         }
         .app-list { display: flex; flex-direction: column; gap: 12px; }
@@ -319,7 +304,8 @@
             display: flex; justify-content: space-between; align-items: center;
             font-weight: 700; font-size: 15px; color: var(--text-neon);
             cursor: pointer; transition: 0.2s;
-            font-family: var(--font-tech);
+            font-family: var(--font-main);
+            text-decoration: none;
         }
         .app-opt:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); color: var(--neon-cyan); }
         .app-opt:active { background: var(--neon-cyan); color: #000; }
@@ -332,9 +318,9 @@
             color: var(--neon-cyan);
             border: 1px solid var(--neon-cyan);
             padding: 14px 32px; border-radius: 4px;
-            font-weight: 900; font-size: 14px; font-family: var(--font-tech);
+            font-weight: 900; font-size: 14px; font-family: var(--font-main);
             box-shadow: 0 0 30px var(--lamp-cyan);
-            text-transform: uppercase; letter-spacing: 1px;
+            letter-spacing: 1px;
             opacity: 0; transition: 0.3s; z-index: 2000;
         }
         .tst.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -346,25 +332,24 @@
 
     <div class="container">
         <div class="header">
-            <div class="brand">Dashboard</div>
+            <div class="brand">__BRAND__</div>
             <div class="theme-btn" id="themeBtn">☀️</div>
         </div>
 
         <div class="grid">
-            
+
             <!-- PANEL: PROFILE (HUD) -->
             <div class="panel span-2">
-                <div class="scanner"></div>
-                <div class="hud-profile" style="margin-top: 10px;">
+                <div class="hud-profile">
                     <div class="avatar">
                         👤 {% if user.online_at %}<div style="position:absolute; bottom:6px; right:6px; width:14px; height:14px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 10px var(--neon-success);"></div>{% endif %}
                     </div>
                     <div class="hud-info">
                         <h2>{{ user.username }}</h2>
                         {% if user.status.name == 'active' %}
-                            <span class="hud-status">System Online</span>
+                            <span class="hud-status">آنلاین</span>
                         {% else %}
-                            <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 10px var(--neon-purple);">Offline</span>
+                            <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 10px var(--neon-purple);">آفلاین</span>
                         {% endif %}
                     </div>
                 </div>
@@ -373,7 +358,7 @@
             <!-- PANEL: CTA -->
             <div class="panel span-2" style="padding: 0;">
                 <a href="https://t.me/__BOT__" class="btn-tech btn-cyan" style="border-radius: var(--radius-panel); height: 64px; font-size: 16px;">
-                    Initiate Renewal
+                    تمدید اشتراک
                 </a>
             </div>
 
@@ -381,18 +366,18 @@
             <div class="panel span-2">
                 <div class="stats-row">
                     <div class="chip">
-                        <div class="chip-label">Total Capacity</div>
+                        <div class="chip-label">حجم کل</div>
                         <div class="chip-val" id="totDisp">...</div>
                     </div>
                     <div class="chip">
-                        <div class="chip-label">Consumed</div>
+                        <div class="chip-label">مصرف شده</div>
                         <div class="chip-val" id="useDisp">...</div>
                     </div>
                 </div>
 
                 <div class="energy-block">
                     <div class="e-top">
-                        <div class="e-lbl">Data Usage</div>
+                        <div class="e-lbl">مصرف داده</div>
                         <div class="e-pct" id="usagePercent">0%</div>
                     </div>
                     <div class="track"><div class="fill cyan" id="usageFill"></div></div>
@@ -400,7 +385,7 @@
 
                 <div class="energy-block">
                     <div class="e-top">
-                        <div class="e-lbl" style="color:var(--neon-purple);">Time Remaining</div>
+                        <div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div>
                         <div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div>
                     </div>
                     <div class="track"><div class="fill purple" id="timeFill"></div></div>
@@ -410,23 +395,23 @@
             <!-- PANEL: CONTROLS -->
             <div class="panel span-2">
                 <div class="btn-grid">
-                    <button class="btn-tech btn-purple" onclick="hc(null, this)">Copy Link</button>
-                    <button class="btn-tech btn-purple" onclick="om('qrm')">QR Code</button>
+                    <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
+                    <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
                 <button class="btn-tech btn-cyan" style="margin-bottom:16px;" onclick="om('appMod')">
-                    Direct Connection
+                    اتصال مستقیم
                 </button>
                 <button class="btn-tech btn-purple" onclick="sc()">
-                    View Configurations
+                    مشاهده کانفیگ‌ها
                 </button>
             </div>
 
             <!-- PANEL: DOWNLOADS -->
             <div class="panel span-2">
                 <div class="dl-grid">
-                    <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">Android</span></div>
-                    <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">iOS</span></div>
-                    <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">Windows</span></div>
+                    <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
+                    <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
+                    <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
                 </div>
             </div>
 
@@ -434,79 +419,82 @@
             <div class="panel span-2">
                 <div class="footer-hud">
                     <div>
-                        <div style="margin-bottom:6px; color:var(--text-dim);">Expiration Date</div>
+                        <div style="margin-bottom:6px; color:var(--text-dim);">تاریخ انقضا</div>
                         <div style="font-size:15px; color:white;" id="ed">...</div>
                     </div>
-                    <a href="https://t.me/__SUP__" style="text-decoration:none; color:var(--neon-cyan); padding: 10px 24px; border: 1px solid var(--neon-cyan); border-radius: 4px; font-family: var(--font-tech); font-weight:700; text-transform:uppercase; letter-spacing:1px; box-shadow: var(--lamp-cyan);">Support</a>
+                    <a href="https://t.me/__SUP__" style="text-decoration:none; color:var(--neon-cyan); padding: 10px 24px; border: 1px solid var(--neon-cyan); border-radius: 4px; font-family: var(--font-main); font-weight:700; letter-spacing:1px; box-shadow: var(--lamp-cyan);">پشتیبانی</a>
                 </div>
             </div>
 
         </div>
-        
-        <div style="text-align:center; margin-top:50px; font-family: var(--font-tech); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
-    </div>
 
+        <div style="text-align:center; margin-top:50px; font-family: var(--font-main); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
+    </div>
     <!-- MODALS -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
         <div class="mbox">
-            <div class="mtitle">Select Client</div>
+            <div class="mtitle">انتخاب برنامه</div>
             <div class="app-list">
                 <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
                 <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
                 <div class="app-opt" onclick="openApp('happ')">Happ</div>
-                <div class="app-opt" onclick="openApp('sub')">Universal</div>
+                <div class="app-opt" onclick="openApp('sub')">یونیورسال</div>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('appMod')">Close</button>
+            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
     <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
         <div class="mbox">
-            <div class="mtitle">Download Android</div>
+            <div class="mtitle">دانلود اندروید</div>
             <div class="app-list">
                 <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-and')">Close</button>
+            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
+
     <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
         <div class="mbox">
-            <div class="mtitle">Download iOS</div>
+            <div class="mtitle">دانلود آیفون</div>
             <div class="app-list">
                 <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
                 <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-ios')">Close</button>
+            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-ios')">بستن</button>
         </div>
     </div>
+
     <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
         <div class="mbox">
-            <div class="mtitle">Download Windows</div>
+            <div class="mtitle">دانلود ویندوز</div>
             <div class="app-list">
                 <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
                 <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-win')">Close</button>
+            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-win')">بستن</button>
         </div>
     </div>
+
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
         <div class="mbox">
             <div style="background:black; padding:12px; border:1px solid var(--neon-cyan); border-radius:4px; display:inline-block; margin-bottom:20px; box-shadow: 0 0 20px var(--lamp-cyan);">
                 <img id="qi" src="" width="200" style="border-radius:2px;">
             </div>
-            <div><button class="btn-tech btn-purple" onclick="cm('qrm')">Close</button></div>
-        </div>
-    </div>
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox" style="max-width:400px; text-align: right; overflow-y: auto; max-height: 80vh;">
-            <div class="mtitle" style="text-align: center;">Configurations</div>
-            <div id="cl" style="display: flex; flex-direction: column; gap: 10px;">...</div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('cfm')">Close</button>
+            <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
         </div>
     </div>
 
-    <div class="tst" id="toast">Copied Successfully</div>
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
+        <div class="mbox" style="max-width:400px; text-align: right; overflow-y: auto; max-height: 80vh;">
+            <div class="mtitle" style="text-align: center;">کانفیگ‌ها</div>
+            <div id="cl" style="display: flex; flex-direction: column; gap: 10px;">...</div>
+            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('cfm')">بستن</button>
+        </div>
+    </div>
+
+    <div class="tst" id="toast">با موفقیت کپی شد</div>
     <input type="text" id="cph" readonly>
 
     <script>
@@ -522,7 +510,7 @@
         var finalSubUrl = subUrl;
         if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { finalSubUrl += '#' + username; }
 
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + finalSubUrl;
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(finalSubUrl);
 
         // THEME
         var root = document.documentElement;
@@ -539,7 +527,7 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        var tPer = 0; var expDate = null; var daysLeftText = 'UNLIMITED'; var daysNum = null;
+        var tPer = 0; var expDate = null; var daysLeftText = 'نامحدود'; var daysNum = null;
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
@@ -548,11 +536,11 @@
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-                    if (days <= 0) { tPer = 0; daysLeftText = 'EXPIRED'; } 
-                    else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' DAYS'; }
+                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی شده'; } 
+                    else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
-        } else { tPer = 100; daysLeftText = 'UNLIMITED'; }
+        } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
         // UPDATES
         var up = document.getElementById('usagePercent');
@@ -562,14 +550,12 @@
 
         var tp = document.getElementById('timePercent');
         var tf = document.getElementById('timeFill');
-        var tl = document.getElementById('timeLabel');
-        if (daysLeftText === 'UNLIMITED') { tp.innerText = '∞'; tf.style.width = '100%'; } 
+        if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; } 
         else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-        tl.innerText = daysLeftText;
-        if (daysLeftText === 'EXPIRED') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
+        if (daysLeftText === 'منقضی شده') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
 
         function fb(b) {
-            if (tot === 0) return 'UNLIMITED'; if (b <= 0) return '0 B';
+            if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
             var u = ['B', 'KB', 'MB', 'GB', 'TB'];
             var i = Math.floor(Math.log(b) / Math.log(1024));
             return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
@@ -579,7 +565,7 @@
 
         var ed = document.getElementById('ed');
         if (ed) {
-            if (!expDate) ed.innerText = 'UNLIMITED';
+            if (!expDate) ed.innerText = 'نامحدود';
             else ed.innerText = new Intl.DateTimeFormat('fa-IR').format(expDate) + ' (' + daysLeftText + ')';
         }
 
@@ -615,16 +601,21 @@
             om('cfm'); var l = document.getElementById('cl'); l.innerHTML = '...';
             fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
                 if (t) {
+                    l.innerHTML = '';
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
                             if (username && z.indexOf('#') === -1) z += '#' + username;
-                            var n = 'Config'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
-                            l.innerHTML += '<div class="app-opt" onclick="hc(\'' + z + '\', this)"><span style="max-width: 80%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>COPY</span></div>';
+                            var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
+                            var div = document.createElement('div');
+                            div.className = 'app-opt';
+                            div.innerHTML = '<span style="max-width: 80%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
+                            div.onclick = function() { hc(z, this); };
+                            l.appendChild(div);
                         }
                     });
                 }
-            }).catch(() => l.innerHTML = 'ERROR');
+            }).catch(() => l.innerHTML = 'خطا در دریافت');
         }
 
         var ua = navigator.userAgent.toLowerCase();
