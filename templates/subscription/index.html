@@ -852,6 +852,7 @@
         var totStr = '{{ user.data_limit }}';
         var useStr = '{{ user.used_traffic }}';
         var expStr = '{{ user.expire }}';
+        var createdStr = '{{ user.created_at }}';
 
         {% raw %}
         var rawSub = '{{ subscription_url }}';
@@ -875,20 +876,55 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        var tPer = 0; var expDate = null; var daysLeftText = 'نامحدود'; var daysNum = null;
+        // === FIXED TIME CALCULATION ===
+        var tPer = 0; 
+        var expDate = null; 
+        var createdDate = null;
+        var daysLeftText = 'نامحدود'; 
+        var daysNum = null;
+        var totalDays = 30;
+
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
+                
+                // سعی کن تاریخ ایجاد رو بخون
+                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) {
+                    createdDate = new Date(createdStr);
+                }
+                
                 if (!isNaN(expDate.getTime())) {
                     var now = new Date();
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
-                    else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' روز'; }
+                    
+                    // محاسبه کل مدت اشتراک
+                    if (createdDate && !isNaN(createdDate.getTime())) {
+                        // اگر تاریخ ایجاد موجود بود، کل مدت را دقیق محاسبه کن
+                        totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
+                    } else {
+                        // تخمین بر اساس روزهای باقی‌مانده
+                        if (days > 300) totalDays = 365;
+                        else if (days > 150) totalDays = 180;
+                        else if (days > 75) totalDays = 90;
+                        else if (days > 45) totalDays = 60;
+                        else totalDays = 30;
+                    }
+                    
+                    if (days <= 0) { 
+                        tPer = 0; 
+                        daysLeftText = 'منقضی'; 
+                    } else { 
+                        tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); 
+                        daysLeftText = Math.ceil(days) + ' روز'; 
+                    }
                 }
             } catch (e) {}
-        } else { tPer = 100; daysLeftText = 'نامحدود'; }
+        } else { 
+            tPer = 100; 
+            daysLeftText = 'نامحدود'; 
+        }
 
         var up = document.getElementById('usagePercent');
         var uf = document.getElementById('usageFill');
