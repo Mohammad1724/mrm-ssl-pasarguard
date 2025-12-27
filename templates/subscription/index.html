@@ -129,13 +129,11 @@
 
         .panel.span-2 { grid-column: span 2; }
 
-        /* --- PROFILE HUD WITH SUPPORT --- */
         .hud-profile {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 20px;
-            position: relative;
         }
         .profile-left {
             display: flex;
@@ -213,32 +211,35 @@
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
 
-        /* --- SOFT CYAN BUTTON (NEW) --- */
+        /* --- SOFT CYAN BUTTON WITH BLACK TEXT --- */
         .btn-soft-cyan { 
-            border-color: rgba(0, 200, 255, 0.3); 
-            box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.35); 
-            background: rgba(0, 180, 255, 0.08);
-            color: #7dd8ff;
+            border-color: rgba(0, 200, 255, 0.4); 
+            box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.4); 
+            background: rgba(0, 200, 255, 0.25);
+            color: #000000;
+            font-weight: 900;
         }
         .btn-soft-cyan:hover { 
-            background: rgba(0, 180, 255, 0.15); 
-            color: #fff; 
-            border-color: rgba(0, 200, 255, 0.5); 
-            box-shadow: 0 20px 50px -10px rgba(0, 180, 255, 0.45);
+            background: rgba(0, 200, 255, 0.35); 
+            color: #000000; 
+            border-color: rgba(0, 200, 255, 0.6); 
+            box-shadow: 0 20px 50px -10px rgba(0, 180, 255, 0.5);
         }
         .btn-soft-cyan:active { transform: translateY(2px); box-shadow: none; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
+        /* --- STATS WITH 3 CHIPS --- */
         .stats-row {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 16px;
             margin-bottom: 30px;
         }
         .chip {
             background: var(--glass-hud);
-            padding: 20px; border-radius: var(--radius-hud);
+            padding: 20px 15px; 
+            border-radius: var(--radius-hud);
             border: 1px solid var(--glass-border);
             text-align: center;
             position: relative;
@@ -249,7 +250,8 @@
             border-radius: 4px;
         }
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
-        .chip-val { font-family: var(--font-tech); font-size: 20px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
+        .chip-val { font-family: var(--font-tech); font-size: 16px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
+        .chip.expiry .chip-val { font-size: 13px; }
 
         .energy-block { margin-bottom: 30px; }
         .energy-block:last-child { margin-bottom: 0; }
@@ -266,7 +268,7 @@
         .downloads-section {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
         }
         .downloads-label {
             font-family: var(--font-main);
@@ -298,38 +300,6 @@
         .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
         .dl-icon { font-size: 22px; margin-bottom: 6px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
         .dl-txt { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--neon-cyan); }
-
-        /* --- FOOTER WITH EXPIRY --- */
-        .footer-section {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .expiry-box {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .expiry-icon {
-            font-size: 24px;
-            filter: drop-shadow(0 0 5px var(--neon-purple));
-        }
-        .expiry-info {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        .expiry-label {
-            font-family: var(--font-main);
-            font-size: 10px;
-            color: var(--text-dim);
-        }
-        .expiry-date {
-            font-family: var(--font-tech);
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-neon);
-        }
 
         .mod {
             position: fixed; inset: 0; z-index: 1000;
@@ -421,14 +391,7 @@
                 </div>
             </div>
 
-            <!-- PANEL: CTA -->
-            <div class="panel span-2" style="padding: 0;">
-                <a href="https://t.me/__BOT__" class="btn-tech btn-cyan" style="border-radius: var(--radius-panel); height: 64px; font-size: 16px;">
-                    تمدید اشتراک
-                </a>
-            </div>
-
-            <!-- PANEL: METRICS -->
+            <!-- PANEL: METRICS (WITH EXPIRY) -->
             <div class="panel span-2">
                 <div class="stats-row">
                     <div class="chip">
@@ -438,6 +401,10 @@
                     <div class="chip">
                         <div class="chip-label">مصرف شده</div>
                         <div class="chip-val" id="useDisp">...</div>
+                    </div>
+                    <div class="chip expiry">
+                        <div class="chip-label">تاریخ انقضا</div>
+                        <div class="chip-val" id="ed">...</div>
                     </div>
                 </div>
 
@@ -458,7 +425,7 @@
                 </div>
             </div>
 
-            <!-- PANEL: CONTROLS -->
+            <!-- PANEL: ALL CONTROLS (MERGED) -->
             <div class="panel span-2">
                 <div class="btn-grid">
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
@@ -467,28 +434,20 @@
                 <button class="btn-tech btn-soft-cyan" style="margin-bottom:16px;" onclick="om('appMod')">
                     اتصال مستقیم
                 </button>
-                <button class="btn-tech btn-purple" onclick="sc()">
-                    مشاهده کانفیگ‌ها
-                </button>
+                <div class="btn-grid" style="margin-bottom:0;">
+                    <button class="btn-tech btn-purple" onclick="sc()">مشاهده کانفیگ‌ها</button>
+                    <a href="https://t.me/__BOT__" class="btn-tech btn-cyan">تمدید اشتراک</a>
+                </div>
             </div>
 
-            <!-- PANEL: DOWNLOADS + EXPIRY (MERGED) -->
+            <!-- PANEL: DOWNLOADS -->
             <div class="panel span-2">
-                <div class="footer-section">
-                    <div class="expiry-box">
-                        <span class="expiry-icon">📅</span>
-                        <div class="expiry-info">
-                            <span class="expiry-label">تاریخ انقضا</span>
-                            <span class="expiry-date" id="ed">...</span>
-                        </div>
-                    </div>
-                    <div class="downloads-section">
-                        <span class="downloads-label">دانلود اپلیکیشن:</span>
-                        <div class="dl-grid">
-                            <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
-                            <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
-                            <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
-                        </div>
+                <div class="downloads-section">
+                    <span class="downloads-label">دانلود اپلیکیشن:</span>
+                    <div class="dl-grid">
+                        <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
+                        <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
+                        <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
                     </div>
                 </div>
             </div>
@@ -630,7 +589,7 @@
         var ed = document.getElementById('ed');
         if (ed) {
             if (!expDate) ed.innerText = 'نامحدود';
-            else ed.innerText = new Intl.DateTimeFormat('fa-IR').format(expDate) + ' (' + daysLeftText + ')';
+            else ed.innerText = daysLeftText;
         }
 
         function hc(t, btn) {
