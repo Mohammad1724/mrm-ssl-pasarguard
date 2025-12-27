@@ -155,7 +155,6 @@
             font-family: var(--font-tech); 
             font-size: 18px; font-weight: 700; 
             color: var(--text-neon);
-            text-transform: uppercase; 
             letter-spacing: 1px;
             margin-bottom: 6px;
             word-break: break-all;
@@ -206,10 +205,6 @@
             transition: all 0.3s;
             letter-spacing: 1px;
         }
-        .btn-cyan { border-color: rgba(0, 242, 255, 0.3); box-shadow: var(--lamp-cyan); }
-        .btn-cyan:hover { background: rgba(0, 242, 255, 0.1); color: #fff; border-color: var(--neon-cyan); }
-        .btn-cyan:active { transform: translateY(2px); box-shadow: none; }
-        
         .btn-purple { border-color: rgba(112, 0, 255, 0.3); box-shadow: var(--lamp-purple); }
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
@@ -424,15 +419,19 @@
             }
             
             .avatar {
-                width: 40px;
-                height: 40px;
-                font-size: 18px;
+                width: 38px;
+                height: 38px;
+                font-size: 16px;
                 border-radius: 10px;
             }
             
             .hud-info h2 {
-                font-size: 12px;
+                font-size: 11px;
                 margin-bottom: 2px;
+                background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
             }
             
             .hud-status {
@@ -447,7 +446,7 @@
                 border-radius: 8px;
             }
 
-            /* COMPACT STATS - HORIZONTAL */
+            /* COMPACT STATS */
             .stats-row {
                 display: flex;
                 gap: 8px;
@@ -612,13 +611,13 @@
             }
             
             .avatar {
-                width: 36px;
-                height: 36px;
-                font-size: 16px;
+                width: 34px;
+                height: 34px;
+                font-size: 14px;
             }
             
             .hud-info h2 {
-                font-size: 11px;
+                font-size: 10px;
             }
             
             .support-btn {
@@ -680,7 +679,7 @@
                             👤 {% if user.online_at %}<div style="position:absolute; bottom:3px; right:3px; width:10px; height:10px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 8px var(--neon-success);"></div>{% endif %}
                         </div>
                         <div class="hud-info">
-                            <h2>{{ user.username }}</h2>
+                            <h2>✦ {{ user.username }} ✦</h2>
                             {% if user.status.name == 'active' %}
                                 <span class="hud-status">آنلاین</span>
                             {% else %}
@@ -692,7 +691,7 @@
                 </div>
             </div>
 
-            <!-- PANEL: METRICS (WITH EXPIRY) -->
+            <!-- PANEL: METRICS -->
             <div class="panel span-2">
                 <div class="stats-row">
                     <div class="chip">
@@ -737,7 +736,7 @@
                 </button>
                 <div class="btn-grid" style="margin-bottom:0;">
                     <button class="btn-tech btn-purple" onclick="sc()">کانفیگ‌ها</button>
-                    <a href="https://t.me/__BOT__" class="btn-tech btn-cyan">تمدید</a>
+                    <a href="https://t.me/__BOT__" class="btn-tech btn-purple">تمدید</a>
                 </div>
             </div>
 
