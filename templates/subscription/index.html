@@ -7,34 +7,22 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&family=Roboto+Mono:wght@500;700&display=swap');
 
-        /* --- CYBER FUTURE VARIABLES --- */
         :root {
-            /* Ultra Deep Space */
             --bg-deep: #020205;
             --bg-void: #0a0a0f;
-
-            /* Cyber Accents */
             --neon-cyan: #00f2ff;
             --neon-purple: #7000ff;
             --neon-success: #0aff00;
-
-            /* Glass Materials */
             --glass-hud: rgba(20, 20, 30, 0.5);
             --glass-panel: rgba(10, 10, 15, 0.7);
             --glass-border: rgba(255, 255, 255, 0.08);
-
-            /* Neon Glows (The Lamps) */
             --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4); 
             --lamp-purple: 0 25px 60px -15px rgba(112, 0, 255, 0.4);
             --lamp-success: 0 25px 60px -15px rgba(10, 255, 0, 0.4);
-
-            /* Typography */
             --font-tech: 'Roboto Mono', monospace;
             --font-main: 'Vazirmatn', sans-serif;
             --text-neon: #ffffff;
             --text-dim: #6b7280;
-
-            /* UI Accents - ROUNDED */
             --radius-hud: 12px; 
             --radius-panel: 24px;
         }
@@ -74,7 +62,6 @@
             padding: 100px 24px 24px;
         }
 
-        /* --- HEADER --- */
         .header {
             display: flex;
             justify-content: space-between;
@@ -105,14 +92,12 @@
             transition: 0.3s;
         }
 
-        /* --- GRID --- */
         .grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 24px;
         }
 
-        /* --- TECH PANELS (Cards) --- */
         .panel {
             background: var(--glass-panel);
             backdrop-filter: blur(20px);
@@ -144,19 +129,25 @@
 
         .panel.span-2 { grid-column: span 2; }
 
-        /* --- PROFILE HUD --- */
+        /* --- PROFILE HUD WITH SUPPORT --- */
         .hud-profile {
             display: flex;
             align-items: center;
-            gap: 24px;
+            justify-content: space-between;
+            gap: 20px;
             position: relative;
         }
+        .profile-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
         .avatar {
-            width: 80px; height: 80px;
+            width: 70px; height: 70px;
             border-radius: var(--radius-hud);
             background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
             display: flex; align-items: center; justify-content: center;
-            font-size: 32px; color: white;
+            font-size: 28px; color: white;
             position: relative;
             box-shadow: var(--lamp-cyan);
             border: 1px solid rgba(255,255,255,0.3);
@@ -164,25 +155,39 @@
 
         .hud-info h2 { 
             font-family: var(--font-tech); 
-            font-size: 22px; font-weight: 700; 
+            font-size: 18px; font-weight: 700; 
             color: var(--text-neon);
             text-transform: uppercase; 
             letter-spacing: 1px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
         .hud-status {
             font-family: var(--font-tech);
-            font-size: 11px; font-weight: 700;
-            padding: 4px 12px; border-radius: var(--radius-hud);
+            font-size: 10px; font-weight: 700;
+            padding: 4px 10px; border-radius: var(--radius-hud);
             background: rgba(0, 242, 255, 0.1);
             color: var(--neon-cyan);
             border: 1px solid var(--neon-cyan);
-            text-transform: uppercase;
             display: inline-block;
             box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
         }
+        
+        .support-btn {
+            text-decoration: none;
+            color: var(--neon-purple);
+            padding: 12px 20px;
+            border: 1px solid var(--neon-purple);
+            border-radius: var(--radius-hud);
+            font-family: var(--font-main);
+            font-weight: 700;
+            font-size: 13px;
+            box-shadow: var(--lamp-purple);
+            transition: 0.3s;
+        }
+        .support-btn:hover {
+            background: rgba(112, 0, 255, 0.1);
+        }
 
-        /* --- TECH BUTTONS (THE LAMPS) --- */
         .btn-tech {
             width: 100%;
             height: 56px;
@@ -208,23 +213,23 @@
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
 
-        /* --- GREEN LAMP BUTTON (NEW) --- */
-        .btn-green { 
-            border-color: rgba(10, 255, 0, 0.4); 
-            box-shadow: var(--lamp-success), 0 0 20px rgba(10, 255, 0, 0.3); 
-            background: rgba(10, 255, 0, 0.1);
+        /* --- SOFT CYAN BUTTON (NEW) --- */
+        .btn-soft-cyan { 
+            border-color: rgba(0, 200, 255, 0.3); 
+            box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.35); 
+            background: rgba(0, 180, 255, 0.08);
+            color: #7dd8ff;
         }
-        .btn-green:hover { 
-            background: rgba(10, 255, 0, 0.2); 
+        .btn-soft-cyan:hover { 
+            background: rgba(0, 180, 255, 0.15); 
             color: #fff; 
-            border-color: var(--neon-success); 
-            box-shadow: var(--lamp-success), 0 0 30px rgba(10, 255, 0, 0.5);
+            border-color: rgba(0, 200, 255, 0.5); 
+            box-shadow: 0 20px 50px -10px rgba(0, 180, 255, 0.45);
         }
-        .btn-green:active { transform: translateY(2px); box-shadow: none; }
+        .btn-soft-cyan:active { transform: translateY(2px); box-shadow: none; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
-        /* --- STATS CHIPS --- */
         .stats-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -246,7 +251,6 @@
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 20px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
 
-        /* --- ENERGY BARS --- */
         .energy-block { margin-bottom: 30px; }
         .energy-block:last-child { margin-bottom: 0; }
         .e-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
@@ -256,34 +260,77 @@
         .track::after { content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
         .fill { height: 100%; border-radius: var(--radius-hud); transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px currentColor; }
         .fill.cyan { background: var(--neon-cyan); color: var(--neon-cyan); }
-        .fill.green { background: var(--neon-success); color: var(--neon-success); }
         .fill.purple { background: var(--neon-purple); color: var(--neon-purple); }
 
-        /* --- DOWNLOAD HUDS --- */
-        .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        /* --- DOWNLOADS SECTION (COMPACT) --- */
+        .downloads-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .downloads-label {
+            font-family: var(--font-main);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-dim);
+            white-space: nowrap;
+        }
+        .dl-grid { 
+            display: flex; 
+            gap: 12px; 
+            flex: 1;
+        }
         .dl-hud {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 24px; background: var(--glass-hud);
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            padding: 16px 20px; 
+            background: var(--glass-hud);
             border-radius: var(--radius-hud);
             cursor: pointer;
             transition: 0.2s;
             border: 1px solid var(--glass-border);
             position: relative;
+            flex: 1;
         }
         .dl-hud:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); }
         .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
-        .dl-icon { font-size: 28px; margin-bottom: 8px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
-        .dl-txt { font-family: var(--font-main); font-size: 11px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
+        .dl-icon { font-size: 22px; margin-bottom: 6px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
+        .dl-txt { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--neon-cyan); }
 
-        /* --- FOOTER --- */
-        .footer-hud {
-            display: flex; justify-content: space-between; align-items: center;
-            font-family: var(--font-main); font-size: 11px; font-weight: 700; color: var(--text-dim);
-            border-top: 1px solid var(--glass-border);
-            padding-top: 20px;
+        /* --- FOOTER WITH EXPIRY --- */
+        .footer-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .expiry-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .expiry-icon {
+            font-size: 24px;
+            filter: drop-shadow(0 0 5px var(--neon-purple));
+        }
+        .expiry-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .expiry-label {
+            font-family: var(--font-main);
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+        .expiry-date {
+            font-family: var(--font-tech);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-neon);
         }
 
-        /* --- MODALS --- */
         .mod {
             position: fixed; inset: 0; z-index: 1000;
             background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
@@ -327,7 +374,6 @@
         .app-opt:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); color: var(--neon-cyan); }
         .app-opt:active { background: var(--neon-cyan); color: #000; }
 
-        /* --- TOAST --- */
         .tst {
             position: fixed; bottom: 60px; left: 50%;
             transform: translateX(-50%) translateY(20px);
@@ -355,20 +401,23 @@
 
         <div class="grid">
 
-            <!-- PANEL: PROFILE (HUD) -->
+            <!-- PANEL: PROFILE + SUPPORT -->
             <div class="panel span-2">
                 <div class="hud-profile">
-                    <div class="avatar">
-                        👤 {% if user.online_at %}<div style="position:absolute; bottom:6px; right:6px; width:14px; height:14px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 10px var(--neon-success);"></div>{% endif %}
+                    <div class="profile-left">
+                        <div class="avatar">
+                            👤 {% if user.online_at %}<div style="position:absolute; bottom:4px; right:4px; width:12px; height:12px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 10px var(--neon-success);"></div>{% endif %}
+                        </div>
+                        <div class="hud-info">
+                            <h2>{{ user.username }}</h2>
+                            {% if user.status.name == 'active' %}
+                                <span class="hud-status">آنلاین</span>
+                            {% else %}
+                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 10px var(--neon-purple);">آفلاین</span>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="hud-info">
-                        <h2>{{ user.username }}</h2>
-                        {% if user.status.name == 'active' %}
-                            <span class="hud-status">آنلاین</span>
-                        {% else %}
-                            <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 10px var(--neon-purple);">آفلاین</span>
-                        {% endif %}
-                    </div>
+                    <a href="https://t.me/__SUP__" class="support-btn">پشتیبانی</a>
                 </div>
             </div>
 
@@ -415,7 +464,7 @@
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
-                <button class="btn-tech btn-green" style="margin-bottom:16px;" onclick="om('appMod')">
+                <button class="btn-tech btn-soft-cyan" style="margin-bottom:16px;" onclick="om('appMod')">
                     اتصال مستقیم
                 </button>
                 <button class="btn-tech btn-purple" onclick="sc()">
@@ -423,23 +472,24 @@
                 </button>
             </div>
 
-            <!-- PANEL: DOWNLOADS -->
+            <!-- PANEL: DOWNLOADS + EXPIRY (MERGED) -->
             <div class="panel span-2">
-                <div class="dl-grid">
-                    <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
-                    <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
-                    <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
-                </div>
-            </div>
-
-            <!-- PANEL: INFO -->
-            <div class="panel span-2">
-                <div class="footer-hud">
-                    <div>
-                        <div style="margin-bottom:6px; color:var(--text-dim);">تاریخ انقضا</div>
-                        <div style="font-size:15px; color:var(--text-neon);" id="ed">...</div>
+                <div class="footer-section">
+                    <div class="expiry-box">
+                        <span class="expiry-icon">📅</span>
+                        <div class="expiry-info">
+                            <span class="expiry-label">تاریخ انقضا</span>
+                            <span class="expiry-date" id="ed">...</span>
+                        </div>
                     </div>
-                    <a href="https://t.me/__SUP__" style="text-decoration:none; color:var(--neon-cyan); padding: 10px 24px; border: 1px solid var(--neon-cyan); border-radius: var(--radius-hud); font-family: var(--font-main); font-weight:700; letter-spacing:1px; box-shadow: var(--lamp-cyan);">پشتیبانی</a>
+                    <div class="downloads-section">
+                        <span class="downloads-label">دانلود اپلیکیشن:</span>
+                        <div class="dl-grid">
+                            <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
+                            <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
+                            <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -529,7 +579,6 @@
 
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(finalSubUrl);
 
-        // THEME
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '🌙'; } 
@@ -539,7 +588,6 @@
             else { root.classList.add('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'light'); }
         };
 
-        // CALC
         var tot = parseInt(totStr) || 0;
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
@@ -559,7 +607,6 @@
             } catch (e) {}
         } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
-        // UPDATES
         var up = document.getElementById('usagePercent');
         var uf = document.getElementById('usageFill');
         up.innerText = Math.round(per) + '%'; uf.style.width = per + '%';
@@ -586,7 +633,6 @@
             else ed.innerText = new Intl.DateTimeFormat('fa-IR').format(expDate) + ' (' + daysLeftText + ')';
         }
 
-        // LOGIC
         function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
             if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
