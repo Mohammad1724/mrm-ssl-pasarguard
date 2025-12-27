@@ -10,7 +10,8 @@ export NODE_DIR="/opt/pg-node"
 export NODE_ENV="$NODE_DIR/.env"
 export NODE_DEF_CERTS="/var/lib/pg-node/certs"
 
-export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager/index.html"
+# ✅ مسیر صحیح گیت‌هاب
+export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
 
 # --- Colors ---
 export RED='\033[0;31m'
@@ -95,7 +96,7 @@ restart_service() {
     if [ "$SERVICE" == "panel" ]; then
         echo -e "${BLUE}Restarting Panel ($PANEL_DIR)...${NC}"
         if [ -d "$PANEL_DIR" ]; then
-            cd "$PANEL_DIR" && docker compose restart
+            cd "$PANEL_DIR" && docker compose down && docker compose up -d  # ✅ اصلاح شد
             echo -e "${GREEN}Done.${NC}"
         else
             echo -e "${RED}Panel not found.${NC}"
