@@ -34,9 +34,9 @@
             --text-neon: #ffffff;
             --text-dim: #6b7280;
 
-            /* UI Accents */
-            --radius-hud: 4px; 
-            --radius-panel: 16px;
+            /* UI Accents - ROUNDED */
+            --radius-hud: 12px; 
+            --radius-panel: 24px;
         }
 
         :root.light {
@@ -49,7 +49,7 @@
             --glass-panel: rgba(240, 240, 240, 0.6);
             --glass-border: rgba(0, 0, 0, 0.1);
             --text-neon: #000000;
-            --text-dim: #888;
+            --text-dim: #666666;
             --lamp-cyan: 0 15px 30px -5px rgba(0, 102, 204, 0.3);
             --lamp-purple: 0 15px 30px -5px rgba(85, 0, 204, 0.3);
             --lamp-success: 0 15px 30px -5px rgba(0, 153, 0, 0.3);
@@ -62,7 +62,6 @@
             background-color: var(--bg-deep);
             color: var(--text-neon);
             min-height: 100vh;
-            /* Tech Grid Background */
             background-image: linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
                               linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
             background-size: 40px 40px;
@@ -131,7 +130,7 @@
             width: 10px; height: 10px;
             border-top: 2px solid var(--neon-cyan);
             border-right: 2px solid var(--neon-cyan);
-            border-radius: 2px;
+            border-radius: 4px;
         }
         .panel::after {
             content: '';
@@ -140,7 +139,7 @@
             width: 10px; height: 10px;
             border-bottom: 2px solid var(--neon-cyan);
             border-left: 2px solid var(--neon-cyan);
-            border-radius: 2px;
+            border-radius: 4px;
         }
 
         .panel.span-2 { grid-column: span 2; }
@@ -154,7 +153,7 @@
         }
         .avatar {
             width: 80px; height: 80px;
-            border-radius: 12px;
+            border-radius: var(--radius-hud);
             background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
             display: flex; align-items: center; justify-content: center;
             font-size: 32px; color: white;
@@ -174,7 +173,7 @@
         .hud-status {
             font-family: var(--font-tech);
             font-size: 11px; font-weight: 700;
-            padding: 4px 12px; border-radius: 4px;
+            padding: 4px 12px; border-radius: var(--radius-hud);
             background: rgba(0, 242, 255, 0.1);
             color: var(--neon-cyan);
             border: 1px solid var(--neon-cyan);
@@ -187,7 +186,7 @@
         .btn-tech {
             width: 100%;
             height: 56px;
-            border-radius: 8px; 
+            border-radius: var(--radius-hud); 
             border: 1px solid var(--glass-border);
             background: var(--glass-hud);
             color: var(--text-neon);
@@ -204,9 +203,25 @@
         .btn-cyan { border-color: rgba(0, 242, 255, 0.3); box-shadow: var(--lamp-cyan); }
         .btn-cyan:hover { background: rgba(0, 242, 255, 0.1); color: #fff; border-color: var(--neon-cyan); }
         .btn-cyan:active { transform: translateY(2px); box-shadow: none; }
+        
         .btn-purple { border-color: rgba(112, 0, 255, 0.3); box-shadow: var(--lamp-purple); }
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
+
+        /* --- GREEN LAMP BUTTON (NEW) --- */
+        .btn-green { 
+            border-color: rgba(10, 255, 0, 0.4); 
+            box-shadow: var(--lamp-success), 0 0 20px rgba(10, 255, 0, 0.3); 
+            background: rgba(10, 255, 0, 0.1);
+        }
+        .btn-green:hover { 
+            background: rgba(10, 255, 0, 0.2); 
+            color: #fff; 
+            border-color: var(--neon-success); 
+            box-shadow: var(--lamp-success), 0 0 30px rgba(10, 255, 0, 0.5);
+        }
+        .btn-green:active { transform: translateY(2px); box-shadow: none; }
+
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
         /* --- STATS CHIPS --- */
@@ -226,6 +241,7 @@
         .chip::before {
             content: ''; position: absolute; top: 0; right: 0; width: 8px; height: 8px;
             border-top: 1px solid var(--neon-cyan); border-right: 1px solid var(--neon-cyan);
+            border-radius: 4px;
         }
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 20px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
@@ -236,9 +252,9 @@
         .e-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .e-lbl { font-family: var(--font-main); font-size: 12px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
         .e-pct { font-family: var(--font-tech); font-size: 28px; font-weight: 900; color: var(--text-neon); letter-spacing: -1px; }
-        .track { width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; position: relative; }
+        .track { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: var(--radius-hud); overflow: hidden; position: relative; }
         .track::after { content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
-        .fill { height: 100%; border-radius: 2px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px currentColor; }
+        .fill { height: 100%; border-radius: var(--radius-hud); transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px currentColor; }
         .fill.cyan { background: var(--neon-cyan); color: var(--neon-cyan); }
         .fill.green { background: var(--neon-success); color: var(--neon-success); }
         .fill.purple { background: var(--neon-purple); color: var(--neon-purple); }
@@ -285,9 +301,10 @@
         .mbox::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; height: 1px;
+            top: 0; left: 0; right: 0; height: 2px;
             background: var(--neon-cyan);
             box-shadow: 0 0 10px var(--neon-cyan);
+            border-radius: var(--radius-panel) var(--radius-panel) 0 0;
         }
         .mtitle { 
             font-family: var(--font-main); 
@@ -317,7 +334,7 @@
             background: var(--bg-void);
             color: var(--neon-cyan);
             border: 1px solid var(--neon-cyan);
-            padding: 14px 32px; border-radius: 4px;
+            padding: 14px 32px; border-radius: var(--radius-hud);
             font-weight: 900; font-size: 14px; font-family: var(--font-main);
             box-shadow: 0 0 30px var(--lamp-cyan);
             letter-spacing: 1px;
@@ -398,7 +415,7 @@
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
-                <button class="btn-tech btn-cyan" style="margin-bottom:16px;" onclick="om('appMod')">
+                <button class="btn-tech btn-green" style="margin-bottom:16px;" onclick="om('appMod')">
                     اتصال مستقیم
                 </button>
                 <button class="btn-tech btn-purple" onclick="sc()">
@@ -420,9 +437,9 @@
                 <div class="footer-hud">
                     <div>
                         <div style="margin-bottom:6px; color:var(--text-dim);">تاریخ انقضا</div>
-                        <div style="font-size:15px; color:white;" id="ed">...</div>
+                        <div style="font-size:15px; color:var(--text-neon);" id="ed">...</div>
                     </div>
-                    <a href="https://t.me/__SUP__" style="text-decoration:none; color:var(--neon-cyan); padding: 10px 24px; border: 1px solid var(--neon-cyan); border-radius: 4px; font-family: var(--font-main); font-weight:700; letter-spacing:1px; box-shadow: var(--lamp-cyan);">پشتیبانی</a>
+                    <a href="https://t.me/__SUP__" style="text-decoration:none; color:var(--neon-cyan); padding: 10px 24px; border: 1px solid var(--neon-cyan); border-radius: var(--radius-hud); font-family: var(--font-main); font-weight:700; letter-spacing:1px; box-shadow: var(--lamp-cyan);">پشتیبانی</a>
                 </div>
             </div>
 
@@ -479,8 +496,8 @@
 
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
         <div class="mbox">
-            <div style="background:black; padding:12px; border:1px solid var(--neon-cyan); border-radius:4px; display:inline-block; margin-bottom:20px; box-shadow: 0 0 20px var(--lamp-cyan);">
-                <img id="qi" src="" width="200" style="border-radius:2px;">
+            <div style="background:black; padding:12px; border:1px solid var(--neon-cyan); border-radius: var(--radius-hud); display:inline-block; margin-bottom:20px; box-shadow: 0 0 20px var(--lamp-cyan);">
+                <img id="qi" src="" width="200" style="border-radius: var(--radius-hud);">
             </div>
             <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
         </div>
