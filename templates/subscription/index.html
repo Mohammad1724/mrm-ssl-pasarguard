@@ -53,7 +53,6 @@
             background-image: linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
                               linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
             background-size: 40px 40px;
-            padding-bottom: 60px;
         }
 
         .container {
@@ -301,7 +300,6 @@
         .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
         .dl-icon { font-size: 22px; margin-bottom: 6px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
         .dl-txt { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--neon-cyan); }
-
         .mod {
             position: fixed; inset: 0; z-index: 1000;
             background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
@@ -362,230 +360,304 @@
 
         #cph { position: absolute; opacity: 0; }
 
-        /* --- MOBILE RESPONSIVE --- */
+        /* ======================================== */
+        /* MOBILE COMPACT - NO SCROLL NEEDED       */
+        /* ======================================== */
         @media (max-width: 768px) {
-            .container {
-                padding: 80px 16px 24px;
+            body {
+                padding-bottom: 20px;
             }
             
+            .container {
+                padding: 16px 12px 12px;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+
             .header {
-                margin-bottom: 24px;
-                padding-bottom: 16px;
+                margin-bottom: 12px;
+                padding-bottom: 10px;
             }
             
             .brand {
-                font-size: 20px;
+                font-size: 16px;
                 letter-spacing: 1px;
             }
             
             .theme-btn {
-                width: 42px;
-                height: 42px;
-                font-size: 16px;
+                width: 36px;
+                height: 36px;
+                font-size: 14px;
             }
             
             .grid {
                 grid-template-columns: 1fr;
-                gap: 16px;
+                gap: 10px;
+                flex: 1;
             }
             
             .panel {
-                padding: 20px;
+                padding: 12px;
+                border-radius: 16px;
+            }
+            
+            .panel::before, .panel::after {
+                width: 6px;
+                height: 6px;
             }
             
             .panel.span-2 {
                 grid-column: span 1;
             }
-            
+
+            /* COMPACT PROFILE */
             .hud-profile {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 16px;
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
             }
             
             .profile-left {
-                width: 100%;
-            }
-            
-            .support-btn {
-                width: 100%;
-                text-align: center;
-                padding: 14px 20px;
+                gap: 10px;
+                flex: 1;
             }
             
             .avatar {
-                width: 60px;
-                height: 60px;
-                font-size: 24px;
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+                border-radius: 10px;
             }
             
             .hud-info h2 {
-                font-size: 16px;
+                font-size: 12px;
+                margin-bottom: 2px;
             }
             
+            .hud-status {
+                font-size: 8px;
+                padding: 2px 6px;
+                border-radius: 6px;
+            }
+            
+            .support-btn {
+                padding: 8px 12px;
+                font-size: 10px;
+                border-radius: 8px;
+            }
+
+            /* COMPACT STATS - HORIZONTAL */
             .stats-row {
-                grid-template-columns: 1fr 1fr 1fr;
-                gap: 10px;
-                margin-bottom: 20px;
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
             }
             
             .chip {
-                padding: 14px 8px;
+                flex: 1;
+                padding: 10px 6px;
+                border-radius: 10px;
+            }
+            
+            .chip::before {
+                display: none;
             }
             
             .chip-label {
-                font-size: 8px;
-                margin-bottom: 6px;
+                font-size: 7px;
+                margin-bottom: 4px;
             }
             
             .chip-val {
-                font-size: 14px;
+                font-size: 11px;
             }
             
             .chip.expiry .chip-val {
-                font-size: 11px;
+                font-size: 9px;
             }
-            
+
+            /* COMPACT ENERGY BARS */
             .energy-block {
-                margin-bottom: 20px;
+                margin-bottom: 10px;
             }
             
-            .e-pct {
-                font-size: 22px;
+            .e-top {
+                margin-bottom: 6px;
             }
             
             .e-lbl {
-                font-size: 11px;
+                font-size: 9px;
             }
             
+            .e-pct {
+                font-size: 16px;
+            }
+            
+            .track {
+                height: 4px;
+            }
+
+            /* COMPACT BUTTONS */
             .btn-tech {
-                height: 50px;
-                font-size: 13px;
+                height: 40px;
+                font-size: 11px;
+                border-radius: 10px;
             }
             
             .btn-grid {
                 grid-template-columns: 1fr 1fr;
-                gap: 12px;
-                margin-bottom: 12px;
+                gap: 8px;
+                margin-bottom: 8px;
             }
-            
+
+            /* COMPACT DOWNLOADS */
             .downloads-section {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
+                flex-direction: row;
+                align-items: center;
+                gap: 10px;
             }
             
             .downloads-label {
-                font-size: 11px;
+                font-size: 9px;
+                display: none;
             }
             
             .dl-grid {
                 width: 100%;
+                gap: 8px;
             }
             
             .dl-hud {
-                padding: 14px 12px;
-            }
-            
-            .dl-icon {
-                font-size: 20px;
-                margin-bottom: 4px;
-            }
-            
-            .dl-txt {
-                font-size: 9px;
-            }
-            
-            .mbox {
-                padding: 24px;
-            }
-            
-            .mtitle {
-                font-size: 18px;
-                margin-bottom: 20px;
-            }
-            
-            .app-opt {
-                padding: 14px;
-                font-size: 14px;
-            }
-            
-            .tst {
-                padding: 12px 24px;
-                font-size: 12px;
-                bottom: 40px;
-            }
-        }
-
-        @media (max-width: 380px) {
-            .container {
-                padding: 70px 12px 20px;
-            }
-            
-            .brand {
-                font-size: 16px;
-            }
-            
-            .panel {
-                padding: 16px;
-            }
-            
-            .avatar {
-                width: 50px;
-                height: 50px;
-                font-size: 20px;
-            }
-            
-            .hud-info h2 {
-                font-size: 14px;
-            }
-            
-            .hud-status {
-                font-size: 9px;
-                padding: 3px 8px;
-            }
-            
-            .stats-row {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
-            
-            .chip {
-                padding: 14px;
-            }
-            
-            .chip-label {
-                font-size: 9px;
-            }
-            
-            .chip-val {
-                font-size: 16px;
-            }
-            
-            .chip.expiry .chip-val {
-                font-size: 13px;
-            }
-            
-            .btn-tech {
-                height: 46px;
-                font-size: 12px;
-            }
-            
-            .btn-grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }
-            
-            .dl-hud {
-                padding: 12px 8px;
+                padding: 10px 8px;
+                border-radius: 10px;
             }
             
             .dl-icon {
                 font-size: 18px;
+                margin-bottom: 2px;
             }
             
             .dl-txt {
                 font-size: 8px;
+            }
+
+            /* HIDE BRAND FOOTER ON MOBILE */
+            .brand-footer {
+                display: none;
+            }
+
+            /* COMPACT MODALS */
+            .mod {
+                padding: 16px;
+            }
+            
+            .mbox {
+                padding: 20px;
+                border-radius: 16px;
+            }
+            
+            .mtitle {
+                font-size: 16px;
+                margin-bottom: 16px;
+            }
+            
+            .app-opt {
+                padding: 12px;
+                font-size: 13px;
+                border-radius: 10px;
+            }
+            
+            .app-list {
+                gap: 8px;
+            }
+
+            /* COMPACT TOAST */
+            .tst {
+                padding: 10px 20px;
+                font-size: 11px;
+                bottom: 20px;
+                border-radius: 10px;
+            }
+        }
+
+        /* EXTRA SMALL - VERY COMPACT */
+        @media (max-width: 380px) {
+            .container {
+                padding: 12px 8px 8px;
+            }
+            
+            .header {
+                margin-bottom: 8px;
+                padding-bottom: 8px;
+            }
+            
+            .brand {
+                font-size: 14px;
+            }
+            
+            .theme-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 12px;
+            }
+            
+            .grid {
+                gap: 8px;
+            }
+            
+            .panel {
+                padding: 10px;
+                border-radius: 12px;
+            }
+            
+            .avatar {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
+            }
+            
+            .hud-info h2 {
+                font-size: 11px;
+            }
+            
+            .support-btn {
+                padding: 6px 10px;
+                font-size: 9px;
+            }
+            
+            .chip {
+                padding: 8px 4px;
+            }
+            
+            .chip-label {
+                font-size: 6px;
+            }
+            
+            .chip-val {
+                font-size: 10px;
+            }
+            
+            .btn-tech {
+                height: 36px;
+                font-size: 10px;
+            }
+            
+            .btn-grid {
+                gap: 6px;
+                margin-bottom: 6px;
+            }
+            
+            .dl-hud {
+                padding: 8px 6px;
+            }
+            
+            .dl-icon {
+                font-size: 16px;
+            }
+            
+            .dl-txt {
+                font-size: 7px;
             }
         }
     </style>
@@ -605,14 +677,14 @@
                 <div class="hud-profile">
                     <div class="profile-left">
                         <div class="avatar">
-                            👤 {% if user.online_at %}<div style="position:absolute; bottom:4px; right:4px; width:12px; height:12px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 10px var(--neon-success);"></div>{% endif %}
+                            👤 {% if user.online_at %}<div style="position:absolute; bottom:3px; right:3px; width:10px; height:10px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 8px var(--neon-success);"></div>{% endif %}
                         </div>
                         <div class="hud-info">
                             <h2>{{ user.username }}</h2>
                             {% if user.status.name == 'active' %}
                                 <span class="hud-status">آنلاین</span>
                             {% else %}
-                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 10px var(--neon-purple);">آفلاین</span>
+                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 8px var(--neon-purple);">آفلاین</span>
                             {% endif %}
                         </div>
                     </div>
@@ -632,7 +704,7 @@
                         <div class="chip-val" id="useDisp">...</div>
                     </div>
                     <div class="chip expiry">
-                        <div class="chip-label">تاریخ انقضا</div>
+                        <div class="chip-label">انقضا</div>
                         <div class="chip-val" id="ed">...</div>
                     </div>
                 </div>
@@ -654,25 +726,25 @@
                 </div>
             </div>
 
-            <!-- PANEL: ALL CONTROLS (MERGED) -->
+            <!-- PANEL: ALL CONTROLS -->
             <div class="panel span-2">
                 <div class="btn-grid">
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
-                <button class="btn-tech btn-soft-cyan" style="margin-bottom:16px;" onclick="om('appMod')">
+                <button class="btn-tech btn-soft-cyan" style="margin-bottom:8px;" onclick="om('appMod')">
                     اتصال مستقیم
                 </button>
                 <div class="btn-grid" style="margin-bottom:0;">
-                    <button class="btn-tech btn-purple" onclick="sc()">مشاهده کانفیگ‌ها</button>
-                    <a href="https://t.me/__BOT__" class="btn-tech btn-cyan">تمدید اشتراک</a>
+                    <button class="btn-tech btn-purple" onclick="sc()">کانفیگ‌ها</button>
+                    <a href="https://t.me/__BOT__" class="btn-tech btn-cyan">تمدید</a>
                 </div>
             </div>
 
             <!-- PANEL: DOWNLOADS -->
             <div class="panel span-2">
                 <div class="downloads-section">
-                    <span class="downloads-label">دانلود اپلیکیشن:</span>
+                    <span class="downloads-label">دانلود:</span>
                     <div class="dl-grid">
                         <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
                         <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
@@ -683,7 +755,7 @@
 
         </div>
 
-        <div style="text-align:center; margin-top:50px; font-family: var(--font-main); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
+        <div class="brand-footer" style="text-align:center; margin-top:30px; font-family: var(--font-main); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
     </div>
     <!-- MODALS -->
     <div class="mod" id="appMod" onclick="if(event.target===this)cm('appMod')">
@@ -695,7 +767,7 @@
                 <div class="app-opt" onclick="openApp('happ')">Happ</div>
                 <div class="app-opt" onclick="openApp('sub')">یونیورسال</div>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('appMod')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
@@ -706,7 +778,7 @@
                 <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-and')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
 
@@ -717,7 +789,7 @@
                 <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
                 <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-ios')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-ios')">بستن</button>
         </div>
     </div>
 
@@ -728,28 +800,28 @@
                 <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
                 <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('dl-win')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-win')">بستن</button>
         </div>
     </div>
 
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
         <div class="mbox">
-            <div style="background:black; padding:12px; border:1px solid var(--neon-cyan); border-radius: var(--radius-hud); display:inline-block; margin-bottom:20px; box-shadow: 0 0 20px var(--lamp-cyan);">
-                <img id="qi" src="" width="200" style="border-radius: var(--radius-hud); max-width: 100%;">
+            <div style="background:black; padding:10px; border:1px solid var(--neon-cyan); border-radius: 10px; display:inline-block; margin-bottom:16px; box-shadow: 0 0 20px var(--lamp-cyan);">
+                <img id="qi" src="" width="180" style="border-radius: 8px; max-width: 100%;">
             </div>
             <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
         </div>
     </div>
 
     <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox" style="max-width:400px; text-align: right; overflow-y: auto; max-height: 80vh;">
+        <div class="mbox" style="max-width:360px; text-align: right; overflow-y: auto; max-height: 70vh;">
             <div class="mtitle" style="text-align: center;">کانفیگ‌ها</div>
-            <div id="cl" style="display: flex; flex-direction: column; gap: 10px;">...</div>
-            <button class="btn-tech btn-purple" style="margin-top:24px;" onclick="cm('cfm')">بستن</button>
+            <div id="cl" style="display: flex; flex-direction: column; gap: 8px;">...</div>
+            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('cfm')">بستن</button>
         </div>
     </div>
 
-    <div class="tst" id="toast">با موفقیت کپی شد</div>
+    <div class="tst" id="toast">کپی شد ✓</div>
     <input type="text" id="cph" readonly>
 
     <script>
@@ -765,7 +837,7 @@
         var finalSubUrl = subUrl;
         if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { finalSubUrl += '#' + username; }
 
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(finalSubUrl);
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(finalSubUrl);
 
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
@@ -789,7 +861,7 @@
                     var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
                     daysNum = days;
-                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی شده'; } 
+                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
                     else { tPer = Math.min((days / 30) * 100, 100); daysLeftText = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
@@ -804,7 +876,7 @@
         var tf = document.getElementById('timeFill');
         if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; } 
         else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-        if (daysLeftText === 'منقضی شده') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
+        if (daysLeftText === 'منقضی') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
 
         function fb(b) {
             if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
@@ -834,7 +906,7 @@
         }
         function st(btn) {
             var t = document.getElementById('toast');
-            t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2000);
+            t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
         }
         function om(i) { document.getElementById(i).style.display = 'flex'; }
         function cm(i) { document.getElementById(i).style.display = 'none'; }
@@ -860,13 +932,13 @@
                             var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             var div = document.createElement('div');
                             div.className = 'app-opt';
-                            div.innerHTML = '<span style="max-width: 80%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
+                            div.innerHTML = '<span style="max-width: 75%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
                             div.onclick = function() { hc(z, this); };
                             l.appendChild(div);
                         }
                     });
                 }
-            }).catch(() => l.innerHTML = 'خطا در دریافت');
+            }).catch(() => l.innerHTML = 'خطا');
         }
 
         var ua = navigator.userAgent.toLowerCase();
