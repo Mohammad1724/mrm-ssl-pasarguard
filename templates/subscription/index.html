@@ -149,6 +149,7 @@
             position: relative;
             box-shadow: var(--lamp-cyan);
             border: 1px solid rgba(255,255,255,0.3);
+            flex-shrink: 0;
         }
 
         .hud-info h2 { 
@@ -158,6 +159,7 @@
             text-transform: uppercase; 
             letter-spacing: 1px;
             margin-bottom: 6px;
+            word-break: break-all;
         }
         .hud-status {
             font-family: var(--font-tech);
@@ -181,6 +183,8 @@
             font-size: 13px;
             box-shadow: var(--lamp-purple);
             transition: 0.3s;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         .support-btn:hover {
             background: rgba(112, 0, 255, 0.1);
@@ -211,7 +215,6 @@
         .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
         .btn-purple:active { transform: translateY(2px); box-shadow: none; }
 
-        /* --- SOFT CYAN BUTTON WITH BLACK TEXT --- */
         .btn-soft-cyan { 
             border-color: rgba(0, 200, 255, 0.4); 
             box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.4); 
@@ -229,7 +232,6 @@
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
-        /* --- STATS WITH 3 CHIPS --- */
         .stats-row {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -264,7 +266,6 @@
         .fill.cyan { background: var(--neon-cyan); color: var(--neon-cyan); }
         .fill.purple { background: var(--neon-purple); color: var(--neon-purple); }
 
-        /* --- DOWNLOADS SECTION (COMPACT) --- */
         .downloads-section {
             display: flex;
             align-items: center;
@@ -305,12 +306,13 @@
             position: fixed; inset: 0; z-index: 1000;
             background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
             display: none; align-items: center; justify-content: center;
+            padding: 20px;
         }
         .mbox {
             background: var(--bg-void);
             border: 1px solid var(--neon-cyan);
             border-radius: var(--radius-panel);
-            padding: 32px; width: 85%; max-width: 360px;
+            padding: 32px; width: 100%; max-width: 360px;
             text-align: center;
             box-shadow: 0 0 50px var(--lamp-cyan);
             position: relative;
@@ -359,6 +361,233 @@
         .tst.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
         #cph { position: absolute; opacity: 0; }
+
+        /* --- MOBILE RESPONSIVE --- */
+        @media (max-width: 768px) {
+            .container {
+                padding: 80px 16px 24px;
+            }
+            
+            .header {
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+            }
+            
+            .brand {
+                font-size: 20px;
+                letter-spacing: 1px;
+            }
+            
+            .theme-btn {
+                width: 42px;
+                height: 42px;
+                font-size: 16px;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+            
+            .panel {
+                padding: 20px;
+            }
+            
+            .panel.span-2 {
+                grid-column: span 1;
+            }
+            
+            .hud-profile {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 16px;
+            }
+            
+            .profile-left {
+                width: 100%;
+            }
+            
+            .support-btn {
+                width: 100%;
+                text-align: center;
+                padding: 14px 20px;
+            }
+            
+            .avatar {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+            
+            .hud-info h2 {
+                font-size: 16px;
+            }
+            
+            .stats-row {
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            
+            .chip {
+                padding: 14px 8px;
+            }
+            
+            .chip-label {
+                font-size: 8px;
+                margin-bottom: 6px;
+            }
+            
+            .chip-val {
+                font-size: 14px;
+            }
+            
+            .chip.expiry .chip-val {
+                font-size: 11px;
+            }
+            
+            .energy-block {
+                margin-bottom: 20px;
+            }
+            
+            .e-pct {
+                font-size: 22px;
+            }
+            
+            .e-lbl {
+                font-size: 11px;
+            }
+            
+            .btn-tech {
+                height: 50px;
+                font-size: 13px;
+            }
+            
+            .btn-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-bottom: 12px;
+            }
+            
+            .downloads-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+            
+            .downloads-label {
+                font-size: 11px;
+            }
+            
+            .dl-grid {
+                width: 100%;
+            }
+            
+            .dl-hud {
+                padding: 14px 12px;
+            }
+            
+            .dl-icon {
+                font-size: 20px;
+                margin-bottom: 4px;
+            }
+            
+            .dl-txt {
+                font-size: 9px;
+            }
+            
+            .mbox {
+                padding: 24px;
+            }
+            
+            .mtitle {
+                font-size: 18px;
+                margin-bottom: 20px;
+            }
+            
+            .app-opt {
+                padding: 14px;
+                font-size: 14px;
+            }
+            
+            .tst {
+                padding: 12px 24px;
+                font-size: 12px;
+                bottom: 40px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .container {
+                padding: 70px 12px 20px;
+            }
+            
+            .brand {
+                font-size: 16px;
+            }
+            
+            .panel {
+                padding: 16px;
+            }
+            
+            .avatar {
+                width: 50px;
+                height: 50px;
+                font-size: 20px;
+            }
+            
+            .hud-info h2 {
+                font-size: 14px;
+            }
+            
+            .hud-status {
+                font-size: 9px;
+                padding: 3px 8px;
+            }
+            
+            .stats-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .chip {
+                padding: 14px;
+            }
+            
+            .chip-label {
+                font-size: 9px;
+            }
+            
+            .chip-val {
+                font-size: 16px;
+            }
+            
+            .chip.expiry .chip-val {
+                font-size: 13px;
+            }
+            
+            .btn-tech {
+                height: 46px;
+                font-size: 12px;
+            }
+            
+            .btn-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .dl-hud {
+                padding: 12px 8px;
+            }
+            
+            .dl-icon {
+                font-size: 18px;
+            }
+            
+            .dl-txt {
+                font-size: 8px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -506,7 +735,7 @@
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
         <div class="mbox">
             <div style="background:black; padding:12px; border:1px solid var(--neon-cyan); border-radius: var(--radius-hud); display:inline-block; margin-bottom:20px; box-shadow: 0 0 20px var(--lamp-cyan);">
-                <img id="qi" src="" width="200" style="border-radius: var(--radius-hud);">
+                <img id="qi" src="" width="200" style="border-radius: var(--radius-hud); max-width: 100%;">
             </div>
             <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
         </div>
