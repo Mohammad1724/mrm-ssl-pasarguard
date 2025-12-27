@@ -69,6 +69,8 @@
             border-bottom: 1px solid var(--glass-border);
             padding-bottom: 20px;
         }
+        
+        /* BRAND WITH BREATHING ANIMATION */
         .brand {
             font-family: var(--font-tech);
             font-size: 28px;
@@ -77,7 +79,22 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             text-shadow: 0 0 10px var(--neon-cyan);
+            animation: breathe 3s ease-in-out infinite;
         }
+        
+        @keyframes breathe {
+            0%, 100% { 
+                opacity: 0.7; 
+                text-shadow: 0 0 10px var(--neon-cyan);
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 1; 
+                text-shadow: 0 0 25px var(--neon-cyan), 0 0 50px var(--neon-cyan);
+                transform: scale(1.02);
+            }
+        }
+        
         .theme-btn {
             width: 48px; height: 48px;
             border-radius: var(--radius-hud);
@@ -360,239 +377,24 @@
         /* ======================================== */
         @media (max-width: 768px) {
             body {
-                padding-bottom: 20px;
+                padding-bottom: 10px;
             }
             
             .container {
-                padding: 16px 12px 12px;
+                padding: 12px 10px 10px;
                 min-height: 100vh;
                 display: flex;
                 flex-direction: column;
             }
 
             .header {
-                margin-bottom: 12px;
-                padding-bottom: 10px;
-            }
-            
-            .brand {
-                font-size: 16px;
-                letter-spacing: 1px;
-            }
-            
-            .theme-btn {
-                width: 36px;
-                height: 36px;
-                font-size: 14px;
-            }
-            
-            .grid {
-                grid-template-columns: 1fr;
-                gap: 10px;
-                flex: 1;
-            }
-            
-            .panel {
-                padding: 12px;
-                border-radius: 16px;
-            }
-            
-            .panel::before, .panel::after {
-                width: 6px;
-                height: 6px;
-            }
-            
-            .panel.span-2 {
-                grid-column: span 1;
-            }
-
-            /* COMPACT PROFILE */
-            .hud-profile {
-                flex-direction: row;
-                align-items: center;
-                gap: 10px;
-            }
-            
-            .profile-left {
-                gap: 10px;
-                flex: 1;
-            }
-            
-            .avatar {
-                width: 38px;
-                height: 38px;
-                font-size: 16px;
-                border-radius: 10px;
-            }
-            
-            .hud-info h2 {
-                font-size: 11px;
-                margin-bottom: 2px;
-                background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }
-            
-            .hud-status {
-                font-size: 8px;
-                padding: 2px 6px;
-                border-radius: 6px;
-            }
-            
-            .support-btn {
-                padding: 8px 12px;
-                font-size: 10px;
-                border-radius: 8px;
-            }
-
-            /* COMPACT STATS */
-            .stats-row {
-                display: flex;
-                gap: 8px;
                 margin-bottom: 10px;
-            }
-            
-            .chip {
-                flex: 1;
-                padding: 10px 6px;
-                border-radius: 10px;
-            }
-            
-            .chip::before {
-                display: none;
-            }
-            
-            .chip-label {
-                font-size: 7px;
-                margin-bottom: 4px;
-            }
-            
-            .chip-val {
-                font-size: 11px;
-            }
-            
-            .chip.expiry .chip-val {
-                font-size: 9px;
-            }
-
-            /* COMPACT ENERGY BARS */
-            .energy-block {
-                margin-bottom: 10px;
-            }
-            
-            .e-top {
-                margin-bottom: 6px;
-            }
-            
-            .e-lbl {
-                font-size: 9px;
-            }
-            
-            .e-pct {
-                font-size: 16px;
-            }
-            
-            .track {
-                height: 4px;
-            }
-
-            /* COMPACT BUTTONS */
-            .btn-tech {
-                height: 40px;
-                font-size: 11px;
-                border-radius: 10px;
-            }
-            
-            .btn-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 8px;
-                margin-bottom: 8px;
-            }
-
-            /* COMPACT DOWNLOADS */
-            .downloads-section {
-                flex-direction: row;
-                align-items: center;
-                gap: 10px;
-            }
-            
-            .downloads-label {
-                font-size: 9px;
-                display: none;
-            }
-            
-            .dl-grid {
-                width: 100%;
-                gap: 8px;
-            }
-            
-            .dl-hud {
-                padding: 10px 8px;
-                border-radius: 10px;
-            }
-            
-            .dl-icon {
-                font-size: 18px;
-                margin-bottom: 2px;
-            }
-            
-            .dl-txt {
-                font-size: 8px;
-            }
-
-            /* HIDE BRAND FOOTER ON MOBILE */
-            .brand-footer {
-                display: none;
-            }
-
-            /* COMPACT MODALS */
-            .mod {
-                padding: 16px;
-            }
-            
-            .mbox {
-                padding: 20px;
-                border-radius: 16px;
-            }
-            
-            .mtitle {
-                font-size: 16px;
-                margin-bottom: 16px;
-            }
-            
-            .app-opt {
-                padding: 12px;
-                font-size: 13px;
-                border-radius: 10px;
-            }
-            
-            .app-list {
-                gap: 8px;
-            }
-
-            /* COMPACT TOAST */
-            .tst {
-                padding: 10px 20px;
-                font-size: 11px;
-                bottom: 20px;
-                border-radius: 10px;
-            }
-        }
-
-        /* EXTRA SMALL - VERY COMPACT */
-        @media (max-width: 380px) {
-            .container {
-                padding: 12px 8px 8px;
-            }
-            
-            .header {
-                margin-bottom: 8px;
                 padding-bottom: 8px;
             }
             
             .brand {
                 font-size: 14px;
+                letter-spacing: 1px;
             }
             
             .theme-btn {
@@ -602,61 +404,275 @@
             }
             
             .grid {
+                grid-template-columns: 1fr;
                 gap: 8px;
+                flex: 1;
             }
             
             .panel {
                 padding: 10px;
-                border-radius: 12px;
+                border-radius: 14px;
+            }
+            
+            .panel::before, .panel::after {
+                width: 5px;
+                height: 5px;
+            }
+            
+            .panel.span-2 {
+                grid-column: span 1;
+            }
+
+            /* VERY COMPACT PROFILE */
+            .hud-profile {
+                flex-direction: row;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .profile-left {
+                gap: 8px;
+                flex: 1;
             }
             
             .avatar {
-                width: 34px;
-                height: 34px;
+                width: 32px;
+                height: 32px;
                 font-size: 14px;
+                border-radius: 8px;
             }
             
             .hud-info h2 {
                 font-size: 10px;
+                margin-bottom: 2px;
+                background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+            }
+            
+            .hud-status {
+                font-size: 7px;
+                padding: 2px 5px;
+                border-radius: 4px;
             }
             
             .support-btn {
                 padding: 6px 10px;
                 font-size: 9px;
+                border-radius: 6px;
+            }
+
+            /* COMPACT STATS */
+            .stats-row {
+                display: flex;
+                gap: 6px;
+                margin-bottom: 8px;
             }
             
             .chip {
+                flex: 1;
                 padding: 8px 4px;
+                border-radius: 8px;
+            }
+            
+            .chip::before {
+                display: none;
             }
             
             .chip-label {
                 font-size: 6px;
+                margin-bottom: 3px;
             }
             
             .chip-val {
                 font-size: 10px;
             }
             
+            .chip.expiry .chip-val {
+                font-size: 8px;
+            }
+
+            /* COMPACT ENERGY BARS */
+            .energy-block {
+                margin-bottom: 8px;
+            }
+            
+            .e-top {
+                margin-bottom: 4px;
+            }
+            
+            .e-lbl {
+                font-size: 8px;
+            }
+            
+            .e-pct {
+                font-size: 14px;
+            }
+            
+            .track {
+                height: 3px;
+            }
+
+            /* COMPACT BUTTONS */
             .btn-tech {
                 height: 36px;
                 font-size: 10px;
+                border-radius: 8px;
             }
             
             .btn-grid {
+                grid-template-columns: 1fr 1fr;
                 gap: 6px;
                 margin-bottom: 6px;
+            }
+
+            /* COMPACT DOWNLOADS */
+            .downloads-section {
+                flex-direction: row;
+                align-items: center;
+                gap: 8px;
+            }
+            
+            .downloads-label {
+                display: none;
+            }
+            
+            .dl-grid {
+                width: 100%;
+                gap: 6px;
             }
             
             .dl-hud {
                 padding: 8px 6px;
+                border-radius: 8px;
             }
             
             .dl-icon {
                 font-size: 16px;
+                margin-bottom: 2px;
             }
             
             .dl-txt {
                 font-size: 7px;
+            }
+
+            /* HIDE BRAND FOOTER ON MOBILE */
+            .brand-footer {
+                display: none;
+            }
+
+            /* COMPACT MODALS */
+            .mod {
+                padding: 12px;
+            }
+            
+            .mbox {
+                padding: 16px;
+                border-radius: 14px;
+            }
+            
+            .mtitle {
+                font-size: 14px;
+                margin-bottom: 12px;
+            }
+            
+            .app-opt {
+                padding: 10px;
+                font-size: 12px;
+                border-radius: 8px;
+            }
+            
+            .app-list {
+                gap: 6px;
+            }
+
+            /* COMPACT TOAST */
+            .tst {
+                padding: 8px 16px;
+                font-size: 10px;
+                bottom: 15px;
+                border-radius: 8px;
+            }
+        }
+
+        /* EXTRA SMALL */
+        @media (max-width: 380px) {
+            .container {
+                padding: 10px 8px 8px;
+            }
+            
+            .brand {
+                font-size: 12px;
+            }
+            
+            .theme-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 10px;
+            }
+            
+            .grid {
+                gap: 6px;
+            }
+            
+            .panel {
+                padding: 8px;
+                border-radius: 10px;
+            }
+            
+            .avatar {
+                width: 28px;
+                height: 28px;
+                font-size: 12px;
+            }
+            
+            .hud-info h2 {
+                font-size: 9px;
+            }
+            
+            .hud-status {
+                font-size: 6px;
+                padding: 1px 4px;
+            }
+            
+            .support-btn {
+                padding: 5px 8px;
+                font-size: 8px;
+            }
+            
+            .chip {
+                padding: 6px 3px;
+            }
+            
+            .chip-label {
+                font-size: 5px;
+            }
+            
+            .chip-val {
+                font-size: 9px;
+            }
+            
+            .btn-tech {
+                height: 32px;
+                font-size: 9px;
+            }
+            
+            .btn-grid {
+                gap: 5px;
+                margin-bottom: 5px;
+            }
+            
+            .dl-hud {
+                padding: 6px 4px;
+            }
+            
+            .dl-icon {
+                font-size: 14px;
+            }
+            
+            .dl-txt {
+                font-size: 6px;
             }
         }
     </style>
@@ -676,14 +692,14 @@
                 <div class="hud-profile">
                     <div class="profile-left">
                         <div class="avatar">
-                            👤 {% if user.online_at %}<div style="position:absolute; bottom:3px; right:3px; width:10px; height:10px; background:var(--neon-success); border:2px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 8px var(--neon-success);"></div>{% endif %}
+                            👤 {% if user.online_at %}<div style="position:absolute; bottom:2px; right:2px; width:8px; height:8px; background:var(--neon-success); border:1px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 6px var(--neon-success);"></div>{% endif %}
                         </div>
                         <div class="hud-info">
                             <h2>✦ {{ user.username }} ✦</h2>
                             {% if user.status.name == 'active' %}
                                 <span class="hud-status">آنلاین</span>
                             {% else %}
-                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 8px var(--neon-purple);">آفلاین</span>
+                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 6px var(--neon-purple);">آفلاین</span>
                             {% endif %}
                         </div>
                     </div>
@@ -731,7 +747,7 @@
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
-                <button class="btn-tech btn-soft-cyan" style="margin-bottom:8px;" onclick="om('appMod')">
+                <button class="btn-tech btn-soft-cyan" style="margin-bottom:6px;" onclick="om('appMod')">
                     اتصال مستقیم
                 </button>
                 <div class="btn-grid" style="margin-bottom:0;">
@@ -766,7 +782,7 @@
                 <div class="app-opt" onclick="openApp('happ')">Happ</div>
                 <div class="app-opt" onclick="openApp('sub')">یونیورسال</div>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('appMod')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('appMod')">بستن</button>
         </div>
     </div>
 
@@ -777,7 +793,7 @@
                 <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
                 <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-and')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button>
         </div>
     </div>
 
@@ -788,7 +804,7 @@
                 <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
                 <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-ios')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button>
         </div>
     </div>
 
@@ -799,24 +815,24 @@
                 <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
                 <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('dl-win')">بستن</button>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button>
         </div>
     </div>
 
     <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
         <div class="mbox">
-            <div style="background:black; padding:10px; border:1px solid var(--neon-cyan); border-radius: 10px; display:inline-block; margin-bottom:16px; box-shadow: 0 0 20px var(--lamp-cyan);">
-                <img id="qi" src="" width="180" style="border-radius: 8px; max-width: 100%;">
+            <div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px; display:inline-block; margin-bottom:12px; box-shadow: 0 0 15px var(--lamp-cyan);">
+                <img id="qi" src="" width="160" style="border-radius: 6px; max-width: 100%;">
             </div>
             <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
         </div>
     </div>
 
     <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox" style="max-width:360px; text-align: right; overflow-y: auto; max-height: 70vh;">
+        <div class="mbox" style="max-width:340px; text-align: right; overflow-y: auto; max-height: 65vh;">
             <div class="mtitle" style="text-align: center;">کانفیگ‌ها</div>
-            <div id="cl" style="display: flex; flex-direction: column; gap: 8px;">...</div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('cfm')">بستن</button>
+            <div id="cl" style="display: flex; flex-direction: column; gap: 6px;">...</div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button>
         </div>
     </div>
 
@@ -836,7 +852,7 @@
         var finalSubUrl = subUrl;
         if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { finalSubUrl += '#' + username; }
 
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(finalSubUrl);
+        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(finalSubUrl);
 
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
@@ -931,7 +947,7 @@
                             var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             var div = document.createElement('div');
                             div.className = 'app-opt';
-                            div.innerHTML = '<span style="max-width: 75%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
+                            div.innerHTML = '<span style="max-width: 70%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
                             div.onclick = function() { hc(z, this); };
                             l.appendChild(div);
                         }
