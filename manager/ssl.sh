@@ -7,17 +7,26 @@ _get_cert_action() {
     local EMAIL=$1
     shift
     local DOMAINS=("${@}")
+    local DEBUG_LOG="/var/log/certbot_debug.log"
 
-    echo -e "${BLUE}Opening Port 80 temporarily...${NC}"
-    # FIX: Check if UFW exists before using
-    if command -v ufw &> /dev/null; then
-        ufw allow 80/tcp > /dev/null 2>&1
+    echo -e "${YELLOW}[Step 1/5] Network & DNS Validation...${NC}"
+    # Check internet connectivity to Let's Encrypt API
+    if ! curl -s --connect-timeout 5 https://acme-v02.api.letsencrypt.org/directory > /dev/null; then
+        echo -e "${RED}✘ Error: Let's Encrypt API is unreachable. Check your internet/firewall!${NC}"
+        return 1
     fi
 
-    echo -e "${BLUE}Stopping web services...${NC}"
+    echo -e "${YELLOW}[Step 2/5] Preparing Firewall (Port 80)...${NC}"
+    if command -v ufw &> /dev/null; then
+        # Ensure port 80 is open for standalone mode
+        ufw allow 80/tcp > /dev/null 2>&1
+        ufw allow 443/tcp > /dev/null 2>&1
+        ufw reload > /dev/null 2>&1
+    fi
+
+    echo -e "${YELLOW}[Step 3/5] Stopping conflicting services...${NC}"
     systemctl stop nginx 2>/dev/null
     systemctl stop apache2 2>/dev/null
-    # Kill any process on port 80 if fuser exists
     if command -v fuser &> /dev/null; then
         fuser -k 80/tcp 2>/dev/null
     fi
@@ -28,16 +37,29 @@ _get_cert_action() {
         DOM_FLAGS="$DOM_FLAGS -d $D"
     done
 
-    # Added --expand to fix the error
-    certbot certonly --standalone --non-interactive --agree-tos --expand --email "$EMAIL" $DOM_FLAGS
+    echo -e "${YELLOW}[Step 4/5] Requesting Certificate from Let's Encrypt...${NC}"
+    echo -e "${CYAN}Info: This may take up to 1 minute. Check $DEBUG_LOG for details.${NC}"
+    
+    # Run certbot with debug logging
+    certbot certonly --standalone --non-interactive --agree-tos --expand --email "$EMAIL" $DOM_FLAGS > "$DEBUG_LOG" 2>&1
     local CERTBOT_RESULT=$?
 
+    echo -e "${YELLOW}[Step 5/5] Restoring Services...${NC}"
     systemctl start nginx 2>/dev/null
 
+    # Smart cleanup
     if ! systemctl is-active --quiet nginx; then
         if command -v ufw &> /dev/null; then
-             ufw delete allow 80/tcp > /dev/null 2>&1
+             # Optional: keep port 80 open if nginx failed to start to avoid lockouts
+             echo -e "${BLUE}Port 80 left open for safety.${NC}"
         fi
+    fi
+
+    if [ $CERTBOT_RESULT -eq 0 ]; then
+        echo -e "${GREEN}✔ SSL Generation Successful!${NC}"
+    else
+        echo -e "${RED}✘ SSL Generation Failed. Showing last 10 lines of debug log:${NC}"
+        tail -n 10 "$DEBUG_LOG"
     fi
 
     return $CERTBOT_RESULT
@@ -65,8 +87,7 @@ _process_panel() {
 
         local C_FILE="$TARGET_DIR/fullchain.pem"
         local K_FILE="$TARGET_DIR/privkey.pem"
-        
-        # FIX: Secure Permissions
+
         chmod 644 "$C_FILE" "$K_FILE"
 
         if [ ! -f "$PANEL_ENV" ]; then touch "$PANEL_ENV"; fi
@@ -109,7 +130,7 @@ _process_node() {
 
         local C_FILE="$TARGET_DIR/server.crt"
         local K_FILE="$TARGET_DIR/server.key"
-        
+
         chmod 644 "$C_FILE" "$K_FILE"
 
         if [ -f "$NODE_ENV" ]; then
@@ -142,7 +163,6 @@ _process_config() {
     if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/" && \
        cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/"; then
 
-        # FIX: Do not use 755 for everything, security risk.
         chmod 755 "$TARGET_DIR"
         chmod 644 "$TARGET_DIR"/*.pem
 
@@ -159,7 +179,7 @@ _process_config() {
 ssl_wizard() {
     clear
     echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}         SSL GENERATION WIZARD  v1.0             ${NC}"
+    echo -e "${YELLOW}         SSL GENERATION WIZARD  v1.1             ${NC}"
     echo -e "${CYAN}=============================================${NC}"
 
     read -p "How many domains? (e.g. 1, 2): " COUNT
@@ -194,6 +214,7 @@ ssl_wizard() {
 
     if [ $RES -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
         echo -e "${RED}✘ SSL Generation Failed!${NC}"
+        echo -e "${YELLOW}Check /var/log/certbot_debug.log for more info.${NC}"
         pause
         return
     fi
@@ -329,7 +350,7 @@ view_cert_content() {
     if [ -f "$TARGET_DIR/$FILE" ]; then
         clear
         echo -e "${YELLOW}--- START OF $HEADER ---${NC}"
-        echo -e "${GREEN}"
+        echo -ne "${GREEN}"
         cat "$TARGET_DIR/$FILE"
         echo -e "${NC}"
         echo -e "${YELLOW}--- END OF $HEADER ---${NC}"
