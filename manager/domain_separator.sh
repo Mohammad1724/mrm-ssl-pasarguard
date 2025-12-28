@@ -19,8 +19,7 @@ install_requirements() {
     fi
 
     if [ "$NEED_INSTALL" = true ]; then
-        install_package nginx nginx
-        install_package certbot certbot
+        apt update && apt install -y nginx certbot
         echo -e "${GREEN}✔ Requirements installed.${NC}"
     else
         echo -e "${GREEN}✔ Requirements are already installed.${NC}"
@@ -91,17 +90,15 @@ setup_domain_separation() {
     # Check Admin cert (required)
     if [ $ADMIN_CERT_OK -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$ADMIN_DOM" ]; then
         echo -e "${RED}✘ Failed to get SSL for Admin Domain!${NC}"
-        echo -e "${YELLOW}Check if domain points to this server IP.${NC}"
         systemctl start nginx
-        pause
-        return
+        pause; return
     fi
 
-    # Determine which cert to use for Sub
+    # Check Sub cert
     local SUB_CERT_PATH="/etc/letsencrypt/live/$SUB_DOM"
     if [ $SUB_CERT_OK -ne 0 ] || [ ! -d "$SUB_CERT_PATH" ]; then
-        # FIX: Abort if 2nd SSL fails to avoid broken security
         echo -e "${RED}✘ Sub Domain SSL failed. Cannot proceed safely.${NC}"
+        systemctl start nginx
         pause; return
     fi
 
@@ -121,8 +118,9 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/$ADMIN_DOM/privkey.pem;
 
     location / {
-        # FIX: Use HTTP (Internal) to prevent 502 Bad Gateway
-        proxy_pass http://127.0.0.1:$PANEL_PORT;
+        # FIXED: Changed to HTTPS to match Pasarguard .env config
+        proxy_pass https://127.0.0.1:$PANEL_PORT;
+        proxy_ssl_verify off;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -142,7 +140,9 @@ server {
     ssl_certificate_key ${SUB_CERT_PATH}/privkey.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:$PANEL_PORT;
+        # FIXED: Changed to HTTPS to match Pasarguard .env config
+        proxy_pass https://127.0.0.1:$PANEL_PORT;
+        proxy_ssl_verify off;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -159,20 +159,11 @@ EOF
         echo -e "${RED}✘ Nginx Config Error! Reverting...${NC}"
         rm -f "$NGINX_CONF"
         systemctl start nginx
-        pause
-        return
+        pause; return
     fi
 
     if command -v ufw &> /dev/null; then ufw allow $PORT/tcp > /dev/null 2>&1; fi
     systemctl restart nginx
-
-    if systemctl is-active --quiet nginx; then
-        echo -e "${GREEN}✔ Nginx is running.${NC}"
-    else
-        echo -e "${RED}✘ Nginx failed! Check: journalctl -xe${NC}"
-        pause
-        return
-    fi
 
     echo ""
     echo -e "${GREEN}======================================${NC}"
