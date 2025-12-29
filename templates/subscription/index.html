@@ -8,7 +8,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&family=Roboto+Mono:wght@500;700&display=swap');
 
         :root {
-            --bg-deep: #020205;
+            --bg-deep: #0d1117; /* رنگ سورمه‌ای تیره اصلاح شده */
             --bg-void: #0a0a0f;
             --neon-cyan: #00f2ff;
             --neon-purple: #7000ff;
@@ -70,7 +70,6 @@
             padding-bottom: 20px;
         }
 
-        /* BRAND WITH BREATHING ANIMATION */
         .brand {
             font-family: var(--font-tech);
             font-size: 28px;
@@ -124,24 +123,8 @@
             position: relative;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
-        .panel::before {
-            content: '';
-            position: absolute;
-            top: -1px; right: -1px;
-            width: 10px; height: 10px;
-            border-top: 2px solid var(--neon-cyan);
-            border-right: 2px solid var(--neon-cyan);
-            border-radius: 4px;
-        }
-        .panel::after {
-            content: '';
-            position: absolute;
-            bottom: -1px; left: -1px;
-            width: 10px; height: 10px;
-            border-bottom: 2px solid var(--neon-cyan);
-            border-left: 2px solid var(--neon-cyan);
-            border-radius: 4px;
-        }
+
+        /* خطوط بنفش گوشه پانل‌ها حذف شد */
 
         .panel.span-2 { grid-column: span 2; }
 
@@ -257,11 +240,7 @@
             text-align: center;
             position: relative;
         }
-        .chip::before {
-            content: ''; position: absolute; top: 0; right: 0; width: 8px; height: 8px;
-            border-top: 1px solid var(--neon-cyan); border-right: 1px solid var(--neon-cyan);
-            border-radius: 4px;
-        }
+        /* خط گوشه چیپ‌ها حذف شد */
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 16px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
         .chip.expiry .chip-val { font-size: 13px; }
@@ -327,14 +306,7 @@
             box-shadow: 0 0 50px var(--lamp-cyan);
             position: relative;
         }
-        .mbox::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; height: 2px;
-            background: var(--neon-cyan);
-            box-shadow: 0 0 10px var(--neon-cyan);
-            border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-        }
+        /* خط بالای پاپ‌آپ‌ها حذف شد */
         .mtitle { 
             font-family: var(--font-main); 
             font-size: 20px; font-weight: 900; 
@@ -372,7 +344,7 @@
 
         #cph { position: absolute; opacity: 0; }
 
-        /* MODAL STEPS STYLE */
+        /* OS MODAL CUSTOM STYLES */
         .os-choice { display: flex; justify-content: space-around; gap: 15px; }
         .os-btn { 
             cursor: pointer; padding: 20px; border-radius: 15px; 
@@ -382,316 +354,45 @@
         .os-btn:hover { border-color: var(--neon-cyan); background: rgba(0, 242, 255, 0.1); }
         .os-btn span { display: block; margin-top: 10px; font-weight: 900; font-size: 14px; }
 
-        /* ======================================== */
-        /* MOBILE COMPACT - NO SCROLL NEEDED       */
-        /* ======================================== */
         @media (max-width: 768px) {
-            body {
-                padding-bottom: 10px;
-            }
-
-            .container {
-                padding: 12px 10px 10px;
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .header {
-                margin-bottom: 10px;
-                padding-bottom: 8px;
-            }
-
-            .brand {
-                font-size: 14px;
-                letter-spacing: 1px;
-            }
-
-            .theme-btn {
-                width: 32px;
-                height: 32px;
-                font-size: 12px;
-            }
-
-            .grid {
-                grid-template-columns: 1fr;
-                gap: 8px;
-                flex: 1;
-            }
-
-            .panel {
-                padding: 10px;
-                border-radius: 14px;
-            }
-
-            .panel::before, .panel::after {
-                width: 5px;
-                height: 5px;
-            }
-
-            .panel.span-2 {
-                grid-column: span 1;
-            }
-
-            /* === SMALLER PROFILE BOX === */
-            .panel:first-of-type {
-                padding: 6px 10px;
-            }
-
-            .hud-profile {
-                flex-direction: row;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .profile-left {
-                gap: 8px;
-                flex: 1;
-            }
-
-            .avatar {
-                width: 34px;
-                height: 34px;
-                font-size: 15px;
-                border-radius: 8px;
-            }
-
-            .hud-info h2 {
-                font-size: 12px;
-                margin-bottom: 2px;
-                background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }
-
-            .hud-status {
-                font-size: 8px;
-                padding: 2px 6px;
-                border-radius: 5px;
-            }
-
-            .support-btn {
-                padding: 6px 10px;
-                font-size: 9px;
-                border-radius: 6px;
-            }
-
-            /* COMPACT STATS */
-            .stats-row {
-                display: flex;
-                gap: 6px;
-                margin-bottom: 8px;
-            }
-
-            .chip {
-                flex: 1;
-                padding: 8px 4px;
-                border-radius: 8px;
-            }
-
-            .chip::before {
-                display: none;
-            }
-
-            .chip-label {
-                font-size: 6px;
-                margin-bottom: 3px;
-            }
-
-            .chip-val {
-                font-size: 10px;
-            }
-
-            .chip.expiry .chip-val {
-                font-size: 8px;
-            }
-
-            /* COMPACT ENERGY BARS */
-            .energy-block {
-                margin-bottom: 8px;
-            }
-
-            .e-top {
-                margin-bottom: 4px;
-            }
-
-            .e-lbl {
-                font-size: 8px;
-            }
-
-            .e-pct {
-                font-size: 14px;
-            }
-
-            .track {
-                height: 3px;
-            }
-
-            /* COMPACT BUTTONS */
-            .btn-tech {
-                height: 36px;
-                font-size: 10px;
-                border-radius: 8px;
-            }
-
-            .btn-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 6px;
-                margin-bottom: 6px;
-            }
-
-            /* COMPACT DOWNLOADS */
-            .downloads-section {
-                flex-direction: row;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .downloads-label {
-                display: none;
-            }
-
-            .dl-grid {
-                width: 100%;
-                gap: 6px;
-            }
-
-            .dl-hud {
-                padding: 8px 6px;
-                border-radius: 8px;
-            }
-
-            .dl-icon {
-                font-size: 16px;
-                margin-bottom: 2px;
-            }
-
-            .dl-txt {
-                font-size: 7px;
-            }
-
-            /* HIDE BRAND FOOTER ON MOBILE */
-            .brand-footer {
-                display: none;
-            }
-
-            /* COMPACT MODALS */
-            .mod {
-                padding: 12px;
-            }
-
-            .mbox {
-                padding: 16px;
-                border-radius: 14px;
-            }
-
-            .mtitle {
-                font-size: 14px;
-                margin-bottom: 12px;
-            }
-
-            .app-opt {
-                padding: 10px;
-                font-size: 12px;
-                border-radius: 8px;
-            }
-
-            .app-list {
-                gap: 6px;
-            }
-
-            /* COMPACT TOAST */
-            .tst {
-                padding: 8px 16px;
-                font-size: 10px;
-                bottom: 15px;
-                border-radius: 8px;
-            }
-        }
-
-        /* EXTRA SMALL */
-        @media (max-width: 380px) {
-            .container {
-                padding: 10px 8px 8px;
-            }
-
-            .brand {
-                font-size: 12px;
-            }
-
-            .theme-btn {
-                width: 28px;
-                height: 28px;
-                font-size: 10px;
-            }
-
-            .grid {
-                gap: 6px;
-            }
-
-            .panel {
-                padding: 8px;
-                border-radius: 10px;
-            }
-
-            .panel:first-of-type {
-                padding: 5px 8px;
-            }
-
-            .avatar {
-                width: 30px;
-                height: 30px;
-                font-size: 13px;
-            }
-
-            .hud-info h2 {
-                font-size: 11px;
-            }
-
-            .hud-status {
-                font-size: 7px;
-                padding: 1px 4px;
-            }
-
-            .support-btn {
-                padding: 5px 8px;
-                font-size: 8px;
-            }
-
-            .chip {
-                padding: 6px 3px;
-            }
-
-            .chip-label {
-                font-size: 5px;
-            }
-
-            .chip-val {
-                font-size: 9px;
-            }
-
-            .btn-tech {
-                height: 32px;
-                font-size: 9px;
-            }
-
-            .btn-grid {
-                gap: 5px;
-                margin-bottom: 5px;
-            }
-
-            .dl-hud {
-                padding: 6px 4px;
-            }
-
-            .dl-icon {
-                font-size: 14px;
-            }
-
-            .dl-txt {
-                font-size: 6px;
-            }
+            body { padding-bottom: 10px; }
+            .container { padding: 12px 10px 10px; min-height: 100vh; display: flex; flex-direction: column; }
+            .header { margin-bottom: 10px; padding-bottom: 8px; }
+            .brand { font-size: 14px; letter-spacing: 1px; }
+            .theme-btn { width: 32px; height: 32px; font-size: 12px; }
+            .grid { grid-template-columns: 1fr; gap: 8px; flex: 1; }
+            .panel { padding: 10px; border-radius: 14px; }
+            .panel.span-2 { grid-column: span 1; }
+            .panel:first-of-type { padding: 6px 10px; }
+            .hud-profile { flex-direction: row; align-items: center; gap: 8px; }
+            .profile-left { gap: 8px; flex: 1; }
+            .avatar { width: 34px; height: 34px; font-size: 15px; border-radius: 8px; }
+            .hud-info h2 { font-size: 12px; margin-bottom: 2px; }
+            .hud-status { font-size: 8px; padding: 2px 6px; border-radius: 5px; }
+            .support-btn { padding: 6px 10px; font-size: 9px; border-radius: 6px; }
+            .stats-row { display: flex; gap: 6px; margin-bottom: 8px; }
+            .chip { flex: 1; padding: 8px 4px; border-radius: 8px; }
+            .chip-label { font-size: 6px; margin-bottom: 3px; }
+            .chip-val { font-size: 10px; }
+            .chip.expiry .chip-val { font-size: 8px; }
+            .energy-block { margin-bottom: 8px; }
+            .e-top { margin-bottom: 4px; }
+            .e-lbl { font-size: 8px; }
+            .e-pct { font-size: 14px; }
+            .track { height: 3px; }
+            .btn-tech { height: 36px; font-size: 10px; border-radius: 8px; }
+            .btn-grid { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+            .downloads-label { display: none; }
+            .dl-grid { width: 100%; gap: 6px; }
+            .dl-hud { padding: 8px 6px; border-radius: 8px; }
+            .dl-icon { font-size: 16px; margin-bottom: 2px; }
+            .dl-txt { font-size: 7px; }
+            .mod { padding: 12px; }
+            .mbox { padding: 16px; border-radius: 14px; }
+            .mtitle { font-size: 14px; margin-bottom: 12px; }
+            .app-opt { padding: 10px; font-size: 12px; border-radius: 8px; }
+            .app-list { gap: 6px; }
+            .tst { padding: 8px 16px; font-size: 10px; bottom: 15px; border-radius: 8px; }
         }
     </style>
 </head>
@@ -704,8 +405,6 @@
         </div>
 
         <div class="grid">
-
-            <!-- PANEL: PROFILE + SUPPORT -->
             <div class="panel span-2">
                 <div class="hud-profile">
                     <div class="profile-left">
@@ -725,46 +424,28 @@
                 </div>
             </div>
 
-            <!-- PANEL: METRICS -->
             <div class="panel span-2">
                 <div class="stats-row">
-                    <div class="chip">
-                        <div class="chip-label">حجم کل</div>
-                        <div class="chip-val" id="totDisp">...</div>
-                    </div>
-                    <div class="chip">
-                        <div class="chip-label">مصرف شده</div>
-                        <div class="chip-val" id="useDisp">...</div>
-                    </div>
-                    <div class="chip expiry">
-                        <div class="chip-label">انقضا</div>
-                        <div class="chip-val" id="ed">...</div>
-                    </div>
+                    <div class="chip"><div class="chip-label">حجم کل</div><div class="chip-val" id="totDisp">...</div></div>
+                    <div class="chip"><div class="chip-label">مصرف شده</div><div class="chip-val" id="useDisp">...</div></div>
+                    <div class="chip expiry"><div class="chip-label">انقضا</div><div class="chip-val" id="ed">...</div></div>
                 </div>
-
                 <div class="energy-block">
-                    <div class="e-top">
-                        <div class="e-lbl">مصرف داده</div>
-                        <div class="e-pct" id="usagePercent">0%</div>
-                    </div>
+                    <div class="e-top"><div class="e-lbl">مصرف داده</div><div class="e-pct" id="usagePercent">0%</div></div>
                     <div class="track"><div class="fill cyan" id="usageFill"></div></div>
                 </div>
-
                 <div class="energy-block">
-                    <div class="e-top">
-                        <div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div>
-                        <div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div>
-                    </div>
+                    <div class="e-top"><div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div><div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div></div>
                     <div class="track"><div class="fill purple" id="timeFill"></div></div>
                 </div>
             </div>
 
-            <!-- PANEL: ALL CONTROLS -->
             <div class="panel span-2">
                 <div class="btn-grid">
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
+                <!-- تغییر هدف دکمه به مودال سیستم عامل -->
                 <button class="btn-tech btn-soft-cyan" style="margin-bottom:6px;" onclick="om('osModal')">
                     اتصال مستقیم
                 </button>
@@ -774,7 +455,6 @@
                 </div>
             </div>
 
-            <!-- PANEL: DOWNLOADS -->
             <div class="panel span-2">
                 <div class="downloads-section">
                     <span class="downloads-label">دانلود:</span>
@@ -785,30 +465,21 @@
                     </div>
                 </div>
             </div>
-
         </div>
-
         <div class="brand-footer" style="text-align:center; margin-top:30px; font-family: var(--font-main); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
     </div>
 
     <!-- MODALS -->
-    <!-- NEW OS SELECTION MODAL -->
+    <!-- NEW OS MODAL -->
     <div class="mod" id="osModal" onclick="if(event.target===this)cm('osModal')">
         <div class="mbox">
             <div id="osSelection">
                 <div class="mtitle">انتخاب سیستم عامل</div>
                 <div class="os-choice">
-                    <div class="os-btn" onclick="showApps('android')">
-                        <span style="font-size: 30px;">🤖</span>
-                        <span>Android</span>
-                    </div>
-                    <div class="os-btn" onclick="showApps('ios')">
-                        <span style="font-size: 30px;">🍎</span>
-                        <span>iOS / iPhone</span>
-                    </div>
+                    <div class="os-btn" onclick="showApps('android')"><span>🤖 Android</span></div>
+                    <div class="os-btn" onclick="showApps('ios')"><span>🍎 iOS</span></div>
                 </div>
             </div>
-
             <div id="androidApps" style="display: none;">
                 <div class="mtitle">برنامه‌های اندروید</div>
                 <div class="app-list">
@@ -819,7 +490,6 @@
                     <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
                 </div>
             </div>
-
             <div id="iosApps" style="display: none;">
                 <div class="mtitle">برنامه‌های آیفون</div>
                 <div class="app-list">
@@ -831,11 +501,11 @@
                     <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
                 </div>
             </div>
-            
             <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('osModal')">بستن</button>
         </div>
     </div>
 
+    <!-- باقی مودال‌های اصلی شما بدون تغییر -->
     <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
         <div class="mbox">
             <div class="mtitle">دانلود اندروید</div>
@@ -918,66 +588,28 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        // === FIXED TIME CALCULATION ===
-        var tPer = 0; 
-        var expDate = null; 
-        var createdDate = null;
-        var daysLeftText = 'نامحدود'; 
-        var daysNum = null;
-        var totalDays = 30;
-
+        // === محاسبات زمان ===
+        var tPer = 0; var expDate = null; var createdDate = null;
+        var daysLeftText = 'نامحدود'; var totalDays = 30;
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
-
-                // سعی کن تاریخ ایجاد رو بخون
-                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) {
-                    createdDate = new Date(createdStr);
-                }
-
+                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) createdDate = new Date(createdStr);
                 if (!isNaN(expDate.getTime())) {
-                    var now = new Date();
-                    var diffMs = expDate - now;
+                    var now = new Date(); var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
-                    daysNum = days;
-
-                    // محاسبه کل مدت اشتراک
-                    if (createdDate && !isNaN(createdDate.getTime())) {
-                        // اگر تاریخ ایجاد موجود بود، کل مدت را دقیق محاسبه کن
-                        totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
-                    } else {
-                        // تخمین بر اساس روزهای باقی‌مانده
-                        if (days > 300) totalDays = 365;
-                        else if (days > 150) totalDays = 180;
-                        else if (days > 75) totalDays = 90;
-                        else if (days > 45) totalDays = 60;
-                        else totalDays = 30;
-                    }
-
-                    if (days <= 0) { 
-                        tPer = 0; 
-                        daysLeftText = 'منقضی'; 
-                    } else { 
-                        tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); 
-                        daysLeftText = Math.ceil(days) + ' روز'; 
-                    }
+                    if (createdDate && !isNaN(createdDate.getTime())) totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
+                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
+                    else { tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); daysLeftText = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
-        } else { 
-            tPer = 100; 
-            daysLeftText = 'نامحدود'; 
-        }
+        } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
-        var up = document.getElementById('usagePercent');
-        var uf = document.getElementById('usageFill');
-        up.innerText = Math.round(per) + '%'; uf.style.width = per + '%';
-        if (per > 90) { uf.style.background = '#ff0055'; uf.style.color = '#ff0055'; }
-
-        var tp = document.getElementById('timePercent');
-        var tf = document.getElementById('timeFill');
+        document.getElementById('usagePercent').innerText = Math.round(per) + '%';
+        document.getElementById('usageFill').style.width = per + '%';
+        var tp = document.getElementById('timePercent'); var tf = document.getElementById('timeFill');
         if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; } 
         else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-        if (daysLeftText === 'منقضی') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
 
         function fb(b) {
             if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
@@ -987,23 +619,11 @@
         }
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
-
-        var ed = document.getElementById('ed');
-        if (ed) {
-            if (!expDate) ed.innerText = 'نامحدود';
-            else ed.innerText = daysLeftText;
-        }
+        document.getElementById('ed').innerText = daysLeftText;
 
         function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
-            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn)).catch(() => fbc(t, btn));
-            else fbc(t, btn);
-        }
-        function fbc(t, btn) {
-            var h = document.getElementById('cph');
-            h.style.display = 'block'; h.value = t; h.focus(); h.select();
-            try { document.execCommand('copy'); st(btn); } catch (e) {}
-            h.style.display = 'none';
+            navigator.clipboard.writeText(t).then(() => st(btn));
         }
         function st(btn) {
             var t = document.getElementById('toast');
@@ -1021,11 +641,7 @@
 
         function showApps(os) {
             document.getElementById('osSelection').style.display = 'none';
-            if (os === 'android') {
-                document.getElementById('androidApps').style.display = 'block';
-            } else {
-                document.getElementById('iosApps').style.display = 'block';
-            }
+            document.getElementById(os === 'android' ? 'androidApps' : 'iosApps').style.display = 'block';
         }
 
         function openApp(app) {
@@ -1039,8 +655,8 @@
             else if (app === 'shadowrocket') link = 'shadowrocket://add/' + t + '?remark=' + encodeURIComponent(n);
             else if (app === 'stash') link = 'stash://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'foxray') link = 'foxray://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch (e) { link = t; } }
-            window.location.href = link; setTimeout(() => cm('osModal'), 500);
+            else link = t;
+            window.location.href = link;
         }
 
         function sc() {
@@ -1051,23 +667,17 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            if (username && z.indexOf('#') === -1) z += '#' + username;
                             var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
                             var div = document.createElement('div');
                             div.className = 'app-opt';
-                            div.innerHTML = '<span style="max-width: 70%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
+                            div.innerHTML = '<span>' + n + '</span><span>کپی</span>';
                             div.onclick = function() { hc(z, this); };
                             l.appendChild(div);
                         }
                     });
                 }
-            }).catch(() => l.innerHTML = 'خطا');
+            });
         }
-
-        var ua = navigator.userAgent.toLowerCase();
-        if (ua.indexOf('android') > -1) document.getElementById('da').classList.add('active');
-        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('di').classList.add('active');
-        else if (ua.indexOf('win') > -1) document.getElementById('dw').classList.add('active');
         {% endraw %}
     </script>
 </body>
