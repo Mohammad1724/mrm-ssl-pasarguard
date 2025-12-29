@@ -162,5 +162,3 @@ start_migration() {
     cd "$TGT" && $DOCKER_CMD up -d --force-recreate
     mok "MIGRATION COMPLETED! SYSTEM IS UNSTOPPABLE."
 }
-
-start_migration
