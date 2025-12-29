@@ -8,14 +8,14 @@
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&family=Roboto+Mono:wght@500;700&display=swap');
 
         :root {
-            --bg-deep: #0d1117; /* رنگ سورمه‌ای تیره اصلاح شده */
+            --bg-deep: #1a1f26; /* روشن‌تر برای معلوم شدن کادرها */
             --bg-void: #0a0a0f;
             --neon-cyan: #00f2ff;
             --neon-purple: #7000ff;
             --neon-success: #0aff00;
             --glass-hud: rgba(20, 20, 30, 0.5);
-            --glass-panel: rgba(10, 10, 15, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-panel: rgba(30, 41, 59, 0.7); /* متمایز از پس‌زمینه */
+            --glass-border: rgba(255, 255, 255, 0.12); /* معلوم شدن خطوط کادر */
             --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4); 
             --lamp-purple: 0 25px 60px -15px rgba(112, 0, 255, 0.4);
             --lamp-success: 0 25px 60px -15px rgba(10, 255, 0, 0.4);
@@ -124,7 +124,7 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
 
-        /* خطوط گوشه پانل‌ها حذف شد طبق درخواست */
+        /* بخش Before و After که خطوط بنفش بودند حذف شد */
 
         .panel.span-2 { grid-column: span 2; }
 
@@ -154,7 +154,7 @@
         .hud-info h2 { 
             font-family: var(--font-tech); 
             font-size: 18px; font-weight: 700; 
-            color: var(--text-neon);
+            color: var(--neon-cyan) !important; /* رنگ فیروزه‌ای ثابت */
             letter-spacing: 1px;
             margin-bottom: 6px;
             word-break: break-all;
@@ -213,16 +213,14 @@
             border-color: rgba(0, 200, 255, 0.4); 
             box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.4); 
             background: rgba(0, 200, 255, 0.25);
-            color: #000000;
+            color: var(--neon-cyan) !important;
             font-weight: 900;
         }
         .btn-soft-cyan:hover { 
             background: rgba(0, 200, 255, 0.35); 
-            color: #000000; 
             border-color: rgba(0, 200, 255, 0.6); 
             box-shadow: 0 20px 50px -10px rgba(0, 180, 255, 0.5);
         }
-        .btn-soft-cyan:active { transform: translateY(2px); box-shadow: none; }
 
         .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
 
@@ -240,7 +238,7 @@
             text-align: center;
             position: relative;
         }
-        /* خط گوشه چیپ‌ها حذف شد */
+        /* خط گوشه Chip حذف شد */
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 16px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
         .chip.expiry .chip-val { font-size: 13px; }
@@ -343,7 +341,7 @@
 
         #cph { position: absolute; opacity: 0; }
 
-        /* OS MODAL CUSTOM STYLES */
+        /* OS MODAL STYLE */
         .os-choice { display: flex; justify-content: space-around; gap: 15px; }
         .os-btn { 
             cursor: pointer; padding: 20px; border-radius: 15px; 
@@ -352,226 +350,44 @@
         }
         .os-btn:hover { border-color: var(--neon-cyan); background: rgba(0, 242, 255, 0.1); }
         .os-btn span { display: block; margin-top: 10px; font-weight: 900; font-size: 14px; }
+
         @media (max-width: 768px) {
-            body {
-                padding-bottom: 10px;
-            }
-
-            .container {
-                padding: 12px 10px 10px;
-                min-height: 100vh;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .header {
-                margin-bottom: 10px;
-                padding-bottom: 8px;
-            }
-
-            .brand {
-                font-size: 14px;
-                letter-spacing: 1px;
-            }
-
-            .theme-btn {
-                width: 32px;
-                height: 32px;
-                font-size: 12px;
-            }
-
-            .grid {
-                grid-template-columns: 1fr;
-                gap: 8px;
-                flex: 1;
-            }
-
-            .panel {
-                padding: 10px;
-                border-radius: 14px;
-            }
-
-            .panel.span-2 {
-                grid-column: span 1;
-            }
-
-            .panel:first-of-type {
-                padding: 6px 10px;
-            }
-
-            .hud-profile {
-                flex-direction: row;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .profile-left {
-                gap: 8px;
-                flex: 1;
-            }
-
-            .avatar {
-                width: 34px;
-                height: 34px;
-                font-size: 15px;
-                border-radius: 8px;
-            }
-
-            .hud-info h2 {
-                font-size: 12px;
-                margin-bottom: 2px;
-                background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple));
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-            }
-
-            .hud-status {
-                font-size: 8px;
-                padding: 2px 6px;
-                border-radius: 5px;
-            }
-
-            .support-btn {
-                padding: 6px 10px;
-                font-size: 9px;
-                border-radius: 6px;
-            }
-
-            .stats-row {
-                display: flex;
-                gap: 6px;
-                margin-bottom: 8px;
-            }
-
-            .chip {
-                flex: 1;
-                padding: 8px 4px;
-                border-radius: 8px;
-            }
-
-            .chip-label {
-                font-size: 6px;
-                margin-bottom: 3px;
-            }
-
-            .chip-val {
-                font-size: 10px;
-            }
-
-            .chip.expiry .chip-val {
-                font-size: 8px;
-            }
-
-            .energy-block {
-                margin-bottom: 8px;
-            }
-
-            .e-top {
-                margin-bottom: 4px;
-            }
-
-            .e-lbl {
-                font-size: 8px;
-            }
-
-            .e-pct {
-                font-size: 14px;
-            }
-
-            .track {
-                height: 3px;
-            }
-
-            .btn-tech {
-                height: 36px;
-                font-size: 10px;
-                border-radius: 8px;
-            }
-
-            .btn-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 6px;
-                margin-bottom: 6px;
-            }
-
-            .downloads-section {
-                flex-direction: row;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .downloads-label {
-                display: none;
-            }
-
-            .dl-grid {
-                width: 100%;
-                gap: 6px;
-            }
-
-            .dl-hud {
-                padding: 8px 6px;
-                border-radius: 8px;
-            }
-
-            .dl-icon {
-                font-size: 16px;
-                margin-bottom: 2px;
-            }
-
-            .dl-txt {
-                font-size: 7px;
-            }
-
-            .mbox {
-                padding: 16px;
-                border-radius: 14px;
-            }
-
-            .mtitle {
-                font-size: 14px;
-                margin-bottom: 12px;
-            }
-
-            .app-opt {
-                padding: 10px;
-                font-size: 12px;
-                border-radius: 8px;
-            }
-
-            .app-list {
-                gap: 6px;
-            }
-
-            .tst {
-                padding: 8px 16px;
-                font-size: 10px;
-                bottom: 15px;
-                border-radius: 8px;
-            }
-        }
-
-        /* EXTRA SMALL - KEEPING ALL MEDIA QUERIES */
-        @media (max-width: 380px) {
-            .container { padding: 10px 8px 8px; }
-            .brand { font-size: 12px; }
-            .theme-btn { width: 28px; height: 28px; font-size: 10px; }
-            .grid { gap: 6px; }
-            .panel { padding: 8px; border-radius: 10px; }
-            .panel:first-of-type { padding: 5px 8px; }
-            .avatar { width: 30px; height: 30px; font-size: 13px; }
-            .hud-info h2 { font-size: 11px; }
-            .hud-status { font-size: 7px; padding: 1px 4px; }
-            .support-btn { padding: 5px 8px; font-size: 8px; }
-            .chip { padding: 6px 3px; }
-            .chip-label { font-size: 5px; }
-            .chip-val { font-size: 9px; }
-            .btn-tech { height: 32px; font-size: 9px; }
-            .btn-grid { gap: 5px; margin-bottom: 5px; }
-            .dl-hud { padding: 6px 4px; }
-            .dl-icon { font-size: 14px; }
-            .dl-txt { font-size: 6px; }
+            body { padding-bottom: 10px; }
+            .container { padding: 12px 10px 10px; min-height: 100vh; display: flex; flex-direction: column; }
+            .header { margin-bottom: 10px; padding-bottom: 8px; }
+            .brand { font-size: 14px; letter-spacing: 1px; }
+            .theme-btn { width: 32px; height: 32px; font-size: 12px; }
+            .grid { grid-template-columns: 1fr; gap: 8px; flex: 1; }
+            .panel { padding: 10px; border-radius: 14px; }
+            .panel.span-2 { grid-column: span 1; }
+            .panel:first-of-type { padding: 6px 10px; }
+            .hud-profile { flex-direction: row; align-items: center; gap: 8px; }
+            .profile-left { gap: 8px; flex: 1; }
+            .avatar { width: 34px; height: 34px; font-size: 15px; border-radius: 8px; }
+            .hud-info h2 { font-size: 12px !important; color: var(--neon-cyan) !important; -webkit-text-fill-color: var(--neon-cyan) !important; }
+            .hud-status { font-size: 8px; padding: 2px 6px; border-radius: 5px; }
+            .support-btn { padding: 6px 10px; font-size: 9px; border-radius: 6px; }
+            .stats-row { display: flex; gap: 6px; margin-bottom: 8px; }
+            .chip { flex: 1; padding: 8px 4px; border-radius: 8px; }
+            .chip-label { font-size: 6px; margin-bottom: 3px; }
+            .chip-val { font-size: 10px; }
+            .chip.expiry .chip-val { font-size: 8px; }
+            .energy-block { margin-bottom: 8px; }
+            .e-top { margin-bottom: 4px; }
+            .e-lbl { font-size: 8px; }
+            .e-pct { font-size: 14px; }
+            .track { height: 3px; }
+            .btn-tech { height: 36px; font-size: 10px; border-radius: 8px; }
+            .btn-grid { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+            .dl-grid { width: 100%; gap: 6px; }
+            .dl-hud { padding: 8px 6px; border-radius: 8px; }
+            .dl-icon { font-size: 16px; margin-bottom: 2px; }
+            .dl-txt { font-size: 7px; }
+            .mbox { padding: 16px; border-radius: 14px; }
+            .mtitle { font-size: 14px; margin-bottom: 12px; }
+            .app-opt { padding: 10px; font-size: 12px; border-radius: 8px; }
+            .app-list { gap: 6px; }
+            .tst { padding: 8px 16px; font-size: 10px; bottom: 15px; border-radius: 8px; }
         }
     </style>
 </head>
@@ -584,81 +400,49 @@
         </div>
 
         <div class="grid">
-
-            <!-- PANEL: PROFILE + SUPPORT -->
             <div class="panel span-2">
                 <div class="hud-profile">
                     <div class="profile-left">
-                        <div class="avatar">
-                            👤 {% if user.online_at %}<div style="position:absolute; bottom:2px; right:2px; width:8px; height:8px; background:var(--neon-success); border:1px solid var(--bg-deep); border-radius:50%; box-shadow: 0 0 6px var(--neon-success);"></div>{% endif %}
-                        </div>
+                        <div class="avatar">👤</div>
                         <div class="hud-info">
-                            <h2>⟪ {{ user.username }} ⟫</h2>
-                            {% if user.status.name == 'active' %}
-                                <span class="hud-status">آنلاین</span>
-                            {% else %}
-                                <span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple); box-shadow:0 0 6px var(--neon-purple);">آفلاین</span>
-                            {% endif %}
+                            <h2>👑 {{ user.username }} 👑</h2>
+                            {% if user.status.name == 'active' %}<span class="hud-status">آنلاین</span>{% else %}<span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple);">آفلاین</span>{% endif %}
                         </div>
                     </div>
                     <a href="https://t.me/__SUP__" class="support-btn">پشتیبانی</a>
                 </div>
             </div>
 
-            <!-- PANEL: METRICS -->
             <div class="panel span-2">
                 <div class="stats-row">
-                    <div class="chip">
-                        <div class="chip-label">حجم کل</div>
-                        <div class="chip-val" id="totDisp">...</div>
-                    </div>
-                    <div class="chip">
-                        <div class="chip-label">مصرف شده</div>
-                        <div class="chip-val" id="useDisp">...</div>
-                    </div>
-                    <div class="chip expiry">
-                        <div class="chip-label">انقضا</div>
-                        <div class="chip-val" id="ed">...</div>
-                    </div>
+                    <div class="chip"><div class="chip-label">حجم کل</div><div class="chip-val" id="totDisp">...</div></div>
+                    <div class="chip"><div class="chip-label">مصرف شده</div><div class="chip-val" id="useDisp">...</div></div>
+                    <div class="chip expiry"><div class="chip-label">انقضا</div><div class="chip-val" id="ed">...</div></div>
                 </div>
-
                 <div class="energy-block">
-                    <div class="e-top">
-                        <div class="e-lbl">مصرف داده</div>
-                        <div class="e-pct" id="usagePercent">0%</div>
-                    </div>
+                    <div class="e-top"><div class="e-lbl">مصرف داده</div><div class="e-pct" id="usagePercent">0%</div></div>
                     <div class="track"><div class="fill cyan" id="usageFill"></div></div>
                 </div>
-
                 <div class="energy-block">
-                    <div class="e-top">
-                        <div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div>
-                        <div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div>
-                    </div>
+                    <div class="e-top"><div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div><div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div></div>
                     <div class="track"><div class="fill purple" id="timeFill"></div></div>
                 </div>
             </div>
 
-            <!-- PANEL: ALL CONTROLS -->
             <div class="panel span-2">
                 <div class="btn-grid">
                     <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
                     <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
                 </div>
-                <!-- تغییر تابع دکمه به osModal -->
-                <button class="btn-tech btn-soft-cyan" style="margin-bottom:6px;" onclick="om('osModal')">
-                    اتصال مستقیم
-                </button>
-                <div class="btn-grid" style="margin-bottom:0;">
+                <button class="btn-tech btn-soft-cyan" style="margin-bottom:6px;" onclick="om('osModal')">اتصال مستقیم</button>
+                <div class="btn-grid">
                     <button class="btn-tech btn-purple" onclick="sc()">کانفیگ‌ها</button>
                     <a href="https://t.me/__BOT__" class="btn-tech btn-purple">تمدید</a>
                 </div>
             </div>
 
-            <!-- PANEL: DOWNLOADS -->
             <div class="panel span-2">
                 <div class="downloads-section">
-                    <span class="downloads-label">دانلود:</span>
                     <div class="dl-grid">
                         <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
                         <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
@@ -666,107 +450,43 @@
                     </div>
                 </div>
             </div>
-
         </div>
-
-        <div class="brand-footer" style="text-align:center; margin-top:30px; font-family: var(--font-main); font-size:10px; font-weight:700; color:var(--text-dim); letter-spacing: 2px;">__BRAND__</div>
     </div>
 
     <!-- MODALS -->
-    <!-- NEW OS SELECTION MODAL -->
     <div class="mod" id="osModal" onclick="if(event.target===this)cm('osModal')">
         <div class="mbox">
             <div id="osSelection">
                 <div class="mtitle">انتخاب سیستم عامل</div>
                 <div class="os-choice">
-                    <div class="os-btn" onclick="showApps('android')">
-                        <span style="font-size: 30px;">🤖</span>
-                        <span>Android</span>
-                    </div>
-                    <div class="os-btn" onclick="showApps('ios')">
-                        <span style="font-size: 30px;">🍎</span>
-                        <span>iOS / iPhone</span>
-                    </div>
+                    <div class="os-btn" onclick="showApps('android')"><span>🤖 Android</span></div>
+                    <div class="os-btn" onclick="showApps('ios')"><span>🍎 iOS</span></div>
                 </div>
             </div>
-
-            <div id="androidApps" style="display: none;">
-                <div class="mtitle">برنامه‌های اندروید</div>
-                <div class="app-list">
-                    <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
-                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                    <div class="app-opt" onclick="openApp('v2raytun')">v2rayTun</div>
-                    <div class="app-opt" onclick="openApp('happ')">Happ</div>
-                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-                </div>
-            </div>
-
-            <div id="iosApps" style="display: none;">
-                <div class="mtitle">برنامه‌های آیفون</div>
-                <div class="app-list">
-                    <div class="app-opt" onclick="openApp('streisand')">Streisand</div>
-                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-                    <div class="app-opt" onclick="openApp('shadowrocket')">Shadowrocket</div>
-                    <div class="app-opt" onclick="openApp('stash')">Stash</div>
-                    <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
-                </div>
-            </div>
-            
+            <div id="androidApps" style="display: none;"><div class="mtitle">برنامه‌های اندروید</div><div class="app-list">
+                <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
+                <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
+                <div class="app-opt" onclick="openApp('v2raytun')">v2rayTun</div>
+                <div class="app-opt" onclick="openApp('happ')">Happ</div>
+                <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
+            </div></div>
+            <div id="iosApps" style="display: none;"><div class="mtitle">برنامه‌های آیفون</div><div class="app-list">
+                <div class="app-opt" onclick="openApp('streisand')">Streisand</div>
+                <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
+                <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
+                <div class="app-opt" onclick="openApp('shadowrocket')">Shadowrocket</div>
+                <div class="app-opt" onclick="openApp('stash')">Stash</div>
+                <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
+            </div></div>
             <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('osModal')">بستن</button>
         </div>
     </div>
 
-    <!-- ALL ORIGINAL MODALS RESTORED -->
-    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
-        <div class="mbox">
-            <div class="mtitle">دانلود اندروید</div>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
-                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
-        <div class="mbox">
-            <div class="mtitle">دانلود آیفون</div>
-            <div class="app-list">
-                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
-                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
-        <div class="mbox">
-            <div class="mtitle">دانلود ویندوز</div>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
-                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button>
-        </div>
-    </div>
-
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
-        <div class="mbox">
-            <div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px; display:inline-block; margin-bottom:12px; box-shadow: 0 0 15px var(--lamp-cyan);">
-                <img id="qi" src="" width="160" style="border-radius: 6px; max-width: 100%;">
-            </div>
-            <div><button class="btn-tech btn-purple" onclick="cm('qrm')">بستن</button></div>
-        </div>
-    </div>
-
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox" style="max-width:340px; text-align: right; overflow-y: auto; max-height: 65vh;">
-            <div class="mtitle" style="text-align: center;">کانفیگ‌ها</div>
-            <div id="cl" style="display: flex; flex-direction: column; gap: 6px;">...</div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button>
-        </div>
-    </div>
+    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')"><div class="mbox"><div class="mtitle">دانلود اندروید</div><div class="app-list"><a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a><a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button></div></div>
+    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')"><div class="mbox"><div class="mtitle">دانلود آیفون</div><div class="app-list"><a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a><a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button></div></div>
+    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')"><div class="mbox"><div class="mtitle">دانلود ویندوز</div><div class="app-list"><a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a><a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button></div></div>
+    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px;"><img id="qi" src="" width="160"></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('qrm')">بستن</button></div></div>
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div class="mtitle">کانفیگ‌ها</div><div id="cl"></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button></div></div>
 
     <div class="tst" id="toast">کپی شد ✓</div>
     <input type="text" id="cph" readonly>
@@ -784,13 +504,11 @@
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         var finalSubUrl = subUrl;
         if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { finalSubUrl += '#' + username; }
-
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(finalSubUrl);
 
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
         if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '🌙'; } 
-        else { tb.textContent = '☀️'; }
         tb.onclick = function () {
             if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'dark'); }
             else { root.classList.add('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'light'); }
@@ -800,50 +518,27 @@
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        // === ALL ORIGINAL JS LOGIC RESTORED ===
-        var tPer = 0; 
-        var expDate = null; 
-        var createdDate = null;
-        var daysLeftText = 'نامحدود'; 
-        var daysNum = null;
-        var totalDays = 30;
-
+        var tPer = 0; var expDate = null; var createdDate = null;
+        var daysLeftText = 'نامحدود'; var totalDays = 30;
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
-                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) {
-                    createdDate = new Date(createdStr);
-                }
+                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) createdDate = new Date(createdStr);
                 if (!isNaN(expDate.getTime())) {
-                    var now = new Date();
-                    var diffMs = expDate - now;
+                    var now = new Date(); var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
-                    daysNum = days;
-                    if (createdDate && !isNaN(createdDate.getTime())) {
-                        totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
-                    } else {
-                        if (days > 300) totalDays = 365;
-                        else if (days > 150) totalDays = 180;
-                        else if (days > 75) totalDays = 90;
-                        else if (days > 45) totalDays = 60;
-                        else totalDays = 30;
-                    }
+                    if (createdDate && !isNaN(createdDate.getTime())) totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
                     if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
                     else { tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); daysLeftText = Math.ceil(days) + ' روز'; }
                 }
             } catch (e) {}
         } else { tPer = 100; daysLeftText = 'نامحدود'; }
 
-        var up = document.getElementById('usagePercent');
-        var uf = document.getElementById('usageFill');
-        up.innerText = Math.round(per) + '%'; uf.style.width = per + '%';
-        if (per > 90) { uf.style.background = '#ff0055'; uf.style.color = '#ff0055'; }
-
-        var tp = document.getElementById('timePercent');
-        var tf = document.getElementById('timeFill');
+        document.getElementById('usagePercent').innerText = Math.round(per) + '%';
+        document.getElementById('usageFill').style.width = per + '%';
+        var tp = document.getElementById('timePercent'); var tf = document.getElementById('timeFill');
         if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; } 
         else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
-        if (daysLeftText === 'منقضی') { tf.style.background = '#ff0055'; tf.style.color = '#ff0055'; }
 
         function fb(b) {
             if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
@@ -853,26 +548,16 @@
         }
         document.getElementById('totDisp').textContent = fb(tot);
         document.getElementById('useDisp').textContent = fb(use);
-        var ed = document.getElementById('ed');
-        if (ed) { ed.innerText = (!expDate) ? 'نامحدود' : daysLeftText; }
+        document.getElementById('ed').innerText = daysLeftText;
 
         function hc(t, btn) {
             if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
-            if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(() => st(btn));
-            else fbc(t, btn);
-        }
-        function fbc(t, btn) {
-            var h = document.getElementById('cph');
-            h.style.display = 'block'; h.value = t; h.focus(); h.select();
-            try { document.execCommand('copy'); st(btn); } catch (e) {}
-            h.style.display = 'none';
+            navigator.clipboard.writeText(t).then(() => st(btn));
         }
         function st(btn) {
             var t = document.getElementById('toast');
             t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
         }
-        
-        // MODIFIED MODAL LOGIC
         function om(i) { 
             if (i === 'osModal') {
                 document.getElementById('osSelection').style.display = 'block';
@@ -882,16 +567,10 @@
             document.getElementById(i).style.display = 'flex'; 
         }
         function cm(i) { document.getElementById(i).style.display = 'none'; }
-
         function showApps(os) {
             document.getElementById('osSelection').style.display = 'none';
-            if (os === 'android') {
-                document.getElementById('androidApps').style.display = 'block';
-            } else {
-                document.getElementById('iosApps').style.display = 'block';
-            }
+            document.getElementById(os === 'android' ? 'androidApps' : 'iosApps').style.display = 'block';
         }
-
         function openApp(app) {
             var t = finalSubUrl; var n = document.title; var link = '';
             if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
@@ -903,10 +582,9 @@
             else if (app === 'shadowrocket') link = 'shadowrocket://add/' + t + '?remark=' + encodeURIComponent(n);
             else if (app === 'stash') link = 'stash://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
             else if (app === 'foxray') link = 'foxray://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else { try { var b = btoa(t); link = 'sub://' + b + '#' + encodeURIComponent(n); } catch (e) { link = t; } }
-            window.location.href = link; setTimeout(() => cm('osModal'), 500);
+            else link = t;
+            window.location.href = link;
         }
-
         function sc() {
             om('cfm'); var l = document.getElementById('cl'); l.innerHTML = '...';
             fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
@@ -915,23 +593,15 @@
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            if (username && z.indexOf('#') === -1) z += '#' + username;
                             var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
-                            var div = document.createElement('div');
-                            div.className = 'app-opt';
-                            div.innerHTML = '<span style="max-width: 70%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">' + n + '</span><span>کپی</span>';
-                            div.onclick = function() { hc(z, this); };
-                            l.appendChild(div);
+                            var div = document.createElement('div'); div.className = 'app-opt';
+                            div.innerHTML = '<span>' + n + '</span><span>کپی</span>';
+                            div.onclick = function() { hc(z, this); }; l.appendChild(div);
                         }
                     });
                 }
-            }).catch(() => l.innerHTML = 'خطا');
+            });
         }
-
-        var ua = navigator.userAgent.toLowerCase();
-        if (ua.indexOf('android') > -1) document.getElementById('da').classList.add('active');
-        else if (ua.indexOf('iphone') > -1 || ua.indexOf('ipad') > -1) document.getElementById('di').classList.add('active');
-        else if (ua.indexOf('win') > -1) document.getElementById('dw').classList.add('active');
         {% endraw %}
     </script>
 </body>
