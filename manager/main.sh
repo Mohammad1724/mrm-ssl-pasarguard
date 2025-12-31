@@ -131,6 +131,8 @@ auto_fix() {
 panel_menu() {
     while true; do
         ui_header "PANEL CONTROL"
+        detect_active_panel > /dev/null
+        
         echo -e "Panel: ${CYAN}$PANEL_DIR${NC}"
         echo ""
         echo "1) Restart Panel"
@@ -139,8 +141,8 @@ panel_menu() {
         echo "4) View Logs (Live)"
         echo "5) Create Admin"
         echo "6) Reset Admin Password"
-        echo "7) Delete Admin"
-        echo "8) Edit .env"
+        echo "7) Edit .env"
+        echo "8) Edit docker-compose.yml"
         echo ""
         echo "0) Back"
         echo ""
@@ -153,13 +155,12 @@ panel_menu() {
             4) cd "$PANEL_DIR" && docker compose logs -f ;;
             5) admin_create; pause ;;
             6) admin_reset; pause ;;
-            7) admin_delete; pause ;;
-            8) edit_file "$PANEL_ENV" ;;
+            7) edit_file "$PANEL_ENV" ;;
+            8) edit_file "$PANEL_DIR/docker-compose.yml" ;;
             0) return ;;
         esac
     done
 }
-
 # ==========================================
 # TOOLS MENU
 # ==========================================
