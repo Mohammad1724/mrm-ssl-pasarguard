@@ -130,6 +130,7 @@ auto_fix() {
 # ==========================================
 panel_menu() {
     while true; do
+        clear
         ui_header "PANEL CONTROL"
         detect_active_panel > /dev/null
         
@@ -161,11 +162,13 @@ panel_menu() {
         esac
     done
 }
+
 # ==========================================
 # TOOLS MENU
 # ==========================================
 tools_menu() {
     while true; do
+        clear
         ui_header "TOOLS"
         
         echo "1) 🌐 Domain Separator (Panel & Sub)"
@@ -202,6 +205,7 @@ main_menu() {
     install_deps
     
     while true; do
+        clear
         ui_header "MRM MANAGER v3.0"
         ui_status_bar
         
@@ -220,12 +224,10 @@ main_menu() {
             3) panel_menu ;;
             4) tools_menu ;;
             0) 
+                clear
                 echo -e "${GREEN}Goodbye!${NC}"
                 exit 0 
                 ;;
         esac
     done
 }
-
-# Run
-main_menu
