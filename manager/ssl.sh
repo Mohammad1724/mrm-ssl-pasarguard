@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# SSL MANAGEMENT MODULE v2.1
+# SSL MANAGEMENT MODULE v2.2 (Simplified)
 # Compatible with MRM Manager
 # ==========================================
 
@@ -375,7 +375,7 @@ _process_config() {
 # SSL WIZARD (MAIN FUNCTION)
 # ==========================================
 ssl_wizard() {
-    ui_header "SSL GENERATION WIZARD v2.1"
+    ui_header "SSL GENERATION WIZARD"
     init_logging
     detect_active_panel > /dev/null
     
@@ -460,195 +460,6 @@ ssl_wizard() {
 }
 
 # ==========================================
-# WILDCARD SSL WITH DNS CHALLENGE
-# ==========================================
-wildcard_ssl_wizard() {
-    ui_header "WILDCARD SSL (*.domain.com)"
-    init_logging
-    
-    echo -e "${YELLOW}⚠️  Wildcard SSL requires DNS Challenge${NC}"
-    echo -e "${YELLOW}    You need access to your DNS provider${NC}"
-    echo ""
-
-    # Get base domain
-    read -p "Enter base domain (e.g. example.com): " BASE_DOMAIN
-    if [ -z "$BASE_DOMAIN" ]; then
-        ui_error "Domain cannot be empty."
-        pause
-        return
-    fi
-
-    # Get email
-    read -p "Enter Email: " MAIL
-    if [ -z "$MAIL" ]; then
-        ui_error "Email is required."
-        pause
-        return
-    fi
-
-    log_info "Wildcard SSL requested for *.$BASE_DOMAIN"
-
-    # Select DNS provider
-    echo ""
-    echo -e "${CYAN}Select your DNS Provider:${NC}"
-    echo "1) Cloudflare"
-    echo "2) Manual DNS (Add TXT record yourself)"
-    echo ""
-    read -p "Select: " DNS_PROVIDER
-
-    case $DNS_PROVIDER in
-        1) wildcard_cloudflare "$BASE_DOMAIN" "$MAIL" ;;
-        2) wildcard_manual "$BASE_DOMAIN" "$MAIL" ;;
-        *) ui_error "Invalid selection." ;;
-    esac
-
-    pause
-}
-
-# ------------------------------------------
-# Wildcard with Cloudflare API
-# ------------------------------------------
-wildcard_cloudflare() {
-    local BASE_DOMAIN=$1
-    local EMAIL=$2
-
-    echo -e "\n${CYAN}--- Cloudflare DNS Challenge ---${NC}"
-    
-    # Check if cloudflare plugin is installed
-    if ! pip3 list 2>/dev/null | grep -q certbot-dns-cloudflare; then
-        ui_spinner_start "Installing Cloudflare DNS plugin..."
-        pip3 install certbot-dns-cloudflare > /dev/null 2>&1
-        
-        if [ $? -ne 0 ]; then
-            apt install python3-certbot-dns-cloudflare -y > /dev/null 2>&1
-        fi
-        ui_spinner_stop
-        ui_success "Cloudflare plugin installed"
-    fi
-
-    # Get Cloudflare credentials
-    echo ""
-    echo -e "${YELLOW}You need Cloudflare API Token with DNS edit permissions${NC}"
-    echo -e "${CYAN}Get it from: https://dash.cloudflare.com/profile/api-tokens${NC}"
-    echo ""
-    
-    read -p "Enter Cloudflare API Token: " CF_API_TOKEN
-    if [ -z "$CF_API_TOKEN" ]; then
-        ui_error "API Token is required."
-        return 1
-    fi
-
-    # Create credentials file
-    local CF_CREDS_DIR="/root/.secrets/cloudflare"
-    local CF_CREDS_FILE="$CF_CREDS_DIR/cloudflare.ini"
-    
-    mkdir -p "$CF_CREDS_DIR"
-    chmod 700 "$CF_CREDS_DIR"
-    
-    cat > "$CF_CREDS_FILE" << EOF
-dns_cloudflare_api_token = $CF_API_TOKEN
-EOF
-    
-    chmod 600 "$CF_CREDS_FILE"
-    log_info "Cloudflare credentials saved to $CF_CREDS_FILE"
-
-    ui_spinner_start "Requesting Wildcard Certificate..."
-
-    # Request wildcard certificate
-    certbot certonly \
-        --dns-cloudflare \
-        --dns-cloudflare-credentials "$CF_CREDS_FILE" \
-        --dns-cloudflare-propagation-seconds 60 \
-        --email "$EMAIL" \
-        --agree-tos \
-        --non-interactive \
-        -d "$BASE_DOMAIN" \
-        -d "*.$BASE_DOMAIN" > "$CERTBOT_DEBUG_LOG" 2>&1
-
-    local RESULT=$?
-    ui_spinner_stop
-
-    if [ $RESULT -eq 0 ]; then
-        ui_success "Wildcard SSL Generated Successfully!"
-        echo -e "${GREEN}  Domains: $BASE_DOMAIN, *.$BASE_DOMAIN${NC}"
-        log_success "Wildcard SSL generated for *.$BASE_DOMAIN"
-        
-        _process_wildcard_cert "$BASE_DOMAIN"
-    else
-        ui_error "Wildcard SSL Generation Failed!"
-        echo -e "${YELLOW}Last 15 lines of log:${NC}"
-        tail -n 15 "$CERTBOT_DEBUG_LOG"
-        log_error "Wildcard SSL failed for *.$BASE_DOMAIN"
-    fi
-}
-
-# ------------------------------------------
-# Wildcard with Manual DNS
-# ------------------------------------------
-wildcard_manual() {
-    local BASE_DOMAIN=$1
-    local EMAIL=$2
-
-    echo -e "\n${CYAN}--- Manual DNS Challenge ---${NC}"
-    echo -e "${YELLOW}You will need to add TXT records to your DNS${NC}"
-    echo ""
-
-    certbot certonly \
-        --manual \
-        --preferred-challenges dns \
-        --email "$EMAIL" \
-        --agree-tos \
-        -d "$BASE_DOMAIN" \
-        -d "*.$BASE_DOMAIN"
-
-    local RESULT=$?
-
-    if [ $RESULT -eq 0 ]; then
-        ui_success "Wildcard SSL Generated Successfully!"
-        log_success "Wildcard SSL generated for *.$BASE_DOMAIN (manual)"
-        
-        _process_wildcard_cert "$BASE_DOMAIN"
-    else
-        ui_error "Wildcard SSL Generation Failed!"
-        log_error "Wildcard SSL failed for *.$BASE_DOMAIN (manual)"
-    fi
-}
-
-# ------------------------------------------
-# Process Wildcard Certificate
-# ------------------------------------------
-_process_wildcard_cert() {
-    local BASE_DOMAIN=$1
-    
-    echo ""
-    echo -e "${GREEN}Certificate Location:${NC}"
-    echo -e "  Cert: ${CYAN}/etc/letsencrypt/live/$BASE_DOMAIN/fullchain.pem${NC}"
-    echo -e "  Key:  ${CYAN}/etc/letsencrypt/live/$BASE_DOMAIN/privkey.pem${NC}"
-    echo ""
-    
-    echo "Where to use this wildcard certificate?"
-    echo "1) Main Panel (Dashboard)"
-    echo "2) Node Server"
-    echo "3) Config Domain (Inbounds)"
-    echo "4) All of the above"
-    echo "5) Just show paths (don't copy)"
-    read -p "Select: " TYPE_OPT
-
-    case $TYPE_OPT in
-        1) _process_panel "$BASE_DOMAIN" ;;
-        2) _process_node "$BASE_DOMAIN" ;;
-        3) _process_config "$BASE_DOMAIN" ;;
-        4) 
-            _process_panel "$BASE_DOMAIN"
-            _process_node "$BASE_DOMAIN"
-            _process_config "$BASE_DOMAIN"
-            ;;
-        5) echo -e "${YELLOW}Use these paths in your configuration.${NC}" ;;
-        *) ;;
-    esac
-}
-
-# ==========================================
 # MULTI-SERVER SSL SYNC
 # ==========================================
 multi_server_menu() {
@@ -662,6 +473,7 @@ multi_server_menu() {
         echo "5) 🔄 Sync SSL to Specific Server"
         echo "6) 🔑 Setup SSH Key (Passwordless)"
         echo "7) 🧪 Test Connection to All Servers"
+        echo ""
         echo "0) ↩️  Back"
         echo ""
         read -p "Select: " OPT
@@ -680,9 +492,9 @@ multi_server_menu() {
     done
 }
 
-# ------------------------------------------
-# List Servers
-# ------------------------------------------
+# ==========================================
+# SERVER MANAGEMENT
+# ==========================================
 list_servers() {
     ui_header "CONFIGURED SERVERS"
 
@@ -707,9 +519,6 @@ list_servers() {
     pause
 }
 
-# ------------------------------------------
-# Add Server
-# ------------------------------------------
 add_server() {
     ui_header "ADD NEW SERVER"
 
@@ -783,9 +592,6 @@ add_server() {
     pause
 }
 
-# ------------------------------------------
-# Remove Server
-# ------------------------------------------
 remove_server() {
     ui_header "REMOVE SERVER"
 
@@ -829,9 +635,6 @@ remove_server() {
     pause
 }
 
-# ------------------------------------------
-# Test Server Connection
-# ------------------------------------------
 test_server_connection() {
     local HOST=$1
     local PORT=$2
@@ -852,9 +655,6 @@ test_server_connection() {
     fi
 }
 
-# ------------------------------------------
-# Test All Connections
-# ------------------------------------------
 test_all_connections() {
     ui_header "TESTING ALL CONNECTIONS"
 
@@ -886,13 +686,9 @@ test_all_connections() {
     pause
 }
 
-# ------------------------------------------
-# Setup SSH Keys
-# ------------------------------------------
 setup_ssh_keys() {
     ui_header "SETUP SSH KEY"
 
-    # Check if key exists
     if [ ! -f ~/.ssh/id_rsa ]; then
         echo -e "${YELLOW}No SSH key found. Generating...${NC}"
         ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
@@ -956,9 +752,9 @@ setup_ssh_keys() {
     pause
 }
 
-# ------------------------------------------
-# Sync to Single Server
-# ------------------------------------------
+# ==========================================
+# SYNC FUNCTIONS
+# ==========================================
 sync_to_server() {
     local HOST=$1
     local PORT=$2
@@ -1012,9 +808,6 @@ sync_to_server() {
     return 0
 }
 
-# ------------------------------------------
-# Sync All Servers
-# ------------------------------------------
 sync_all_servers() {
     ui_header "SYNC SSL TO ALL SERVERS"
 
@@ -1086,9 +879,6 @@ sync_all_servers() {
     pause
 }
 
-# ------------------------------------------
-# Sync Specific Server
-# ------------------------------------------
 sync_specific_server() {
     ui_header "SYNC SSL TO SPECIFIC SERVER"
 
@@ -1173,9 +963,6 @@ sync_specific_server() {
     pause
 }
 
-# ------------------------------------------
-# Quick Sync Offer
-# ------------------------------------------
 offer_multi_server_sync() {
     if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
         return
@@ -1321,7 +1108,7 @@ view_ssl_logs() {
     echo "1) View SSL Manager Log (Last 50 lines)"
     echo "2) View Certbot Debug Log (Last 50 lines)"
     echo "3) Clear All Logs"
-    echo "4) Export Logs"
+    echo ""
     echo "0) Back"
     echo ""
     read -p "Select: " LOG_OPT
@@ -1334,6 +1121,7 @@ view_ssl_logs() {
             else
                 ui_error "Log file not found."
             fi
+            pause
             ;;
         2)
             if [ -f "$CERTBOT_DEBUG_LOG" ]; then
@@ -1342,71 +1130,16 @@ view_ssl_logs() {
             else
                 ui_error "Certbot log not found."
             fi
+            pause
             ;;
         3)
             > "$SSL_LOG_FILE" 2>/dev/null
             > "$CERTBOT_DEBUG_LOG" 2>/dev/null
             ui_success "Logs cleared."
-            ;;
-        4)
-            local EXPORT_FILE="/root/ssl-logs-$(date '+%Y%m%d-%H%M%S').txt"
-            {
-                echo "=== SSL Manager Log ==="
-                cat "$SSL_LOG_FILE" 2>/dev/null
-                echo ""
-                echo "=== Certbot Log ==="
-                cat "$CERTBOT_DEBUG_LOG" 2>/dev/null
-            } > "$EXPORT_FILE"
-            ui_success "Exported to: $EXPORT_FILE"
+            pause
             ;;
         0) return ;;
     esac
-    pause
-}
-
-# ==========================================
-# CERTIFICATE INFO
-# ==========================================
-show_cert_info() {
-    ui_header "CERTIFICATE INFORMATION"
-
-    if [ ! -d "/etc/letsencrypt/live" ]; then
-        ui_error "No Let's Encrypt certificates found."
-        pause
-        return
-    fi
-
-    for dir in /etc/letsencrypt/live/*/; do
-        if [ -d "$dir" ]; then
-            local domain=$(basename "$dir")
-            [ "$domain" == "README" ] && continue
-            
-            local cert_file="$dir/fullchain.pem"
-            if [ -f "$cert_file" ]; then
-                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo -e "${YELLOW}Domain:${NC} $domain"
-                
-                local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
-                local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null)
-                local now_epoch=$(date +%s)
-                local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
-                
-                echo -e "${YELLOW}Expires:${NC} $expiry"
-                
-                if [ $days_left -lt 0 ]; then
-                    echo -e "${RED}Status: EXPIRED! ❌${NC}"
-                elif [ $days_left -lt 7 ]; then
-                    echo -e "${RED}Days Left: $days_left ⚠️ EXPIRES SOON!${NC}"
-                elif [ $days_left -lt 30 ]; then
-                    echo -e "${YELLOW}Days Left: $days_left${NC}"
-                else
-                    echo -e "${GREEN}Days Left: $days_left ✔${NC}"
-                fi
-                echo ""
-            fi
-        fi
-    done
-    pause
 }
 
 # ==========================================
@@ -1443,106 +1176,35 @@ renew_certificates() {
 }
 
 # ==========================================
-# REVOKE CERTIFICATE
-# ==========================================
-revoke_certificate() {
-    ui_header "REVOKE SSL CERTIFICATE"
-    
-    if [ ! -d "/etc/letsencrypt/live" ]; then
-        ui_error "No certificates found."
-        pause
-        return
-    fi
-
-    echo -e "${YELLOW}Available certificates:${NC}"
-    local idx=1
-    declare -a certs
-    
-    for dir in /etc/letsencrypt/live/*/; do
-        local domain=$(basename "$dir")
-        [ "$domain" == "README" ] && continue
-        certs[$idx]="$domain"
-        echo "$idx) $domain"
-        ((idx++))
-    done
-
-    if [ $idx -eq 1 ]; then
-        echo "No certificates found."
-        pause
-        return
-    fi
-
-    echo ""
-    read -p "Select certificate to revoke (0 to cancel): " SEL
-    
-    if [ "$SEL" == "0" ]; then
-        return
-    fi
-
-    local DOMAIN=${certs[$SEL]}
-    if [ -z "$DOMAIN" ]; then
-        ui_error "Invalid selection."
-        pause
-        return
-    fi
-
-    echo -e "${RED}⚠️ WARNING: This will permanently revoke $DOMAIN${NC}"
-    read -p "Type 'yes' to confirm: " CONFIRM
-
-    if [ "$CONFIRM" == "yes" ]; then
-        certbot revoke --cert-path "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" --non-interactive 2>/dev/null
-        certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null
-        ui_success "Certificate revoked and deleted."
-        log_info "Certificate revoked for $DOMAIN"
-    else
-        echo "Cancelled."
-    fi
-    
-    pause
-}
-
-# ==========================================
 # MAIN SSL MENU
 # ==========================================
 ssl_menu() {
     init_logging
     
     while true; do
-        ui_header "SSL MANAGEMENT v2.1"
+        ui_header "SSL MANAGEMENT"
         detect_active_panel > /dev/null
         
         echo -e "${CYAN}Active Panel: $(basename $PANEL_DIR)${NC}"
         echo ""
-        echo "1)  🔐 Request New SSL Certificate"
-        echo "2)  🌟 Request Wildcard SSL (*.domain.com)"
-        echo "3)  📁 Show SSL File Paths"
-        echo "4)  📄 View Certificate Content"
-        echo "5)  ℹ️  Certificate Information & Expiry"
-        echo "6)  🔄 Renew All Certificates"
-        echo "7)  🗑️  Revoke Certificate"
-        echo "8)  🌐 Multi-Server Sync"
-        echo "9)  📋 View Logs"
-        echo "10) 📜 Domain List (Let's Encrypt)"
+        echo "1) 🔐 Request New SSL Certificate"
+        echo "2) 📁 Show SSL File Paths"
+        echo "3) 📄 View Certificate Content"
+        echo "4) 🔄 Renew All Certificates"
+        echo "5) 🌐 Multi-Server Sync"
+        echo "6) 📋 View Logs"
         echo ""
-        echo "0)  ↩️  Back"
+        echo "0) ↩️  Back"
         echo ""
         read -p "Select: " S_OPT
         
         case $S_OPT in
             1) ssl_wizard ;;
-            2) wildcard_ssl_wizard ;;
-            3) show_detailed_paths ;;
-            4) view_cert_content ;;
-            5) show_cert_info ;;
-            6) renew_certificates ;;
-            7) revoke_certificate ;;
-            8) multi_server_menu ;;
-            9) view_ssl_logs ;;
-            10) 
-                echo ""
-                ls -1 /etc/letsencrypt/live 2>/dev/null || echo "No certificates found."
-                pause 
-                ;;
+            2) show_detailed_paths ;;
+            3) view_cert_content ;;
+            4) renew_certificates ;;
+            5) multi_server_menu ;;
+            6) view_ssl_logs ;;
             0) return ;;
             *) ;;
         esac
