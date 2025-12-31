@@ -1,190 +1,729 @@
 #!/bin/bash
 
 # ====================================================
-# MRM BACKUP & RESTORE PRO - v6.6 (Node-Fix Edition)
-# 100% Verified: Backup + Telegram + Smart Migration Fix
+# MRM BACKUP & RESTORE PRO - v7.0
+# Compatible with MRM Manager
 # ====================================================
 
+# Load modules
+source /opt/mrm-manager/utils.sh
+source /opt/mrm-manager/ui.sh
+
+# Configuration
 BACKUP_DIR="/root/mrm-backups"
 TG_CONFIG="/root/.mrm_telegram"
 TEMP_BASE="/tmp/mrm_workspace"
 SCRIPT_PATH="$(readlink -f "$0")"
+BACKUP_LOG="/var/log/mrm-backup.log"
 
-# Colors
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
+# ==========================================
+# LOGGING
+# ==========================================
+init_backup_logging() {
+    mkdir -p "$(dirname "$BACKUP_LOG")"
+    touch "$BACKUP_LOG"
+}
 
-# --- [1] Logic: Environment ---
-detect_env() {
-    if [ -d "/opt/pasarguard" ]; then
-        PANEL_DIR="/opt/pasarguard"; DATA_DIR="/var/lib/pasarguard"
-    elif [ -d "/opt/rebecca" ]; then
-        PANEL_DIR="/opt/rebecca"; DATA_DIR="/var/lib/rebecca"
-    else
-        PANEL_DIR="/opt/marzban"; DATA_DIR="/var/lib/marzban"
-    fi
-    ENV_FILE="$PANEL_DIR/.env"
+log_backup() {
+    local LEVEL=$1
+    local MESSAGE=$2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [$LEVEL] $MESSAGE" >> "$BACKUP_LOG"
+}
+
+# ==========================================
+# ENVIRONMENT DETECTION (Uses utils.sh)
+# ==========================================
+setup_env() {
+    detect_active_panel > /dev/null
+    
+    # Set Docker command
     DOCKER_CMD="docker compose"
     ! docker compose version >/dev/null 2>&1 && DOCKER_CMD="docker-compose"
+    
+    log_backup "INFO" "Environment: PANEL_DIR=$PANEL_DIR, DATA_DIR=$DATA_DIR"
 }
 
 get_env_val() {
-    [ -f "$ENV_FILE" ] && grep "^$1=" "$ENV_FILE" | cut -d'=' -f2- | sed 's/[[:space:]]*#.*$//' | sed 's/^"//;s/"$//' | xargs
+    [ -f "$PANEL_ENV" ] && grep "^$1=" "$PANEL_ENV" | cut -d'=' -f2- | sed 's/[[:space:]]*#.*$//' | sed 's/^"//;s/"$//' | xargs
 }
 
-# --- [2] Logic: Telegram ---
+# ==========================================
+# TELEGRAM INTEGRATION
+# ==========================================
 send_to_telegram() {
     local FILE="$1"
-    if [ -f "$TG_CONFIG" ]; then
-        local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-        local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-        [ -z "$TK" ] || [ -z "$CH" ] && return 1
-        local CAPTION="✅ MRM Backup - $(hostname) - $(date '+%Y-%m-%d %H:%M')"
-        curl -s -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument" > /dev/null
+    local MESSAGE="${2:-}"
+    
+    if [ ! -f "$TG_CONFIG" ]; then
+        log_backup "WARNING" "Telegram not configured"
+        return 1
+    fi
+    
+    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    
+    if [ -z "$TK" ] || [ -z "$CH" ]; then
+        log_backup "ERROR" "Invalid Telegram config"
+        return 1
+    fi
+    
+    if [ -n "$FILE" ] && [ -f "$FILE" ]; then
+        # Send file
+        local CAPTION="✅ MRM Backup\n🖥 $(hostname)\n📅 $(date '+%Y-%m-%d %H:%M')\n📦 $(basename "$FILE")"
+        local RESULT=$(curl -s -F chat_id="$CH" -F caption="$CAPTION" -F parse_mode="HTML" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        
+        if echo "$RESULT" | grep -q '"ok":true'; then
+            log_backup "SUCCESS" "File sent to Telegram: $(basename "$FILE")"
+            return 0
+        else
+            log_backup "ERROR" "Failed to send file to Telegram"
+            return 1
+        fi
+    elif [ -n "$MESSAGE" ]; then
+        # Send message only
+        curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+            -d chat_id="$CH" \
+            -d text="$MESSAGE" \
+            -d parse_mode="HTML" > /dev/null
         return $?
     fi
+    
     return 1
 }
 
-# --- [3] Logic: Smart Fix Engine (Crucial for Migration) ---
+test_telegram() {
+    if [ ! -f "$TG_CONFIG" ]; then
+        ui_error "Telegram not configured!"
+        return 1
+    fi
+    
+    ui_spinner_start "Testing Telegram connection..."
+    
+    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    
+    local RESULT=$(curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+        -d chat_id="$CH" \
+        -d text="🧪 MRM Backup Test - $(date '+%Y-%m-%d %H:%M')" 2>&1)
+    
+    ui_spinner_stop
+    
+    if echo "$RESULT" | grep -q '"ok":true'; then
+        ui_success "Telegram connection successful!"
+        return 0
+    else
+        ui_error "Telegram connection failed!"
+        echo -e "${YELLOW}Error: $RESULT${NC}"
+        return 1
+    fi
+}
+
+setup_telegram() {
+    ui_header "SETUP TELEGRAM BOT"
+    
+    echo -e "${CYAN}To get Bot Token:${NC}"
+    echo "  1. Message @BotFather on Telegram"
+    echo "  2. Send /newbot and follow instructions"
+    echo "  3. Copy the token"
+    echo ""
+    echo -e "${CYAN}To get Chat ID:${NC}"
+    echo "  1. Message @userinfobot on Telegram"
+    echo "  2. It will show your Chat ID"
+    echo ""
+    
+    read -p "Enter Bot Token: " TK
+    if [ -z "$TK" ]; then
+        ui_error "Token is required!"
+        pause
+        return
+    fi
+    
+    read -p "Enter Chat ID: " CI
+    if [ -z "$CI" ]; then
+        ui_error "Chat ID is required!"
+        pause
+        return
+    fi
+    
+    # Save config
+    cat > "$TG_CONFIG" << EOF
+TG_TOKEN="$TK"
+TG_CHAT="$CI"
+EOF
+    chmod 600 "$TG_CONFIG"
+    
+    ui_success "Telegram configured!"
+    log_backup "INFO" "Telegram bot configured"
+    
+    # Test connection
+    echo ""
+    read -p "Test connection now? (Y/n): " TEST
+    if [[ ! "$TEST" =~ ^[Nn]$ ]]; then
+        test_telegram
+    fi
+    
+    pause
+}
+
+# ==========================================
+# SMART FIX ENGINE
+# ==========================================
 apply_smart_fix() {
     echo -e "${CYAN}Applying Intelligent System Repairs...${NC}"
-    
+    log_backup "INFO" "Starting smart fix"
+
     # A. Secure Port Detection & Firewall
+    ui_spinner_start "Configuring Firewall..."
     local SSH_PORT=$(ss -tlnp | grep sshd | grep -Po '(?<=:)\d+' | head -1)
     [ -z "$SSH_PORT" ] && SSH_PORT=22
+    
     ufw allow "$SSH_PORT"/tcp >/dev/null 2>&1
     ufw allow 80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
-    
-    # B. Fix Panel .env (Handshake & Gluing)
-    if [ -f "$ENV_FILE" ]; then
-        sed -i 's|\(postgresql+asyncpg://[^"?]*\)\(["\s]*\)$|\1?ssl=disable\2|' "$ENV_FILE"
-        sed -i 's/\([^[:space:]]\)\(UVICORN_\)/\1\n\2/g' "$ENV_FILE"
-        sed -i 's/\([^[:space:]]\)\(SSL_\)/\1\n\2/g' "$ENV_FILE"
+    ui_spinner_stop
+    ui_success "Firewall configured (SSH: $SSH_PORT)"
+
+    # B. Fix Panel .env
+    if [ -f "$PANEL_ENV" ]; then
+        ui_spinner_start "Fixing Panel .env..."
+        sed -i 's|\(postgresql+asyncpg://[^"?]*\)\(["\s]*\)$|\1?ssl=disable\2|' "$PANEL_ENV"
+        sed -i 's/\([^[:space:]]\)\(UVICORN_\)/\1\n\2/g' "$PANEL_ENV"
+        sed -i 's/\([^[:space:]]\)\(SSL_\)/\1\n\2/g' "$PANEL_ENV"
+        ui_spinner_stop
+        ui_success "Panel .env repaired"
     fi
 
-    # C. ⭐ THE NODE SURGERY (Fixes your reported .env issues) ⭐
-    local NODE_ENV="/opt/pg-node/.env"
+    # C. Fix Node .env
     if [ -f "$NODE_ENV" ]; then
-        echo -e "${YELLOW}Fixing Node .env (Removing spaces & repairing SSL paths)...${NC}"
-        # Remove spaces around '=' (e.g. SERVICE_PORT= 5393 -> SERVICE_PORT=5393)
+        ui_spinner_start "Fixing Node .env..."
+        # Remove spaces around '='
         sed -i 's/=[[:space:]]*/=/g' "$NODE_ENV"
         sed -i 's/[[:space:]]*=/=/g' "$NODE_ENV"
         # Ensure SSL paths are clean
-        sed -i 's|SSL_CERT_FILE=.*|SSL_CERT_FILE=/var/lib/pg-node/certs/ssl_cert.pem|g' "$NODE_ENV"
-        sed -i 's|SSL_KEY_FILE=.*|SSL_KEY_FILE=/var/lib/pg-node/certs/ssl_key.pem|g' "$NODE_ENV"
-        # Generate Node SSL key if missing (German node fix)
-        mkdir -p /var/lib/pg-node/certs
-        [ ! -f /var/lib/pg-node/certs/ssl_key.pem ] && openssl genrsa -out /var/lib/pg-node/certs/ssl_key.pem 2048 >/dev/null 2>&1
+        sed -i "s|SSL_CERT_FILE=.*|SSL_CERT_FILE=$NODE_DEF_CERTS/ssl_cert.pem|g" "$NODE_ENV"
+        sed -i "s|SSL_KEY_FILE=.*|SSL_KEY_FILE=$NODE_DEF_CERTS/ssl_key.pem|g" "$NODE_ENV"
+        ui_spinner_stop
+        ui_success "Node .env repaired"
+    fi
+    
+    # D. Generate Node SSL key if missing
+    if [ -d "$NODE_DIR" ]; then
+        mkdir -p "$NODE_DEF_CERTS"
+        if [ ! -f "$NODE_DEF_CERTS/ssl_key.pem" ]; then
+            ui_spinner_start "Generating Node SSL key..."
+            openssl genrsa -out "$NODE_DEF_CERTS/ssl_key.pem" 2048 >/dev/null 2>&1
+            ui_spinner_stop
+            ui_success "Node SSL key generated"
+        fi
     fi
 
-    # D. Nginx Proxy Repair
+    # E. Nginx Proxy Repair
     local NG_CONF="/etc/nginx/conf.d/panel_separate.conf"
     if [ -f "$NG_CONF" ]; then
+        ui_spinner_start "Fixing Nginx config..."
         sed -i 's|proxy_pass http://127.0.0.1:7431;|proxy_pass https://127.0.0.1:7431;\n        proxy_ssl_verify off;|g' "$NG_CONF"
         systemctl restart nginx >/dev/null 2>&1
+        ui_spinner_stop
+        ui_success "Nginx configuration repaired"
     fi
+
+    log_backup "SUCCESS" "Smart fix completed"
 }
 
-# --- [4] Logic: Backup & Restore ---
+# ==========================================
+# BACKUP FUNCTIONS
+# ==========================================
 do_backup() {
-    local MODE="$1"; detect_env
-    [ "$MODE" != "auto" ] && clear && echo -e "${BLUE}Starting Full System Backup...${NC}"
-    local TS=$(date +%Y%m%d_%H%M%S); local B_NAME="MRM_Full_${TS}"
-    local B_PATH="$TEMP_BASE/$B_NAME"; mkdir -p "$B_PATH/database"
+    local MODE="${1:-manual}"
+    setup_env
+    init_backup_logging
+    
+    [ "$MODE" != "auto" ] && ui_header "FULL SYSTEM BACKUP"
+    
+    log_backup "INFO" "Starting backup (mode: $MODE)"
+    
+    local TS=$(date +%Y%m%d_%H%M%S)
+    local B_NAME="MRM_Full_${TS}"
+    local B_PATH="$TEMP_BASE/$B_NAME"
+    
+    mkdir -p "$B_PATH/database" "$B_PATH/panel" "$B_PATH/data"
+    mkdir -p "$BACKUP_DIR"
 
-    # Export Postgres or SQLite
-    if grep -q "postgresql" "$ENV_FILE" 2>/dev/null; then
+    # 1. Export Database
+    [ "$MODE" != "auto" ] && ui_spinner_start "Exporting database..."
+    
+    if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null; then
         local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
-        [ -n "$DB_CONT" ] && docker exec "$DB_CONT" pg_dump -U pasarguard -d pasarguard -f /tmp/db.sql 2>/dev/null
-        [ -n "$DB_CONT" ] && docker cp "$DB_CONT:/tmp/db.sql" "$B_PATH/database/db.sql" 2>/dev/null
+        if [ -n "$DB_CONT" ]; then
+            docker exec "$DB_CONT" pg_dump -U pasarguard -d pasarguard -f /tmp/db.sql 2>/dev/null
+            docker cp "$DB_CONT:/tmp/db.sql" "$B_PATH/database/db.sql" 2>/dev/null
+            log_backup "INFO" "PostgreSQL exported"
+        fi
     else
         [ -f "$DATA_DIR/db.sqlite3" ] && cp "$DATA_DIR/db.sqlite3" "$B_PATH/database/"
+        log_backup "INFO" "SQLite exported"
     fi
+    
+    [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Database exported"
 
-    # Collect Assets
+    # 2. Collect Panel Files
+    [ "$MODE" != "auto" ] && ui_spinner_start "Backing up panel files..."
     cp -a "$PANEL_DIR/." "$B_PATH/panel/" 2>/dev/null
     cp -a "$DATA_DIR/." "$B_PATH/data/" 2>/dev/null
-    [ -d "/opt/pg-node" ] && cp -a /opt/pg-node/. "$B_PATH/node/" 2>/dev/null
-    [ -d "/var/lib/pg-node" ] && cp -a /var/lib/pg-node/. "$B_PATH/node-data/" 2>/dev/null
-    [ -d "/etc/letsencrypt" ] && cp -a /etc/letsencrypt/. "$B_PATH/ssl/" 2>/dev/null
-    [ -d "/etc/nginx" ] && cp -a /etc/nginx/. "$B_PATH/nginx/" 2>/dev/null
+    [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Panel files backed up"
 
-    mkdir -p "$BACKUP_DIR"
-    tar -czf "$BACKUP_DIR/$B_NAME.tar.gz" -C "$TEMP_BASE" "$B_NAME"
-    rm -rf "$TEMP_BASE"
-    send_to_telegram "$BACKUP_DIR/$B_NAME.tar.gz"
-    ls -t "$BACKUP_DIR"/*.tar.gz | tail -n +6 | xargs rm -f 2>/dev/null
-    [ "$MODE" != "auto" ] && echo -e "${GREEN}✔ Backup sent to Telegram!${NC}" && sleep 2
-}
-
-do_restore() {
-    detect_env; clear
-    local FILES=($(ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
-    [ ${#FILES[@]} -eq 0 ] && { echo "No backups found!"; sleep 2; return; }
-    for i in "${!FILES[@]}"; do echo "$((i+1))) $(basename "${FILES[$i]}")"; done
-    read -p "Select Backup: " CH; local SELECTED="${FILES[$((CH-1))]}"
-    [ -z "$SELECTED" ] && return
-    read -p "Type 'CONFIRM' to restore: " CONF; [ "$CONF" != "CONFIRM" ] && return
-
-    local WORK_DIR="/tmp/mrm_res_$(date +%s)"; mkdir -p "$WORK_DIR"
-    tar -xzf "$SELECTED" -C "$WORK_DIR"; local ROOT=$(ls -d "$WORK_DIR"/* | head -1)
-
-    # Stop and Purge
-    $DOCKER_CMD -f "$PANEL_DIR/docker-compose.yml" down >/dev/null 2>&1
-    $DOCKER_CMD -f /opt/pg-node/docker-compose.yml down >/dev/null 2>&1
-    rm -rf "$PANEL_DIR" "$DATA_DIR" /opt/pg-node /var/lib/pg-node
-    
-    # Restore Files
-    mkdir -p "$PANEL_DIR" "$DATA_DIR" /opt/pg-node /var/lib/pg-node
-    cp -a "$ROOT/panel/." "$PANEL_DIR/"
-    cp -a "$ROOT/data/." "$DATA_DIR/"
-    cp -a "$ROOT/node/." /opt/pg-node/ 2>/dev/null
-    cp -a "$ROOT/node-data/." /var/lib/pg-node/ 2>/dev/null
-    cp -a "$ROOT/ssl/." /etc/letsencrypt/ 2>/dev/null
-    cp -a "$ROOT/nginx/." /etc/nginx/ 2>/dev/null
-    
-    apply_smart_fix
-    
-    # Launch
-    cd /opt/pg-node && $DOCKER_CMD up -d >/dev/null 2>&1
-    cd "$PANEL_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
-    
-    # DB Sync
-    if grep -q "postgresql" "$ENV_FILE" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
-        echo "Importing Database..."; sleep 12
-        local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
-        docker exec "$DB_CONT" psql -U pasarguard -d pasarguard -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
-        docker exec -i "$DB_CONT" psql -U pasarguard -d pasarguard < "$ROOT/database/db.sql" >/dev/null 2>&1
+    # 3. Collect Node Files
+    if [ -d "$NODE_DIR" ]; then
+        [ "$MODE" != "auto" ] && ui_spinner_start "Backing up node files..."
+        mkdir -p "$B_PATH/node" "$B_PATH/node-data"
+        cp -a "$NODE_DIR/." "$B_PATH/node/" 2>/dev/null
+        cp -a "$NODE_DEF_CERTS/../." "$B_PATH/node-data/" 2>/dev/null
+        [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Node files backed up"
     fi
-    rm -rf "$WORK_DIR"
-    echo -e "${GREEN}✔ System Restore Complete!${NC}"; sleep 2
+
+    # 4. Collect SSL Certificates
+    if [ -d "/etc/letsencrypt" ]; then
+        [ "$MODE" != "auto" ] && ui_spinner_start "Backing up SSL certificates..."
+        mkdir -p "$B_PATH/ssl"
+        cp -a /etc/letsencrypt/. "$B_PATH/ssl/" 2>/dev/null
+        [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "SSL certificates backed up"
+    fi
+
+    # 5. Collect Nginx Config
+    if [ -d "/etc/nginx" ]; then
+        [ "$MODE" != "auto" ] && ui_spinner_start "Backing up Nginx config..."
+        mkdir -p "$B_PATH/nginx"
+        cp -a /etc/nginx/. "$B_PATH/nginx/" 2>/dev/null
+        [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Nginx config backed up"
+    fi
+
+    # 6. Save metadata
+    cat > "$B_PATH/backup_info.txt" << EOF
+Backup Date: $(date '+%Y-%m-%d %H:%M:%S')
+Hostname: $(hostname)
+Panel: $(basename "$PANEL_DIR")
+Panel Dir: $PANEL_DIR
+Data Dir: $DATA_DIR
+Node Dir: $NODE_DIR
+MRM Version: 2.2
+EOF
+
+    # 7. Create archive
+    [ "$MODE" != "auto" ] && ui_spinner_start "Creating backup archive..."
+    tar -czf "$BACKUP_DIR/$B_NAME.tar.gz" -C "$TEMP_BASE" "$B_NAME"
+    local BACKUP_SIZE=$(du -h "$BACKUP_DIR/$B_NAME.tar.gz" | cut -f1)
+    [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Archive created ($BACKUP_SIZE)"
+
+    # 8. Cleanup temp
+    rm -rf "$TEMP_BASE"
+
+    # 9. Send to Telegram
+    if [ -f "$TG_CONFIG" ]; then
+        [ "$MODE" != "auto" ] && ui_spinner_start "Sending to Telegram..."
+        if send_to_telegram "$BACKUP_DIR/$B_NAME.tar.gz"; then
+            [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Backup sent to Telegram!"
+        else
+            [ "$MODE" != "auto" ] && ui_spinner_stop && ui_warning "Failed to send to Telegram"
+        fi
+    fi
+
+    # 10. Cleanup old backups (keep last 5)
+    ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
+    
+    log_backup "SUCCESS" "Backup completed: $B_NAME.tar.gz ($BACKUP_SIZE)"
+
+    if [ "$MODE" != "auto" ]; then
+        echo ""
+        echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${GREEN}║              ✔ BACKUP COMPLETED!                         ║${NC}"
+        echo -e "${GREEN}╠══════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}║${NC} File: ${CYAN}$BACKUP_DIR/$B_NAME.tar.gz${NC}"
+        echo -e "${GREEN}║${NC} Size: ${CYAN}$BACKUP_SIZE${NC}"
+        echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
+        pause
+    fi
 }
 
-# --- [5] Main ---
-if [ "$1" == "auto" ]; then
-    do_backup "auto"
-else
+# ==========================================
+# RESTORE FUNCTIONS
+# ==========================================
+do_restore() {
+    setup_env
+    ui_header "FULL SYSTEM RESTORE"
+    
+    # List available backups
+    local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
+    
+    if [ ${#FILES[@]} -eq 0 ]; then
+        ui_error "No backups found in $BACKUP_DIR"
+        echo ""
+        echo "Options:"
+        echo "1) Upload backup file manually to $BACKUP_DIR"
+        echo "2) Download from Telegram and place in $BACKUP_DIR"
+        pause
+        return
+    fi
+    
+    echo -e "${YELLOW}Available Backups:${NC}"
+    echo ""
+    for i in "${!FILES[@]}"; do
+        local SIZE=$(du -h "${FILES[$i]}" | cut -f1)
+        local DATE=$(stat -c %y "${FILES[$i]}" | cut -d' ' -f1)
+        echo "$((i+1))) $(basename "${FILES[$i]}") [$SIZE] - $DATE"
+    done
+    
+    echo ""
+    read -p "Select backup to restore (0 to cancel): " CH
+    
+    [ "$CH" == "0" ] && return
+    
+    local SELECTED="${FILES[$((CH-1))]}"
+    if [ -z "$SELECTED" ] || [ ! -f "$SELECTED" ]; then
+        ui_error "Invalid selection!"
+        pause
+        return
+    fi
+    
+    echo ""
+    echo -e "${RED}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${RED}║              ⚠️  WARNING  ⚠️                              ║${NC}"
+    echo -e "${RED}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${RED}║  This will OVERWRITE all current data!                   ║${NC}"
+    echo -e "${RED}║  Make sure you have a backup of current state.           ║${NC}"
+    echo -e "${RED}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    read -p "Type 'CONFIRM' to proceed: " CONF
+    
+    if [ "$CONF" != "CONFIRM" ]; then
+        echo "Cancelled."
+        pause
+        return
+    fi
+    
+    log_backup "INFO" "Starting restore from: $(basename "$SELECTED")"
+
+    # Extract backup
+    local WORK_DIR="/tmp/mrm_restore_$(date +%s)"
+    mkdir -p "$WORK_DIR"
+    
+    ui_spinner_start "Extracting backup..."
+    tar -xzf "$SELECTED" -C "$WORK_DIR"
+    ui_spinner_stop
+    
+    local ROOT=$(ls -d "$WORK_DIR"/* | head -1)
+    
+    if [ ! -d "$ROOT" ]; then
+        ui_error "Invalid backup archive!"
+        rm -rf "$WORK_DIR"
+        pause
+        return
+    fi
+
+    # Show backup info if available
+    if [ -f "$ROOT/backup_info.txt" ]; then
+        echo ""
+        echo -e "${CYAN}Backup Info:${NC}"
+        cat "$ROOT/backup_info.txt"
+        echo ""
+    fi
+
+    # Stop services
+    ui_spinner_start "Stopping services..."
+    $DOCKER_CMD -f "$PANEL_DIR/docker-compose.yml" down >/dev/null 2>&1
+    $DOCKER_CMD -f "$NODE_DIR/docker-compose.yml" down >/dev/null 2>&1
+    ui_spinner_stop
+    ui_success "Services stopped"
+
+    # Backup current state (just in case)
+    ui_spinner_start "Creating safety backup..."
+    local SAFETY_BACKUP="$BACKUP_DIR/pre_restore_$(date +%Y%m%d_%H%M%S).tar.gz"
+    tar -czf "$SAFETY_BACKUP" "$PANEL_DIR" "$DATA_DIR" 2>/dev/null
+    ui_spinner_stop
+    ui_success "Safety backup created"
+
+    # Remove old files
+    ui_spinner_start "Cleaning old files..."
+    rm -rf "$PANEL_DIR" "$DATA_DIR" "$NODE_DIR" "$(dirname "$NODE_DEF_CERTS")"
+    ui_spinner_stop
+
+    # Restore files
+    ui_spinner_start "Restoring panel files..."
+    mkdir -p "$PANEL_DIR" "$DATA_DIR"
+    cp -a "$ROOT/panel/." "$PANEL_DIR/" 2>/dev/null
+    cp -a "$ROOT/data/." "$DATA_DIR/" 2>/dev/null
+    ui_spinner_stop
+    ui_success "Panel files restored"
+
+    if [ -d "$ROOT/node" ]; then
+        ui_spinner_start "Restoring node files..."
+        mkdir -p "$NODE_DIR" "$(dirname "$NODE_DEF_CERTS")"
+        cp -a "$ROOT/node/." "$NODE_DIR/" 2>/dev/null
+        cp -a "$ROOT/node-data/." "$(dirname "$NODE_DEF_CERTS")/" 2>/dev/null
+        ui_spinner_stop
+        ui_success "Node files restored"
+    fi
+
+    if [ -d "$ROOT/ssl" ]; then
+        ui_spinner_start "Restoring SSL certificates..."
+        rm -rf /etc/letsencrypt
+        mkdir -p /etc/letsencrypt
+        cp -a "$ROOT/ssl/." /etc/letsencrypt/ 2>/dev/null
+        ui_spinner_stop
+        ui_success "SSL certificates restored"
+    fi
+
+    if [ -d "$ROOT/nginx" ]; then
+        ui_spinner_start "Restoring Nginx config..."
+        cp -a "$ROOT/nginx/." /etc/nginx/ 2>/dev/null
+        ui_spinner_stop
+        ui_success "Nginx config restored"
+    fi
+
+    # Apply smart fixes
+    apply_smart_fix
+
+    # Start services
+    ui_spinner_start "Starting services..."
+    if [ -d "$NODE_DIR" ]; then
+        cd "$NODE_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
+    fi
+    cd "$PANEL_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
+    ui_spinner_stop
+    ui_success "Services started"
+
+    # Restore database
+    if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
+        echo -e "${YELLOW}Waiting for database to initialize...${NC}"
+        sleep 15
+        
+        ui_spinner_start "Importing database..."
+        local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
+        if [ -n "$DB_CONT" ]; then
+            docker exec "$DB_CONT" psql -U pasarguard -d pasarguard -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+            docker exec -i "$DB_CONT" psql -U pasarguard -d pasarguard < "$ROOT/database/db.sql" >/dev/null 2>&1
+        fi
+        ui_spinner_stop
+        ui_success "Database imported"
+    fi
+
+    # Cleanup
+    rm -rf "$WORK_DIR"
+    
+    log_backup "SUCCESS" "Restore completed from: $(basename "$SELECTED")"
+
+    echo ""
+    echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║              ✔ RESTORE COMPLETED!                        ║${NC}"
+    echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "${YELLOW}Safety backup saved at: $SAFETY_BACKUP${NC}"
+    
+    pause
+}
+
+# ==========================================
+# CRON SCHEDULER
+# ==========================================
+setup_cron() {
+    ui_header "BACKUP SCHEDULER"
+    
+    echo "Current cron status:"
+    if crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
+        local CURRENT=$(crontab -l | grep "$SCRIPT_PATH")
+        echo -e "${GREEN}Active:${NC} $CURRENT"
+    else
+        echo -e "${YELLOW}No scheduled backup${NC}"
+    fi
+    
+    echo ""
+    echo "Select backup interval:"
+    echo "1) Every 6 hours"
+    echo "2) Every 12 hours"
+    echo "3) Every 24 hours (Daily)"
+    echo "4) Every week (Sunday)"
+    echo "5) Disable scheduled backup"
+    echo "0) Cancel"
+    echo ""
+    read -p "Select: " c
+    
+    local CRON_TIME=""
+    case $c in
+        1) CRON_TIME="0 */6 * * *" ;;
+        2) CRON_TIME="0 */12 * * *" ;;
+        3) CRON_TIME="0 0 * * *" ;;
+        4) CRON_TIME="0 0 * * 0" ;;
+        5) CRON_TIME="" ;;
+        0) return ;;
+        *) ui_error "Invalid selection"; pause; return ;;
+    esac
+    
+    # Update crontab
+    (crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH"
+     [ -n "$CRON_TIME" ] && echo "$CRON_TIME $SCRIPT_PATH auto > /dev/null 2>&1"
+    ) | crontab -
+    
+    if [ -n "$CRON_TIME" ]; then
+        ui_success "Scheduled backup enabled: $CRON_TIME"
+        log_backup "INFO" "Cron scheduled: $CRON_TIME"
+    else
+        ui_success "Scheduled backup disabled"
+        log_backup "INFO" "Cron disabled"
+    fi
+    
+    pause
+}
+
+# ==========================================
+# VIEW LOGS
+# ==========================================
+view_backup_logs() {
+    ui_header "BACKUP LOGS"
+    
+    if [ -f "$BACKUP_LOG" ]; then
+        echo -e "${YELLOW}Last 30 entries:${NC}"
+        echo ""
+        tail -n 30 "$BACKUP_LOG"
+    else
+        ui_warning "No logs found"
+    fi
+    
+    pause
+}
+
+# ==========================================
+# LIST BACKUPS
+# ==========================================
+list_backups() {
+    ui_header "AVAILABLE BACKUPS"
+    
+    local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
+    
+    if [ ${#FILES[@]} -eq 0 ]; then
+        ui_warning "No backups found"
+        pause
+        return
+    fi
+    
+    echo -e "${GREEN}ID │ Filename                              │ Size   │ Date${NC}"
+    echo "───┼─────────────────────────────────────────┼────────┼───────────"
+    
+    for i in "${!FILES[@]}"; do
+        local NAME=$(basename "${FILES[$i]}")
+        local SIZE=$(du -h "${FILES[$i]}" | cut -f1)
+        local DATE=$(stat -c %y "${FILES[$i]}" | cut -d' ' -f1)
+        printf "%-2s │ %-39s │ %-6s │ %s\n" "$((i+1))" "$NAME" "$SIZE" "$DATE"
+    done
+    
+    echo ""
+    echo -e "Total: ${CYAN}${#FILES[@]}${NC} backups"
+    echo -e "Location: ${CYAN}$BACKUP_DIR${NC}"
+    
+    pause
+}
+
+# ==========================================
+# DELETE BACKUP
+# ==========================================
+delete_backup() {
+    ui_header "DELETE BACKUP"
+    
+    local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
+    
+    if [ ${#FILES[@]} -eq 0 ]; then
+        ui_warning "No backups found"
+        pause
+        return
+    fi
+    
+    echo -e "${YELLOW}Select backup to delete:${NC}"
+    echo ""
+    
+    for i in "${!FILES[@]}"; do
+        local SIZE=$(du -h "${FILES[$i]}" | cut -f1)
+        echo "$((i+1))) $(basename "${FILES[$i]}") [$SIZE]"
+    done
+    
+    echo ""
+    read -p "Select (0 to cancel): " SEL
+    
+    [ "$SEL" == "0" ] && return
+    
+    local SELECTED="${FILES[$((SEL-1))]}"
+    if [ -z "$SELECTED" ]; then
+        ui_error "Invalid selection"
+        pause
+        return
+    fi
+    
+    echo ""
+    read -p "Delete $(basename "$SELECTED")? (y/N): " CONFIRM
+    
+    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+        rm -f "$SELECTED"
+        ui_success "Backup deleted"
+        log_backup "INFO" "Deleted backup: $(basename "$SELECTED")"
+    else
+        echo "Cancelled"
+    fi
+    
+    pause
+}
+
+# ==========================================
+# MAIN MENU
+# ==========================================
+backup_menu() {
+    init_backup_logging
+    
     while true; do
-        clear
-        echo -e "${CYAN}MRM BACKUP MANAGER v6.6${NC}"
-        echo "1) Full Backup & Telegram"
-        echo "2) Full Restore & Smart Fix"
-        echo "3) Setup Telegram Bot"
-        echo "4) Setup Cron Scheduler"
-        echo "0) Exit"
-        read -p "=> " opt
+        ui_header "BACKUP & RESTORE v7.0"
+        setup_env
+        
+        # Show status
+        local BACKUP_COUNT=$(ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
+        local TG_STATUS="${RED}Not Configured${NC}"
+        [ -f "$TG_CONFIG" ] && TG_STATUS="${GREEN}Configured${NC}"
+        local CRON_STATUS="${RED}Disabled${NC}"
+        crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH" && CRON_STATUS="${GREEN}Active${NC}"
+        
+        echo -e "Panel: ${CYAN}$(basename "$PANEL_DIR")${NC} | Backups: ${CYAN}$BACKUP_COUNT${NC} | Telegram: $TG_STATUS | Cron: $CRON_STATUS"
+        echo ""
+        
+        echo "1)  📦 Create Full Backup"
+        echo "2)  📥 Restore from Backup"
+        echo "3)  📋 List All Backups"
+        echo "4)  🗑️  Delete Backup"
+        echo "5)  🤖 Setup Telegram Bot"
+        echo "6)  🧪 Test Telegram"
+        echo "7)  ⏰ Setup Cron Scheduler"
+        echo "8)  🔧 Run Smart Fix Only"
+        echo "9)  📋 View Logs"
+        echo ""
+        echo "0)  ↩️  Back"
+        echo ""
+        read -p "Select: " opt
+        
         case $opt in
             1) do_backup "manual" ;;
             2) do_restore ;;
-            3) read -p "Token: " TK; read -p "Chat ID: " CI; echo "TG_TOKEN=$TK" > "$TG_CONFIG"; echo "TG_CHAT=$CI" >> "$TG_CONFIG"; echo "Saved."; sleep 1 ;;
-            4) # Scheduler logic (same as v6.5)
-               clear; echo "1) 6h 2) 12h 3) 24h 4) Disable"; read -p "Choice: " c
-               case $c in 1) T="0 */6 * * *" ;; 2) T="0 */12 * * *" ;; 3) T="0 0 * * *" ;; 4) T="" ;; esac
-               (crontab -l | grep -v "$SCRIPT_PATH"; [ -n "$T" ] && echo "$T $SCRIPT_PATH auto > /dev/null 2>&1") | crontab -
-               echo "Cron updated."; sleep 1 ;;
-            0) exit 0 ;;
+            3) list_backups ;;
+            4) delete_backup ;;
+            5) setup_telegram ;;
+            6) test_telegram; pause ;;
+            7) setup_cron ;;
+            8) apply_smart_fix; pause ;;
+            9) view_backup_logs ;;
+            0) return ;;
+            *) ;;
         esac
     done
+}
+
+# ==========================================
+# ENTRY POINT
+# ==========================================
+if [ "$1" == "auto" ]; then
+    do_backup "auto"
+else
+    backup_menu
 fi
