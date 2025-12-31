@@ -1,46 +1,15 @@
 #!/bin/bash
 
-# Load utils safely
-if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
-
 # ==========================================
-# CONFIGURATION - Panel Paths (CORRECTED)
+# SSL MANAGEMENT MODULE v2.1
+# Compatible with MRM Manager
 # ==========================================
-declare -A PANEL_PATHS=(
-    ["marzban"]="/var/lib/marzban/certs"
-    ["pasarguard"]="/var/lib/pasarguard/certs"
-    ["rebecca"]="/var/lib/rebecca/certs"
-)
 
-declare -A PANEL_INSTALL_PATHS=(
-    ["marzban"]="/opt/marzban"
-    ["pasarguard"]="/opt/pasarguard"
-    ["rebecca"]="/opt/Rebecca"
-)
-
-declare -A PANEL_ENV_FILES=(
-    ["marzban"]="/opt/marzban/.env"
-    ["pasarguard"]="/opt/pasarguard/.env"
-    ["rebecca"]="/opt/Rebecca/.env"
-)
-
-declare -A NODE_PATHS=(
-    ["marzban"]="/var/lib/marzban-node/certs"
-    ["pasarguard"]="/var/lib/pasarguard-node/certs"
-    ["rebecca"]="/var/lib/rebecca-node/certs"
-)
-
-declare -A NODE_INSTALL_PATHS=(
-    ["marzban"]="/opt/marzban-node"
-    ["pasarguard"]="/opt/pasarguard-node"
-    ["rebecca"]="/opt/Rebecca-node"
-)
-
-declare -A NODE_ENV_FILES=(
-    ["marzban"]="/opt/marzban-node/.env"
-    ["pasarguard"]="/opt/pasarguard-node/.env"
-    ["rebecca"]="/opt/Rebecca-node/.env"
-)
+# Load utils if not already loaded
+if [ -z "$PANEL_DIR" ]; then 
+    source /opt/mrm-manager/utils.sh
+    source /opt/mrm-manager/ui.sh
+fi
 
 # ==========================================
 # LOGGING SYSTEM
@@ -48,6 +17,7 @@ declare -A NODE_ENV_FILES=(
 SSL_LOG_DIR="/var/log/ssl-manager"
 SSL_LOG_FILE="$SSL_LOG_DIR/ssl-manager.log"
 CERTBOT_DEBUG_LOG="/var/log/certbot_debug.log"
+SERVERS_FILE="/opt/mrm-manager/ssl-servers.conf"
 
 init_logging() {
     mkdir -p "$SSL_LOG_DIR"
@@ -68,136 +38,6 @@ log_success() { log_message "SUCCESS" "$1"; }
 log_warning() { log_message "WARNING" "$1"; }
 
 # ==========================================
-# PANEL DETECTION (AUTO-DETECT)
-# ==========================================
-detect_installed_panels() {
-    local installed=()
-    
-    for panel in "marzban" "pasarguard" "rebecca"; do
-        local install_path="${PANEL_INSTALL_PATHS[$panel]}"
-        if [ -d "$install_path" ]; then
-            installed+=("$panel")
-        fi
-    done
-    
-    echo "${installed[@]}"
-}
-
-# ==========================================
-# PANEL SELECTION
-# ==========================================
-SELECTED_PANEL=""
-
-select_panel() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       SELECT YOUR PANEL                     ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
-    
-    # Auto-detect installed panels
-    local installed_panels=($(detect_installed_panels))
-    
-    if [ ${#installed_panels[@]} -gt 0 ]; then
-        echo -e "${GREEN}Detected installed panels:${NC}"
-        for p in "${installed_panels[@]}"; do
-            echo -e "  ✔ $p"
-        done
-        echo ""
-    fi
-    
-    echo "1) Marzban"
-    echo "2) Pasarguard"
-    echo "3) Rebecca"
-    echo "4) Custom Path"
-    echo ""
-    read -p "Select Panel: " PANEL_OPT
-
-    case $PANEL_OPT in
-        1) SELECTED_PANEL="marzban" ;;
-        2) SELECTED_PANEL="pasarguard" ;;
-        3) SELECTED_PANEL="rebecca" ;;
-        4) SELECTED_PANEL="custom" ;;
-        *) 
-            echo -e "${RED}Invalid selection.${NC}"
-            pause
-            return 1
-            ;;
-    esac
-
-    # Verify panel exists
-    if [ "$SELECTED_PANEL" != "custom" ]; then
-        local install_path="${PANEL_INSTALL_PATHS[$SELECTED_PANEL]}"
-        if [ ! -d "$install_path" ]; then
-            echo -e "${YELLOW}⚠ Warning: $SELECTED_PANEL not found at $install_path${NC}"
-            read -p "Continue anyway? (y/N): " CONT
-            if [[ ! "$CONT" =~ ^[Yy]$ ]]; then
-                return 1
-            fi
-        fi
-    fi
-
-    log_info "Panel selected: $SELECTED_PANEL"
-    echo -e "${GREEN}✔ Selected: $SELECTED_PANEL${NC}"
-    sleep 1
-    return 0
-}
-
-get_panel_cert_path() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom certificate path: " CUSTOM_PATH
-        echo "$CUSTOM_PATH"
-    else
-        echo "${PANEL_PATHS[$SELECTED_PANEL]}"
-    fi
-}
-
-get_panel_env_file() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom .env file path: " CUSTOM_ENV
-        echo "$CUSTOM_ENV"
-    else
-        echo "${PANEL_ENV_FILES[$SELECTED_PANEL]}"
-    fi
-}
-
-get_panel_install_path() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom install path: " CUSTOM_PATH
-        echo "$CUSTOM_PATH"
-    else
-        echo "${PANEL_INSTALL_PATHS[$SELECTED_PANEL]}"
-    fi
-}
-
-get_node_cert_path() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom node certificate path: " CUSTOM_PATH
-        echo "$CUSTOM_PATH"
-    else
-        echo "${NODE_PATHS[$SELECTED_PANEL]}"
-    fi
-}
-
-get_node_env_file() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom node .env file path: " CUSTOM_ENV
-        echo "$CUSTOM_ENV"
-    else
-        echo "${NODE_ENV_FILES[$SELECTED_PANEL]}"
-    fi
-}
-
-get_node_install_path() {
-    if [ "$SELECTED_PANEL" == "custom" ]; then
-        read -p "Enter custom node install path: " CUSTOM_PATH
-        echo "$CUSTOM_PATH"
-    else
-        echo "${NODE_INSTALL_PATHS[$SELECTED_PANEL]}"
-    fi
-}
-
-# ==========================================
 # DNS & IP VALIDATION
 # ==========================================
 validate_domain_dns() {
@@ -209,7 +49,7 @@ validate_domain_dns() {
     log_info "DNS Check - Domain: $DOMAIN, Server IP: $SERVER_IP, Domain IP: $DOMAIN_IP"
 
     if [ -z "$DOMAIN_IP" ]; then
-        echo -e "${RED}✘ Error: Cannot resolve domain $DOMAIN${NC}"
+        ui_error "Cannot resolve domain $DOMAIN"
         echo -e "${YELLOW}  Make sure DNS record exists for this domain.${NC}"
         log_error "DNS resolution failed for $DOMAIN"
         return 1
@@ -234,7 +74,7 @@ validate_domain_dns() {
         fi
         log_warning "User chose to continue despite DNS mismatch"
     else
-        echo -e "${GREEN}✔ DNS OK: $DOMAIN → $DOMAIN_IP${NC}"
+        ui_success "DNS OK: $DOMAIN → $DOMAIN_IP"
         log_info "DNS validation passed for $DOMAIN"
     fi
 
@@ -248,7 +88,7 @@ check_port_availability() {
     local PORT=$1
     if ss -tlnp | grep -q ":$PORT "; then
         local SERVICE=$(ss -tlnp | grep ":$PORT " | awk '{print $NF}')
-        echo -e "${YELLOW}⚠ Port $PORT is in use by: $SERVICE${NC}"
+        ui_warning "Port $PORT is in use by: $SERVICE"
         log_warning "Port $PORT is in use by $SERVICE"
         return 1
     fi
@@ -264,16 +104,18 @@ _get_cert_action() {
     local DOMAINS=("${@}")
 
     init_logging
+    detect_active_panel > /dev/null
+    
     log_info "========== SSL Generation Started =========="
     log_info "Email: $EMAIL"
     log_info "Domains: ${DOMAINS[*]}"
-    log_info "Panel: $SELECTED_PANEL"
+    log_info "Active Panel: $(detect_active_panel)"
 
     echo -e "${YELLOW}[Step 1/6] Network & DNS Validation...${NC}"
     
     # Check internet connectivity to Let's Encrypt API
     if ! curl -s --connect-timeout 15 https://acme-v02.api.letsencrypt.org/directory > /dev/null; then
-        echo -e "${RED}✘ Error: Let's Encrypt API is unreachable. Check your internet/firewall!${NC}"
+        ui_error "Let's Encrypt API is unreachable. Check your internet/firewall!"
         log_error "Let's Encrypt API unreachable"
         return 1
     fi
@@ -321,13 +163,12 @@ _get_cert_action() {
     # Verify port 80 is free
     sleep 2
     if ! check_port_availability 80; then
-        echo -e "${RED}✘ Error: Port 80 is still in use!${NC}"
+        ui_error "Port 80 is still in use!"
         log_error "Port 80 still in use after stopping services"
-        # Try to restore services before failing
         [ "$NGINX_WAS_RUNNING" = true ] && systemctl start nginx 2>/dev/null
         return 1
     fi
-    echo -e "${GREEN}✔ Port 80 is available${NC}"
+    ui_success "Port 80 is available"
 
     # Build domain flags
     local DOM_FLAGS=""
@@ -363,10 +204,10 @@ _get_cert_action() {
     fi
 
     if [ $CERTBOT_RESULT -eq 0 ]; then
-        echo -e "${GREEN}✔ SSL Generation Successful!${NC}"
+        ui_success "SSL Generation Successful!"
         log_success "SSL certificate generated successfully for ${DOMAINS[*]}"
     else
-        echo -e "${RED}✘ SSL Generation Failed!${NC}"
+        ui_error "SSL Generation Failed!"
         echo -e "${YELLOW}Last 15 lines of debug log:${NC}"
         echo -e "${CYAN}----------------------------------------${NC}"
         tail -n 15 "$CERTBOT_DEBUG_LOG"
@@ -380,49 +221,20 @@ _get_cert_action() {
 }
 
 # ==========================================
-# RESTART PANEL SERVICE
-# ==========================================
-restart_panel_service() {
-    local INSTALL_PATH=$(get_panel_install_path)
-    
-    echo -e "${BLUE}Restarting $SELECTED_PANEL service...${NC}"
-    log_info "Restarting $SELECTED_PANEL at $INSTALL_PATH"
-    
-    if [ -f "$INSTALL_PATH/docker-compose.yml" ] || [ -f "$INSTALL_PATH/docker-compose.yaml" ]; then
-        cd "$INSTALL_PATH" && docker compose restart 2>/dev/null || docker-compose restart 2>/dev/null
-    else
-        systemctl restart "$SELECTED_PANEL" 2>/dev/null
-    fi
-}
-
-restart_node_service() {
-    local INSTALL_PATH=$(get_node_install_path)
-    
-    echo -e "${BLUE}Restarting $SELECTED_PANEL node service...${NC}"
-    log_info "Restarting $SELECTED_PANEL node at $INSTALL_PATH"
-    
-    if [ -f "$INSTALL_PATH/docker-compose.yml" ] || [ -f "$INSTALL_PATH/docker-compose.yaml" ]; then
-        cd "$INSTALL_PATH" && docker compose restart 2>/dev/null || docker-compose restart 2>/dev/null
-    else
-        systemctl restart "$SELECTED_PANEL-node" 2>/dev/null
-    fi
-}
-
-# ==========================================
 # PROCESS PANEL SSL
 # ==========================================
 _process_panel() {
     local PRIMARY_DOM=$1
-    echo -e "\n${CYAN}--- Configuring Panel SSL ($SELECTED_PANEL) ---${NC}"
-
-    local BASE_DIR=$(get_panel_cert_path)
-    local ENV_FILE=$(get_panel_env_file)
+    detect_active_panel > /dev/null
+    
+    echo -e "\n${CYAN}--- Configuring Panel SSL ($(basename $PANEL_DIR)) ---${NC}"
 
     echo "Certificate storage options:"
-    echo "1) Default Path ($BASE_DIR/$PRIMARY_DOM)"
+    echo "1) Default Path ($PANEL_DEF_CERTS/$PRIMARY_DOM)"
     echo "2) Custom Path"
     read -p "Select: " PATH_OPT
 
+    local BASE_DIR="$PANEL_DEF_CERTS"
     if [[ "$PATH_OPT" == "2" ]]; then
         read -p "Enter Custom Base Directory: " BASE_DIR
     fi
@@ -440,32 +252,29 @@ _process_panel() {
 
         chmod 644 "$C_FILE" "$K_FILE"
 
-        if [ ! -f "$ENV_FILE" ]; then 
-            touch "$ENV_FILE"
-            log_warning ".env file created at $ENV_FILE"
+        if [ ! -f "$PANEL_ENV" ]; then 
+            touch "$PANEL_ENV"
+            log_warning ".env file created at $PANEL_ENV"
         fi
 
         echo -e "${BLUE}Cleaning up old config in .env...${NC}"
-        sed -i '/UVICORN_SSL_CERTFILE/d' "$ENV_FILE"
-        sed -i '/UVICORN_SSL_KEYFILE/d' "$ENV_FILE"
+        sed -i '/UVICORN_SSL_CERTFILE/d' "$PANEL_ENV"
+        sed -i '/UVICORN_SSL_KEYFILE/d' "$PANEL_ENV"
 
         echo -e "${BLUE}Writing new SSL paths...${NC}"
-        echo "UVICORN_SSL_CERTFILE = \"$C_FILE\"" >> "$ENV_FILE"
-        echo "UVICORN_SSL_KEYFILE = \"$K_FILE\"" >> "$ENV_FILE"
+        echo "UVICORN_SSL_CERTFILE = \"$C_FILE\"" >> "$PANEL_ENV"
+        echo "UVICORN_SSL_KEYFILE = \"$K_FILE\"" >> "$PANEL_ENV"
 
-        # Restart the appropriate service
-        if [ "$SELECTED_PANEL" != "custom" ]; then
-            restart_panel_service
-        fi
+        restart_service "panel"
 
-        echo -e "${GREEN}✔ Panel SSL Updated Successfully!${NC}"
+        ui_success "Panel SSL Updated Successfully!"
         echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
         echo -e "Certificate: ${CYAN}$C_FILE${NC}"
         echo -e "Private Key: ${CYAN}$K_FILE${NC}"
         
         log_success "Panel SSL configured - Cert: $C_FILE, Key: $K_FILE"
     else
-        echo -e "${RED}Error copying certificate files!${NC}"
+        ui_error "Error copying certificate files!"
         log_error "Failed to copy certificate files to $TARGET_DIR"
     fi
 }
@@ -475,16 +284,14 @@ _process_panel() {
 # ==========================================
 _process_node() {
     local PRIMARY_DOM=$1
-    echo -e "\n${PURPLE}--- Configuring Node SSL ($SELECTED_PANEL) ---${NC}"
-
-    local BASE_DIR=$(get_node_cert_path)
-    local ENV_FILE=$(get_node_env_file)
+    echo -e "\n${PURPLE}--- Configuring Node SSL ---${NC}"
 
     echo "Certificate storage options:"
-    echo "1) Default Path ($BASE_DIR/$PRIMARY_DOM)"
+    echo "1) Default Path ($NODE_DEF_CERTS/$PRIMARY_DOM)"
     echo "2) Custom Path"
     read -p "Select: " PATH_OPT
 
+    local BASE_DIR="$NODE_DEF_CERTS"
     if [[ "$PATH_OPT" == "2" ]]; then
         read -p "Enter Custom Base Directory: " BASE_DIR
     fi
@@ -502,33 +309,30 @@ _process_node() {
 
         chmod 644 "$C_FILE" "$K_FILE"
 
-        if [ -f "$ENV_FILE" ]; then
+        if [ -f "$NODE_ENV" ]; then
             echo -e "${BLUE}Cleaning up Node config...${NC}"
-            sed -i '/SSL_CERT_FILE/d' "$ENV_FILE"
-            sed -i '/SSL_KEY_FILE/d' "$ENV_FILE"
+            sed -i '/SSL_CERT_FILE/d' "$NODE_ENV"
+            sed -i '/SSL_KEY_FILE/d' "$NODE_ENV"
 
             echo -e "${BLUE}Writing new SSL paths...${NC}"
-            echo "SSL_CERT_FILE = \"$C_FILE\"" >> "$ENV_FILE"
-            echo "SSL_KEY_FILE = \"$K_FILE\"" >> "$ENV_FILE"
+            echo "SSL_CERT_FILE = \"$C_FILE\"" >> "$NODE_ENV"
+            echo "SSL_KEY_FILE = \"$K_FILE\"" >> "$NODE_ENV"
 
-            # Restart node service
-            if [ "$SELECTED_PANEL" != "custom" ]; then
-                restart_node_service
-            fi
+            restart_service "node"
 
-            echo -e "${GREEN}✔ Node SSL Updated Successfully!${NC}"
+            ui_success "Node SSL Updated Successfully!"
             log_success "Node SSL configured - Cert: $C_FILE, Key: $K_FILE"
         else
-            echo -e "${YELLOW}Node .env not found at $ENV_FILE${NC}"
+            ui_warning "Node .env not found at $NODE_ENV"
             echo -e "${YELLOW}Please manually configure SSL paths.${NC}"
-            log_warning "Node .env not found at $ENV_FILE"
+            log_warning "Node .env not found at $NODE_ENV"
         fi
         
         echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
         echo -e "Certificate: ${CYAN}$C_FILE${NC}"
         echo -e "Private Key: ${CYAN}$K_FILE${NC}"
     else
-        echo -e "${RED}Error copying certificate files!${NC}"
+        ui_error "Error copying certificate files!"
         log_error "Failed to copy node certificate files to $TARGET_DIR"
     fi
 }
@@ -540,8 +344,7 @@ _process_config() {
     local PRIMARY_DOM=$1
     echo -e "\n${ORANGE}--- Config SSL (Inbounds) ---${NC}"
 
-    local BASE_DIR=$(get_panel_cert_path)
-    local TARGET_DIR="$BASE_DIR/$PRIMARY_DOM"
+    local TARGET_DIR="$PANEL_DEF_CERTS/$PRIMARY_DOM"
     mkdir -p "$TARGET_DIR"
 
     log_info "Copying inbound certificates to $TARGET_DIR"
@@ -552,7 +355,7 @@ _process_config() {
         chmod 755 "$TARGET_DIR"
         chmod 644 "$TARGET_DIR"/*.pem
 
-        echo -e "${GREEN}✔ Files Saved Successfully!${NC}"
+        ui_success "Files Saved Successfully!"
         echo -e ""
         echo -e "${YELLOW}╔══════════════════════════════════════════════════════════╗${NC}"
         echo -e "${YELLOW}║         Copy these paths to your Inbound Settings:       ║${NC}"
@@ -563,7 +366,7 @@ _process_config() {
         
         log_success "Inbound SSL configured - Path: $TARGET_DIR"
     else
-        echo -e "${RED}Error copying certificate files!${NC}"
+        ui_error "Error copying certificate files!"
         log_error "Failed to copy inbound certificate files to $TARGET_DIR"
     fi
 }
@@ -572,24 +375,18 @@ _process_config() {
 # SSL WIZARD (MAIN FUNCTION)
 # ==========================================
 ssl_wizard() {
-    clear
+    ui_header "SSL GENERATION WIZARD v2.1"
     init_logging
+    detect_active_panel > /dev/null
     
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       SSL GENERATION WIZARD  v2.0          ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
+    echo -e "${CYAN}Active Panel: $(basename $PANEL_DIR)${NC}"
+    echo -e "${CYAN}Certs Path: $PANEL_DEF_CERTS${NC}"
     echo ""
 
-    # Step 1: Select Panel
-    if ! select_panel; then
-        return
-    fi
-
-    # Step 2: Get domains
-    echo ""
+    # Get domains
     read -p "How many domains? (e.g. 1, 2): " COUNT
     if [[ ! "$COUNT" =~ ^[0-9]+$ ]] || [ "$COUNT" -lt 1 ]; then
-        echo -e "${RED}Invalid number.${NC}"
+        ui_error "Invalid number."
         log_error "Invalid domain count entered: $COUNT"
         pause; return
     fi
@@ -600,7 +397,7 @@ ssl_wizard() {
         if [ -n "$D_INPUT" ]; then
             DOMAIN_LIST+=("$D_INPUT")
         else
-            echo -e "${RED}Domain cannot be empty.${NC}"
+            ui_error "Domain cannot be empty."
             i=$((i-1))
         fi
     done
@@ -610,32 +407,32 @@ ssl_wizard() {
         return
     fi
 
-    # Step 3: Get email
+    # Get email
     read -p "Enter Email: " MAIL
     if [ -z "$MAIL" ]; then
-        echo -e "${RED}Email is required.${NC}"
+        ui_error "Email is required."
         log_error "No email entered"
         pause; return
     fi
 
     local PRIMARY_DOM=${DOMAIN_LIST[0]}
 
-    # Step 4: Get certificate
+    # Get certificate
     _get_cert_action "$MAIL" "${DOMAIN_LIST[@]}"
     local RES=$?
 
     if [ $RES -ne 0 ] || [ ! -d "/etc/letsencrypt/live/$PRIMARY_DOM" ]; then
-        echo -e "${RED}✘ SSL Generation Failed!${NC}"
+        ui_error "SSL Generation Failed!"
         echo -e "${YELLOW}Check logs: $SSL_LOG_FILE${NC}"
         echo -e "${YELLOW}Certbot log: $CERTBOT_DEBUG_LOG${NC}"
         pause
         return
     fi
 
-    echo -e "${GREEN}✔ Success! Primary Domain: $PRIMARY_DOM${NC}"
+    ui_success "Success! Primary Domain: $PRIMARY_DOM"
     echo ""
     
-    # Step 5: Configure usage
+    # Configure usage
     echo "Where to use this certificate?"
     echo "1) Main Panel (Dashboard)"
     echo "2) Node Server"
@@ -652,50 +449,797 @@ ssl_wizard() {
             _process_node "$PRIMARY_DOM"
             _process_config "$PRIMARY_DOM"
             ;;
-        *) echo -e "${RED}Invalid selection.${NC}";;
+        *) ui_error "Invalid selection.";;
     esac
+
+    # Offer multi-server sync if servers are configured
+    offer_multi_server_sync "$PRIMARY_DOM"
 
     log_info "========== SSL Generation Completed =========="
     pause
 }
 
 # ==========================================
+# WILDCARD SSL WITH DNS CHALLENGE
+# ==========================================
+wildcard_ssl_wizard() {
+    ui_header "WILDCARD SSL (*.domain.com)"
+    init_logging
+    
+    echo -e "${YELLOW}⚠️  Wildcard SSL requires DNS Challenge${NC}"
+    echo -e "${YELLOW}    You need access to your DNS provider${NC}"
+    echo ""
+
+    # Get base domain
+    read -p "Enter base domain (e.g. example.com): " BASE_DOMAIN
+    if [ -z "$BASE_DOMAIN" ]; then
+        ui_error "Domain cannot be empty."
+        pause
+        return
+    fi
+
+    # Get email
+    read -p "Enter Email: " MAIL
+    if [ -z "$MAIL" ]; then
+        ui_error "Email is required."
+        pause
+        return
+    fi
+
+    log_info "Wildcard SSL requested for *.$BASE_DOMAIN"
+
+    # Select DNS provider
+    echo ""
+    echo -e "${CYAN}Select your DNS Provider:${NC}"
+    echo "1) Cloudflare"
+    echo "2) Manual DNS (Add TXT record yourself)"
+    echo ""
+    read -p "Select: " DNS_PROVIDER
+
+    case $DNS_PROVIDER in
+        1) wildcard_cloudflare "$BASE_DOMAIN" "$MAIL" ;;
+        2) wildcard_manual "$BASE_DOMAIN" "$MAIL" ;;
+        *) ui_error "Invalid selection." ;;
+    esac
+
+    pause
+}
+
+# ------------------------------------------
+# Wildcard with Cloudflare API
+# ------------------------------------------
+wildcard_cloudflare() {
+    local BASE_DOMAIN=$1
+    local EMAIL=$2
+
+    echo -e "\n${CYAN}--- Cloudflare DNS Challenge ---${NC}"
+    
+    # Check if cloudflare plugin is installed
+    if ! pip3 list 2>/dev/null | grep -q certbot-dns-cloudflare; then
+        ui_spinner_start "Installing Cloudflare DNS plugin..."
+        pip3 install certbot-dns-cloudflare > /dev/null 2>&1
+        
+        if [ $? -ne 0 ]; then
+            apt install python3-certbot-dns-cloudflare -y > /dev/null 2>&1
+        fi
+        ui_spinner_stop
+        ui_success "Cloudflare plugin installed"
+    fi
+
+    # Get Cloudflare credentials
+    echo ""
+    echo -e "${YELLOW}You need Cloudflare API Token with DNS edit permissions${NC}"
+    echo -e "${CYAN}Get it from: https://dash.cloudflare.com/profile/api-tokens${NC}"
+    echo ""
+    
+    read -p "Enter Cloudflare API Token: " CF_API_TOKEN
+    if [ -z "$CF_API_TOKEN" ]; then
+        ui_error "API Token is required."
+        return 1
+    fi
+
+    # Create credentials file
+    local CF_CREDS_DIR="/root/.secrets/cloudflare"
+    local CF_CREDS_FILE="$CF_CREDS_DIR/cloudflare.ini"
+    
+    mkdir -p "$CF_CREDS_DIR"
+    chmod 700 "$CF_CREDS_DIR"
+    
+    cat > "$CF_CREDS_FILE" << EOF
+dns_cloudflare_api_token = $CF_API_TOKEN
+EOF
+    
+    chmod 600 "$CF_CREDS_FILE"
+    log_info "Cloudflare credentials saved to $CF_CREDS_FILE"
+
+    ui_spinner_start "Requesting Wildcard Certificate..."
+
+    # Request wildcard certificate
+    certbot certonly \
+        --dns-cloudflare \
+        --dns-cloudflare-credentials "$CF_CREDS_FILE" \
+        --dns-cloudflare-propagation-seconds 60 \
+        --email "$EMAIL" \
+        --agree-tos \
+        --non-interactive \
+        -d "$BASE_DOMAIN" \
+        -d "*.$BASE_DOMAIN" > "$CERTBOT_DEBUG_LOG" 2>&1
+
+    local RESULT=$?
+    ui_spinner_stop
+
+    if [ $RESULT -eq 0 ]; then
+        ui_success "Wildcard SSL Generated Successfully!"
+        echo -e "${GREEN}  Domains: $BASE_DOMAIN, *.$BASE_DOMAIN${NC}"
+        log_success "Wildcard SSL generated for *.$BASE_DOMAIN"
+        
+        _process_wildcard_cert "$BASE_DOMAIN"
+    else
+        ui_error "Wildcard SSL Generation Failed!"
+        echo -e "${YELLOW}Last 15 lines of log:${NC}"
+        tail -n 15 "$CERTBOT_DEBUG_LOG"
+        log_error "Wildcard SSL failed for *.$BASE_DOMAIN"
+    fi
+}
+
+# ------------------------------------------
+# Wildcard with Manual DNS
+# ------------------------------------------
+wildcard_manual() {
+    local BASE_DOMAIN=$1
+    local EMAIL=$2
+
+    echo -e "\n${CYAN}--- Manual DNS Challenge ---${NC}"
+    echo -e "${YELLOW}You will need to add TXT records to your DNS${NC}"
+    echo ""
+
+    certbot certonly \
+        --manual \
+        --preferred-challenges dns \
+        --email "$EMAIL" \
+        --agree-tos \
+        -d "$BASE_DOMAIN" \
+        -d "*.$BASE_DOMAIN"
+
+    local RESULT=$?
+
+    if [ $RESULT -eq 0 ]; then
+        ui_success "Wildcard SSL Generated Successfully!"
+        log_success "Wildcard SSL generated for *.$BASE_DOMAIN (manual)"
+        
+        _process_wildcard_cert "$BASE_DOMAIN"
+    else
+        ui_error "Wildcard SSL Generation Failed!"
+        log_error "Wildcard SSL failed for *.$BASE_DOMAIN (manual)"
+    fi
+}
+
+# ------------------------------------------
+# Process Wildcard Certificate
+# ------------------------------------------
+_process_wildcard_cert() {
+    local BASE_DOMAIN=$1
+    
+    echo ""
+    echo -e "${GREEN}Certificate Location:${NC}"
+    echo -e "  Cert: ${CYAN}/etc/letsencrypt/live/$BASE_DOMAIN/fullchain.pem${NC}"
+    echo -e "  Key:  ${CYAN}/etc/letsencrypt/live/$BASE_DOMAIN/privkey.pem${NC}"
+    echo ""
+    
+    echo "Where to use this wildcard certificate?"
+    echo "1) Main Panel (Dashboard)"
+    echo "2) Node Server"
+    echo "3) Config Domain (Inbounds)"
+    echo "4) All of the above"
+    echo "5) Just show paths (don't copy)"
+    read -p "Select: " TYPE_OPT
+
+    case $TYPE_OPT in
+        1) _process_panel "$BASE_DOMAIN" ;;
+        2) _process_node "$BASE_DOMAIN" ;;
+        3) _process_config "$BASE_DOMAIN" ;;
+        4) 
+            _process_panel "$BASE_DOMAIN"
+            _process_node "$BASE_DOMAIN"
+            _process_config "$BASE_DOMAIN"
+            ;;
+        5) echo -e "${YELLOW}Use these paths in your configuration.${NC}" ;;
+        *) ;;
+    esac
+}
+
+# ==========================================
+# MULTI-SERVER SSL SYNC
+# ==========================================
+multi_server_menu() {
+    while true; do
+        ui_header "MULTI-SERVER SSL SYNC"
+        
+        echo "1) 📋 List Configured Servers"
+        echo "2) ➕ Add New Server"
+        echo "3) ➖ Remove Server"
+        echo "4) 🔄 Sync SSL to All Servers"
+        echo "5) 🔄 Sync SSL to Specific Server"
+        echo "6) 🔑 Setup SSH Key (Passwordless)"
+        echo "7) 🧪 Test Connection to All Servers"
+        echo "0) ↩️  Back"
+        echo ""
+        read -p "Select: " OPT
+
+        case $OPT in
+            1) list_servers ;;
+            2) add_server ;;
+            3) remove_server ;;
+            4) sync_all_servers ;;
+            5) sync_specific_server ;;
+            6) setup_ssh_keys ;;
+            7) test_all_connections ;;
+            0) return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ------------------------------------------
+# List Servers
+# ------------------------------------------
+list_servers() {
+    ui_header "CONFIGURED SERVERS"
+
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured yet."
+        echo -e "Use 'Add New Server' to add one."
+        pause
+        return
+    fi
+
+    echo -e "${GREEN}ID  │ Name              │ Host              │ Port  │ Path${NC}"
+    echo "────┼───────────────────┼───────────────────┼───────┼──────────────────"
+    
+    local idx=1
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        printf "%-3s │ %-17s │ %-17s │ %-5s │ %s\n" "$idx" "$name" "$host" "$port" "$path"
+        ((idx++))
+    done < "$SERVERS_FILE"
+
+    echo ""
+    pause
+}
+
+# ------------------------------------------
+# Add Server
+# ------------------------------------------
+add_server() {
+    ui_header "ADD NEW SERVER"
+
+    read -p "Server Name (e.g. node-germany): " SERVER_NAME
+    if [ -z "$SERVER_NAME" ]; then
+        ui_error "Name is required."
+        pause
+        return
+    fi
+
+    read -p "Server IP/Host: " SERVER_HOST
+    if [ -z "$SERVER_HOST" ]; then
+        ui_error "Host is required."
+        pause
+        return
+    fi
+
+    read -p "SSH Port [22]: " SERVER_PORT
+    SERVER_PORT=${SERVER_PORT:-22}
+
+    read -p "SSH User [root]: " SERVER_USER
+    SERVER_USER=${SERVER_USER:-root}
+
+    echo ""
+    echo "Select panel type on this server:"
+    echo "1) Pasarguard"
+    echo "2) Marzban"
+    echo "3) Rebecca"
+    echo "4) Custom"
+    read -p "Select: " PANEL_TYPE
+
+    local REMOTE_PATH=""
+    local PANEL_NAME=""
+    
+    case $PANEL_TYPE in
+        1) 
+            PANEL_NAME="pasarguard"
+            REMOTE_PATH="/var/lib/pasarguard/certs"
+            ;;
+        2) 
+            PANEL_NAME="marzban"
+            REMOTE_PATH="/var/lib/marzban/certs"
+            ;;
+        3) 
+            PANEL_NAME="rebecca"
+            REMOTE_PATH="/var/lib/rebecca/certs"
+            ;;
+        4)
+            PANEL_NAME="custom"
+            read -p "Enter remote certificate path: " REMOTE_PATH
+            ;;
+        *)
+            ui_error "Invalid selection."
+            pause
+            return
+            ;;
+    esac
+
+    touch "$SERVERS_FILE"
+    echo "${SERVER_NAME}|${SERVER_HOST}|${SERVER_PORT}|${SERVER_USER}|${REMOTE_PATH}|${PANEL_NAME}" >> "$SERVERS_FILE"
+
+    ui_success "Server added successfully!"
+    log_info "Added server: $SERVER_NAME ($SERVER_HOST)"
+
+    echo ""
+    read -p "Test connection now? (Y/n): " TEST_NOW
+    if [[ ! "$TEST_NOW" =~ ^[Nn]$ ]]; then
+        test_server_connection "$SERVER_HOST" "$SERVER_PORT" "$SERVER_USER"
+    fi
+
+    pause
+}
+
+# ------------------------------------------
+# Remove Server
+# ------------------------------------------
+remove_server() {
+    ui_header "REMOVE SERVER"
+
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured."
+        pause
+        return
+    fi
+
+    echo -e "${YELLOW}Select server to remove:${NC}"
+    echo ""
+
+    local idx=1
+    declare -a server_names
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        echo "$idx) $name ($host)"
+        server_names[$idx]="$name"
+        ((idx++))
+    done < "$SERVERS_FILE"
+
+    echo ""
+    read -p "Select (0 to cancel): " SEL
+
+    if [ "$SEL" == "0" ]; then
+        return
+    fi
+
+    local REMOVE_NAME=${server_names[$SEL]}
+    if [ -z "$REMOVE_NAME" ]; then
+        ui_error "Invalid selection."
+        pause
+        return
+    fi
+
+    grep -v "^${REMOVE_NAME}|" "$SERVERS_FILE" > "${SERVERS_FILE}.tmp"
+    mv "${SERVERS_FILE}.tmp" "$SERVERS_FILE"
+
+    ui_success "Server '$REMOVE_NAME' removed."
+    log_info "Removed server: $REMOVE_NAME"
+    pause
+}
+
+# ------------------------------------------
+# Test Server Connection
+# ------------------------------------------
+test_server_connection() {
+    local HOST=$1
+    local PORT=$2
+    local USER=$3
+
+    echo -e "${YELLOW}Testing connection to $USER@$HOST:$PORT...${NC}"
+    
+    if ssh -o ConnectTimeout=10 -o BatchMode=yes -p "$PORT" "$USER@$HOST" "echo 'OK'" 2>/dev/null; then
+        ui_success "Connection successful!"
+        return 0
+    else
+        ui_error "Connection failed!"
+        echo -e "${YELLOW}Make sure:${NC}"
+        echo -e "  1. SSH is running on the remote server"
+        echo -e "  2. SSH key is configured (use 'Setup SSH Key' option)"
+        echo -e "  3. Firewall allows port $PORT"
+        return 1
+    fi
+}
+
+# ------------------------------------------
+# Test All Connections
+# ------------------------------------------
+test_all_connections() {
+    ui_header "TESTING ALL CONNECTIONS"
+
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured."
+        pause
+        return
+    fi
+
+    local success=0
+    local failed=0
+
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        
+        echo -ne "${YELLOW}[$name]${NC} $host:$port ... "
+        
+        if ssh -o ConnectTimeout=5 -o BatchMode=yes -p "$port" "$user@$host" "exit" 2>/dev/null; then
+            echo -e "${GREEN}✔ OK${NC}"
+            ((success++))
+        else
+            echo -e "${RED}✘ FAILED${NC}"
+            ((failed++))
+        fi
+    done < "$SERVERS_FILE"
+
+    echo ""
+    echo -e "${GREEN}Success: $success${NC} | ${RED}Failed: $failed${NC}"
+    pause
+}
+
+# ------------------------------------------
+# Setup SSH Keys
+# ------------------------------------------
+setup_ssh_keys() {
+    ui_header "SETUP SSH KEY"
+
+    # Check if key exists
+    if [ ! -f ~/.ssh/id_rsa ]; then
+        echo -e "${YELLOW}No SSH key found. Generating...${NC}"
+        ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
+        ui_success "SSH key generated."
+    else
+        ui_success "SSH key already exists."
+    fi
+
+    echo ""
+    
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured. Add a server first."
+        pause
+        return
+    fi
+
+    echo -e "${YELLOW}Select server to setup SSH key:${NC}"
+    echo ""
+
+    local idx=1
+    declare -a hosts ports users
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        echo "$idx) $name ($host)"
+        hosts[$idx]="$host"
+        ports[$idx]="$port"
+        users[$idx]="$user"
+        ((idx++))
+    done < "$SERVERS_FILE"
+
+    echo "$idx) All servers"
+    echo "0) Cancel"
+    echo ""
+    read -p "Select: " SEL
+
+    if [ "$SEL" == "0" ]; then
+        return
+    fi
+
+    if [ "$SEL" == "$idx" ]; then
+        for ((i=1; i<idx; i++)); do
+            echo -e "\n${YELLOW}Setting up ${hosts[$i]}...${NC}"
+            ssh-copy-id -p "${ports[$i]}" "${users[$i]}@${hosts[$i]}" 2>/dev/null
+        done
+    else
+        local HOST=${hosts[$SEL]}
+        local PORT=${ports[$SEL]}
+        local USER=${users[$SEL]}
+
+        if [ -z "$HOST" ]; then
+            ui_error "Invalid selection."
+            pause
+            return
+        fi
+
+        echo -e "${YELLOW}Copying SSH key to $USER@$HOST:$PORT...${NC}"
+        ssh-copy-id -p "$PORT" "$USER@$HOST"
+    fi
+
+    ui_success "SSH key setup complete!"
+    pause
+}
+
+# ------------------------------------------
+# Sync to Single Server
+# ------------------------------------------
+sync_to_server() {
+    local HOST=$1
+    local PORT=$2
+    local USER=$3
+    local REMOTE_BASE_PATH=$4
+    local DOMAIN=$5
+    local LOCAL_CERT_PATH=$6
+    local PANEL=$7
+
+    local REMOTE_PATH="$REMOTE_BASE_PATH/$DOMAIN"
+
+    log_info "Syncing to $USER@$HOST:$PORT - Path: $REMOTE_PATH"
+
+    # Create remote directory
+    if ! ssh -o ConnectTimeout=10 -o BatchMode=yes -p "$PORT" "$USER@$HOST" "mkdir -p $REMOTE_PATH" 2>/dev/null; then
+        log_error "Failed to create directory on $HOST"
+        return 1
+    fi
+
+    # Copy certificate files
+    if ! scp -o ConnectTimeout=10 -o BatchMode=yes -P "$PORT" \
+        "$LOCAL_CERT_PATH/fullchain.pem" \
+        "$USER@$HOST:$REMOTE_PATH/fullchain.pem" 2>/dev/null; then
+        log_error "Failed to copy fullchain.pem to $HOST"
+        return 1
+    fi
+
+    if ! scp -o ConnectTimeout=10 -o BatchMode=yes -P "$PORT" \
+        "$LOCAL_CERT_PATH/privkey.pem" \
+        "$USER@$HOST:$REMOTE_PATH/privkey.pem" 2>/dev/null; then
+        log_error "Failed to copy privkey.pem to $HOST"
+        return 1
+    fi
+
+    # Also copy as server.crt/server.key for node compatibility
+    ssh -o BatchMode=yes -p "$PORT" "$USER@$HOST" "
+        cp $REMOTE_PATH/fullchain.pem $REMOTE_PATH/server.crt 2>/dev/null
+        cp $REMOTE_PATH/privkey.pem $REMOTE_PATH/server.key 2>/dev/null
+        chmod 644 $REMOTE_PATH/*.pem $REMOTE_PATH/*.crt $REMOTE_PATH/*.key 2>/dev/null
+    " 2>/dev/null
+
+    # Restart remote service
+    if [ "$PANEL" != "custom" ] && [ -n "$PANEL" ]; then
+        ssh -o BatchMode=yes -p "$PORT" "$USER@$HOST" "
+            cd /opt/$PANEL 2>/dev/null && docker compose restart 2>/dev/null ||
+            systemctl restart $PANEL 2>/dev/null
+        " 2>/dev/null
+    fi
+
+    log_success "Synced $DOMAIN to $HOST"
+    return 0
+}
+
+# ------------------------------------------
+# Sync All Servers
+# ------------------------------------------
+sync_all_servers() {
+    ui_header "SYNC SSL TO ALL SERVERS"
+
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured."
+        pause
+        return
+    fi
+
+    # Select domain
+    echo -e "${YELLOW}Select certificate to sync:${NC}"
+    echo ""
+
+    local idx=1
+    declare -a domains
+    
+    for dir in /etc/letsencrypt/live/*/; do
+        local domain=$(basename "$dir")
+        [ "$domain" == "README" ] && continue
+        domains[$idx]="$domain"
+        echo "$idx) $domain"
+        ((idx++))
+    done
+
+    if [ $idx -eq 1 ]; then
+        ui_error "No certificates found."
+        pause
+        return
+    fi
+
+    echo ""
+    read -p "Select certificate: " CERT_SEL
+    local SELECTED_DOMAIN=${domains[$CERT_SEL]}
+
+    if [ -z "$SELECTED_DOMAIN" ]; then
+        ui_error "Invalid selection."
+        pause
+        return
+    fi
+
+    local CERT_PATH="/etc/letsencrypt/live/$SELECTED_DOMAIN"
+
+    echo ""
+    echo -e "${YELLOW}Syncing $SELECTED_DOMAIN to all servers...${NC}"
+    echo ""
+
+    log_info "Starting multi-server sync for $SELECTED_DOMAIN"
+
+    local success=0
+    local failed=0
+
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        
+        echo -ne "${YELLOW}[$name]${NC} Syncing to $host ... "
+        
+        if sync_to_server "$host" "$port" "$user" "$path" "$SELECTED_DOMAIN" "$CERT_PATH" "$panel"; then
+            echo -e "${GREEN}✔ Done${NC}"
+            ((success++))
+        else
+            echo -e "${RED}✘ Failed${NC}"
+            ((failed++))
+        fi
+    done < "$SERVERS_FILE"
+
+    echo ""
+    echo -e "${GREEN}Success: $success${NC} | ${RED}Failed: $failed${NC}"
+    log_info "Multi-server sync completed. Success: $success, Failed: $failed"
+    pause
+}
+
+# ------------------------------------------
+# Sync Specific Server
+# ------------------------------------------
+sync_specific_server() {
+    ui_header "SYNC SSL TO SPECIFIC SERVER"
+
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        ui_warning "No servers configured."
+        pause
+        return
+    fi
+
+    # Select server
+    echo -e "${YELLOW}Select server:${NC}"
+    echo ""
+
+    local idx=1
+    declare -a names hosts ports users paths panels
+    while IFS='|' read -r name host port user path panel; do
+        [ -z "$name" ] && continue
+        echo "$idx) $name ($host)"
+        names[$idx]="$name"
+        hosts[$idx]="$host"
+        ports[$idx]="$port"
+        users[$idx]="$user"
+        paths[$idx]="$path"
+        panels[$idx]="$panel"
+        ((idx++))
+    done < "$SERVERS_FILE"
+
+    echo ""
+    read -p "Select server: " SERVER_SEL
+
+    local S_HOST=${hosts[$SERVER_SEL]}
+    if [ -z "$S_HOST" ]; then
+        ui_error "Invalid selection."
+        pause
+        return
+    fi
+
+    # Select certificate
+    echo ""
+    echo -e "${YELLOW}Select certificate to sync:${NC}"
+    echo ""
+
+    idx=1
+    declare -a domains
+    
+    for dir in /etc/letsencrypt/live/*/; do
+        local domain=$(basename "$dir")
+        [ "$domain" == "README" ] && continue
+        domains[$idx]="$domain"
+        echo "$idx) $domain"
+        ((idx++))
+    done
+
+    if [ $idx -eq 1 ]; then
+        ui_error "No certificates found."
+        pause
+        return
+    fi
+
+    echo ""
+    read -p "Select certificate: " CERT_SEL
+    local SELECTED_DOMAIN=${domains[$CERT_SEL]}
+
+    if [ -z "$SELECTED_DOMAIN" ]; then
+        ui_error "Invalid selection."
+        pause
+        return
+    fi
+
+    local CERT_PATH="/etc/letsencrypt/live/$SELECTED_DOMAIN"
+
+    echo ""
+    echo -e "${YELLOW}Syncing $SELECTED_DOMAIN to ${names[$SERVER_SEL]}...${NC}"
+
+    if sync_to_server "${hosts[$SERVER_SEL]}" "${ports[$SERVER_SEL]}" "${users[$SERVER_SEL]}" \
+                      "${paths[$SERVER_SEL]}" "$SELECTED_DOMAIN" "$CERT_PATH" "${panels[$SERVER_SEL]}"; then
+        ui_success "Sync completed successfully!"
+    else
+        ui_error "Sync failed!"
+    fi
+
+    pause
+}
+
+# ------------------------------------------
+# Quick Sync Offer
+# ------------------------------------------
+offer_multi_server_sync() {
+    if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
+        return
+    fi
+
+    local server_count=$(wc -l < "$SERVERS_FILE")
+    
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}You have $server_count server(s) configured.${NC}"
+    read -p "Sync this certificate to other servers? (y/N): " SYNC_NOW
+    
+    if [[ "$SYNC_NOW" =~ ^[Yy]$ ]]; then
+        local DOMAIN=$1
+        local CERT_PATH="/etc/letsencrypt/live/$DOMAIN"
+        
+        echo ""
+        while IFS='|' read -r name host port user path panel; do
+            [ -z "$name" ] && continue
+            echo -ne "${YELLOW}[$name]${NC} Syncing ... "
+            if sync_to_server "$host" "$port" "$user" "$path" "$DOMAIN" "$CERT_PATH" "$panel"; then
+                echo -e "${GREEN}✔${NC}"
+            else
+                echo -e "${RED}✘${NC}"
+            fi
+        done < "$SERVERS_FILE"
+    fi
+}
+
+# ==========================================
 # SHOW EXISTING SSL PATHS
 # ==========================================
 show_detailed_paths() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       EXISTING SSL PATHS                    ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
+    ui_header "EXISTING SSL PATHS"
+    detect_active_panel > /dev/null
 
-    for panel in "marzban" "pasarguard" "rebecca"; do
-        local CERT_PATH="${PANEL_PATHS[$panel]}"
-        local NODE_PATH="${NODE_PATHS[$panel]}"
-        
-        if [ -d "$CERT_PATH" ] && [ "$(ls -A $CERT_PATH 2>/dev/null)" ]; then
-            echo -e "\n${GREEN}━━━ ${panel^^} Panel ━━━${NC}"
-            for dir in "$CERT_PATH"/*; do
-                if [ -d "$dir" ]; then
-                    dom=$(basename "$dir")
-                    echo -e "  ${YELLOW}Domain:${NC} $dom"
-                    [ -f "$dir/fullchain.pem" ] && echo -e "    Cert: ${CYAN}$dir/fullchain.pem${NC}"
-                    [ -f "$dir/privkey.pem" ] && echo -e "    Key:  ${CYAN}$dir/privkey.pem${NC}"
-                fi
-            done
-        fi
-        
-        if [ -d "$NODE_PATH" ] && [ "$(ls -A $NODE_PATH 2>/dev/null)" ]; then
-            echo -e "\n${PURPLE}━━━ ${panel^^} Node ━━━${NC}"
-            for dir in "$NODE_PATH"/*; do
-                if [ -d "$dir" ]; then
-                    dom=$(basename "$dir")
-                    echo -e "  ${YELLOW}Domain:${NC} $dom"
-                    [ -f "$dir/server.crt" ] && echo -e "    Cert: ${CYAN}$dir/server.crt${NC}"
-                    [ -f "$dir/server.key" ] && echo -e "    Key:  ${CYAN}$dir/server.key${NC}"
-                fi
-            done
-        fi
-    done
+    echo -e "${GREEN}--- Panel Certificates ($PANEL_DEF_CERTS) ---${NC}"
+    if [ -d "$PANEL_DEF_CERTS" ] && [ "$(ls -A $PANEL_DEF_CERTS 2>/dev/null)" ]; then
+        for dir in "$PANEL_DEF_CERTS"/*; do
+            if [ -d "$dir" ]; then
+                local dom=$(basename "$dir")
+                echo -e "  ${YELLOW}Domain:${NC} $dom"
+                [ -f "$dir/fullchain.pem" ] && echo -e "    Cert: ${CYAN}$dir/fullchain.pem${NC}"
+                [ -f "$dir/privkey.pem" ] && echo -e "    Key:  ${CYAN}$dir/privkey.pem${NC}"
+            fi
+        done
+    else
+        echo "  No certificates found."
+    fi
+
+    echo ""
+    echo -e "${PURPLE}--- Node Certificates ($NODE_DEF_CERTS) ---${NC}"
+    if [ -d "$NODE_DEF_CERTS" ] && [ "$(ls -A $NODE_DEF_CERTS 2>/dev/null)" ]; then
+        for dir in "$NODE_DEF_CERTS"/*; do
+            if [ -d "$dir" ]; then
+                local dom=$(basename "$dir")
+                echo -e "  ${YELLOW}Domain:${NC} $dom"
+                [ -f "$dir/server.crt" ] && echo -e "    Cert: ${CYAN}$dir/server.crt${NC}"
+                [ -f "$dir/server.key" ] && echo -e "    Key:  ${CYAN}$dir/server.key${NC}"
+            fi
+        done
+    else
+        echo "  No certificates found."
+    fi
 
     echo ""
     pause
@@ -705,27 +1249,22 @@ show_detailed_paths() {
 # VIEW CERTIFICATE CONTENT
 # ==========================================
 view_cert_content() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       VIEW CERTIFICATE FILES                ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
+    ui_header "VIEW CERTIFICATE FILES"
+    detect_active_panel > /dev/null
 
     declare -a all_certs
     local idx=1
 
-    for panel in "marzban" "pasarguard" "rebecca"; do
-        local CERT_PATH="${PANEL_PATHS[$panel]}"
-        if [ -d "$CERT_PATH" ]; then
-            for dir in "$CERT_PATH"/*; do
-                if [ -d "$dir" ]; then
-                    dom=$(basename "$dir")
-                    all_certs[$idx]="$dir"
-                    echo -e "${GREEN}$idx)${NC} [${panel}] $dom"
-                    ((idx++))
-                fi
-            done
-        fi
-    done
+    if [ -d "$PANEL_DEF_CERTS" ]; then
+        for dir in "$PANEL_DEF_CERTS"/*; do
+            if [ -d "$dir" ]; then
+                local dom=$(basename "$dir")
+                all_certs[$idx]="$dir"
+                echo -e "${GREEN}$idx)${NC} [panel] $dom"
+                ((idx++))
+            fi
+        done
+    fi
 
     if [ $idx -eq 1 ]; then
         echo "No certificates found."
@@ -738,7 +1277,7 @@ view_cert_content() {
     local SELECTED_DIR=${all_certs[$NUM]}
 
     if [ -z "$SELECTED_DIR" ]; then
-        echo -e "${RED}Invalid selection.${NC}"
+        ui_error "Invalid selection."
         pause
         return
     fi
@@ -751,30 +1290,24 @@ view_cert_content() {
     read -p "Select: " F_OPT
 
     local FILE=""
-    local HEADER=""
-
+    
     if [ "$F_OPT" == "1" ]; then 
         [ -f "$SELECTED_DIR/fullchain.pem" ] && FILE="fullchain.pem"
         [ -f "$SELECTED_DIR/server.crt" ] && FILE="server.crt"
-        HEADER="CERTIFICATE / PUBLIC KEY"
     elif [ "$F_OPT" == "2" ]; then 
         [ -f "$SELECTED_DIR/privkey.pem" ] && FILE="privkey.pem"
         [ -f "$SELECTED_DIR/server.key" ] && FILE="server.key"
-        HEADER="PRIVATE KEY (Keep Secret)"
-    else 
-        return 
     fi
 
     if [ -n "$FILE" ] && [ -f "$SELECTED_DIR/$FILE" ]; then
         clear
-        echo -e "${YELLOW}--- START OF $HEADER ---${NC}"
-        echo -ne "${GREEN}"
+        echo -e "${YELLOW}--- START OF FILE ---${NC}"
+        echo -e "${GREEN}"
         cat "$SELECTED_DIR/$FILE"
         echo -e "${NC}"
-        echo -e "${YELLOW}--- END OF $HEADER ---${NC}"
-        echo -e "\n(Select and copy the content above)"
+        echo -e "${YELLOW}--- END OF FILE ---${NC}"
     else
-        echo -e "${RED}File not found in $SELECTED_DIR${NC}"
+        ui_error "File not found."
     fi
     pause
 }
@@ -783,72 +1316,50 @@ view_cert_content() {
 # VIEW LOGS
 # ==========================================
 view_ssl_logs() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       SSL MANAGER LOGS                      ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
+    ui_header "SSL MANAGER LOGS"
+    
     echo "1) View SSL Manager Log (Last 50 lines)"
     echo "2) View Certbot Debug Log (Last 50 lines)"
-    echo "3) View Full SSL Manager Log"
-    echo "4) View Full Certbot Log"
-    echo "5) Clear All Logs"
-    echo "6) Export Logs to File"
-    echo "7) Back"
+    echo "3) Clear All Logs"
+    echo "4) Export Logs"
+    echo "0) Back"
     echo ""
     read -p "Select: " LOG_OPT
 
     case $LOG_OPT in
         1)
             if [ -f "$SSL_LOG_FILE" ]; then
-                echo -e "\n${YELLOW}--- Last 50 lines of SSL Manager Log ---${NC}"
+                echo -e "\n${YELLOW}--- SSL Manager Log ---${NC}"
                 tail -n 50 "$SSL_LOG_FILE"
             else
-                echo -e "${RED}Log file not found.${NC}"
+                ui_error "Log file not found."
             fi
             ;;
         2)
             if [ -f "$CERTBOT_DEBUG_LOG" ]; then
-                echo -e "\n${YELLOW}--- Last 50 lines of Certbot Debug Log ---${NC}"
+                echo -e "\n${YELLOW}--- Certbot Debug Log ---${NC}"
                 tail -n 50 "$CERTBOT_DEBUG_LOG"
             else
-                echo -e "${RED}Certbot log file not found.${NC}"
+                ui_error "Certbot log not found."
             fi
             ;;
         3)
-            if [ -f "$SSL_LOG_FILE" ]; then
-                less "$SSL_LOG_FILE"
-            else
-                echo -e "${RED}Log file not found.${NC}"
-            fi
+            > "$SSL_LOG_FILE" 2>/dev/null
+            > "$CERTBOT_DEBUG_LOG" 2>/dev/null
+            ui_success "Logs cleared."
             ;;
         4)
-            if [ -f "$CERTBOT_DEBUG_LOG" ]; then
-                less "$CERTBOT_DEBUG_LOG"
-            else
-                echo -e "${RED}Certbot log file not found.${NC}"
-            fi
-            ;;
-        5)
-            read -p "Are you sure you want to clear all logs? (y/N): " CONFIRM
-            if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-                > "$SSL_LOG_FILE" 2>/dev/null
-                > "$CERTBOT_DEBUG_LOG" 2>/dev/null
-                echo -e "${GREEN}✔ Logs cleared.${NC}"
-            fi
-            ;;
-        6)
             local EXPORT_FILE="/root/ssl-logs-$(date '+%Y%m%d-%H%M%S').txt"
             {
-                echo "========== SSL Manager Log =========="
-                cat "$SSL_LOG_FILE" 2>/dev/null || echo "No log file found"
+                echo "=== SSL Manager Log ==="
+                cat "$SSL_LOG_FILE" 2>/dev/null
                 echo ""
-                echo "========== Certbot Debug Log =========="
-                cat "$CERTBOT_DEBUG_LOG" 2>/dev/null || echo "No log file found"
+                echo "=== Certbot Log ==="
+                cat "$CERTBOT_DEBUG_LOG" 2>/dev/null
             } > "$EXPORT_FILE"
-            echo -e "${GREEN}✔ Logs exported to: $EXPORT_FILE${NC}"
+            ui_success "Exported to: $EXPORT_FILE"
             ;;
-        7) return ;;
+        0) return ;;
     esac
     pause
 }
@@ -857,14 +1368,10 @@ view_ssl_logs() {
 # CERTIFICATE INFO
 # ==========================================
 show_cert_info() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       CERTIFICATE INFORMATION               ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
+    ui_header "CERTIFICATE INFORMATION"
 
     if [ ! -d "/etc/letsencrypt/live" ]; then
-        echo -e "${RED}No Let's Encrypt certificates found.${NC}"
+        ui_error "No Let's Encrypt certificates found."
         pause
         return
     fi
@@ -895,9 +1402,6 @@ show_cert_info() {
                 else
                     echo -e "${GREEN}Days Left: $days_left ✔${NC}"
                 fi
-                
-                local issuer=$(openssl x509 -issuer -noout -in "$cert_file" 2>/dev/null | sed 's/issuer=//')
-                echo -e "${YELLOW}Issuer:${NC} $issuer"
                 echo ""
             fi
         fi
@@ -909,71 +1413,43 @@ show_cert_info() {
 # RENEW CERTIFICATES
 # ==========================================
 renew_certificates() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       RENEW SSL CERTIFICATES                ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
-    
+    ui_header "RENEW SSL CERTIFICATES"
     init_logging
+    
     log_info "Starting certificate renewal"
 
-    echo -e "${YELLOW}Stopping web services...${NC}"
+    ui_spinner_start "Stopping web services..."
     systemctl stop nginx 2>/dev/null
     systemctl stop apache2 2>/dev/null
+    ui_spinner_stop
 
-    echo -e "${YELLOW}Renewing certificates...${NC}"
+    ui_spinner_start "Renewing certificates..."
     certbot renew --standalone > "$CERTBOT_DEBUG_LOG" 2>&1
     local RESULT=$?
+    ui_spinner_stop
 
-    echo -e "${YELLOW}Starting web services...${NC}"
     systemctl start nginx 2>/dev/null
 
     if [ $RESULT -eq 0 ]; then
-        echo -e "${GREEN}✔ Certificate renewal completed!${NC}"
+        ui_success "Certificate renewal completed!"
         log_success "Certificate renewal completed"
-        
-        # Ask if user wants to update panel certificates
-        echo ""
-        read -p "Update panel certificates with renewed files? (y/N): " UPDATE_PANEL
-        if [[ "$UPDATE_PANEL" =~ ^[Yy]$ ]]; then
-            select_panel
-            # Copy renewed certs to panel locations
-            for dir in /etc/letsencrypt/live/*/; do
-                local domain=$(basename "$dir")
-                [ "$domain" == "README" ] && continue
-                
-                local TARGET_DIR="$(get_panel_cert_path)/$domain"
-                if [ -d "$TARGET_DIR" ]; then
-                    cp -L "$dir/fullchain.pem" "$TARGET_DIR/" 2>/dev/null
-                    cp -L "$dir/privkey.pem" "$TARGET_DIR/" 2>/dev/null
-                    echo -e "${GREEN}✔ Updated: $domain${NC}"
-                fi
-            done
-            restart_panel_service
-        fi
     else
-        echo -e "${RED}✘ Certificate renewal failed!${NC}"
-        echo -e "${YELLOW}Check log: $CERTBOT_DEBUG_LOG${NC}"
-        log_error "Certificate renewal failed"
+        ui_error "Certificate renewal failed!"
         tail -n 20 "$CERTBOT_DEBUG_LOG"
+        log_error "Certificate renewal failed"
     fi
     
     pause
 }
 
 # ==========================================
-# REVOKE CERTIFICATE (NEW)
+# REVOKE CERTIFICATE
 # ==========================================
 revoke_certificate() {
-    clear
-    echo -e "${CYAN}=============================================${NC}"
-    echo -e "${YELLOW}       REVOKE SSL CERTIFICATE                ${NC}"
-    echo -e "${CYAN}=============================================${NC}"
-    echo ""
+    ui_header "REVOKE SSL CERTIFICATE"
     
     if [ ! -d "/etc/letsencrypt/live" ]; then
-        echo -e "${RED}No certificates found.${NC}"
+        ui_error "No certificates found."
         pause
         return
     fi
@@ -997,7 +1473,7 @@ revoke_certificate() {
     fi
 
     echo ""
-    read -p "Select certificate to revoke (or 0 to cancel): " SEL
+    read -p "Select certificate to revoke (0 to cancel): " SEL
     
     if [ "$SEL" == "0" ]; then
         return
@@ -1005,18 +1481,18 @@ revoke_certificate() {
 
     local DOMAIN=${certs[$SEL]}
     if [ -z "$DOMAIN" ]; then
-        echo -e "${RED}Invalid selection.${NC}"
+        ui_error "Invalid selection."
         pause
         return
     fi
 
-    echo -e "${RED}⚠️ WARNING: This will permanently revoke the certificate for $DOMAIN${NC}"
-    read -p "Are you sure? Type 'yes' to confirm: " CONFIRM
+    echo -e "${RED}⚠️ WARNING: This will permanently revoke $DOMAIN${NC}"
+    read -p "Type 'yes' to confirm: " CONFIRM
 
     if [ "$CONFIRM" == "yes" ]; then
-        certbot revoke --cert-path "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" --non-interactive
-        certbot delete --cert-name "$DOMAIN" --non-interactive
-        echo -e "${GREEN}✔ Certificate revoked and deleted.${NC}"
+        certbot revoke --cert-path "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" --non-interactive 2>/dev/null
+        certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null
+        ui_success "Certificate revoked and deleted."
         log_info "Certificate revoked for $DOMAIN"
     else
         echo "Cancelled."
@@ -1032,38 +1508,42 @@ ssl_menu() {
     init_logging
     
     while true; do
-        clear
-        echo -e "${BLUE}===========================================${NC}"
-        echo -e "${YELLOW}      SSL MANAGEMENT v2.0                  ${NC}"
-        echo -e "${BLUE}===========================================${NC}"
+        ui_header "SSL MANAGEMENT v2.1"
+        detect_active_panel > /dev/null
+        
+        echo -e "${CYAN}Active Panel: $(basename $PANEL_DIR)${NC}"
         echo ""
-        echo "1) 🔐 Request New SSL Certificate"
-        echo "2) 📁 Show SSL File Paths"
-        echo "3) 📄 View Certificate Content"
-        echo "4) ℹ️  Certificate Information & Expiry"
-        echo "5) 🔄 Renew All Certificates"
-        echo "6) 🗑️  Revoke Certificate"
-        echo "7) 📋 View Logs"
-        echo "8) 📜 Domain List (Let's Encrypt)"
-        echo "9) ↩️  Back"
+        echo "1)  🔐 Request New SSL Certificate"
+        echo "2)  🌟 Request Wildcard SSL (*.domain.com)"
+        echo "3)  📁 Show SSL File Paths"
+        echo "4)  📄 View Certificate Content"
+        echo "5)  ℹ️  Certificate Information & Expiry"
+        echo "6)  🔄 Renew All Certificates"
+        echo "7)  🗑️  Revoke Certificate"
+        echo "8)  🌐 Multi-Server Sync"
+        echo "9)  📋 View Logs"
+        echo "10) 📜 Domain List (Let's Encrypt)"
         echo ""
-        echo -e "${BLUE}===========================================${NC}"
+        echo "0)  ↩️  Back"
+        echo ""
         read -p "Select: " S_OPT
         
         case $S_OPT in
             1) ssl_wizard ;;
-            2) show_detailed_paths ;;
-            3) view_cert_content ;;
-            4) show_cert_info ;;
-            5) renew_certificates ;;
-            6) revoke_certificate ;;
-            7) view_ssl_logs ;;
-            8) 
+            2) wildcard_ssl_wizard ;;
+            3) show_detailed_paths ;;
+            4) view_cert_content ;;
+            5) show_cert_info ;;
+            6) renew_certificates ;;
+            7) revoke_certificate ;;
+            8) multi_server_menu ;;
+            9) view_ssl_logs ;;
+            10) 
                 echo ""
                 ls -1 /etc/letsencrypt/live 2>/dev/null || echo "No certificates found."
                 pause 
                 ;;
-            9) return ;;
+            0) return ;;
             *) ;;
         esac
     done
