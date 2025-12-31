@@ -722,8 +722,10 @@ backup_menu() {
 # ==========================================
 # ENTRY POINT
 # ==========================================
-if [ "$1" == "auto" ]; then
-    do_backup "auto"
-else
-    backup_menu
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [ "$1" == "auto" ]; then
+        do_backup "auto"
+    else
+        backup_menu
+    fi
 fi
