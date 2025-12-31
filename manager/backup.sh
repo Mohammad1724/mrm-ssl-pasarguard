@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# ====================================================
-# MRM BACKUP & RESTORE PRO - v7.0
-# Compatible with MRM Manager
-# ====================================================
+# ==========================================
+# MRM BACKUP & RESTORE PRO v7.1
+# With Auto-Fix for ENV & Docker Compose
+# ==========================================
 
 # Load modules
 source /opt/mrm-manager/utils.sh
@@ -31,12 +31,11 @@ log_backup() {
 }
 
 # ==========================================
-# ENVIRONMENT DETECTION (Uses utils.sh)
+# ENVIRONMENT DETECTION
 # ==========================================
 setup_env() {
     detect_active_panel > /dev/null
     
-    # Set Docker command
     DOCKER_CMD="docker compose"
     ! docker compose version >/dev/null 2>&1 && DOCKER_CMD="docker-compose"
     
@@ -45,6 +44,128 @@ setup_env() {
 
 get_env_val() {
     [ -f "$PANEL_ENV" ] && grep "^$1=" "$PANEL_ENV" | cut -d'=' -f2- | sed 's/[[:space:]]*#.*$//' | sed 's/^"//;s/"$//' | xargs
+}
+
+# ==========================================
+# GET CURRENT SERVER IP
+# ==========================================
+get_server_ip() {
+    local IP=""
+    
+    # Try multiple sources
+    IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null)
+    
+    if [ -z "$IP" ]; then
+        IP=$(curl -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+    fi
+    
+    if [ -z "$IP" ]; then
+        IP=$(curl -s --connect-timeout 5 ipinfo.io/ip 2>/dev/null)
+    fi
+    
+    if [ -z "$IP" ]; then
+        # Get from network interface
+        IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+')
+    fi
+    
+    echo "$IP"
+}
+
+# ==========================================
+# FIX ENV FILE (Broken Lines)
+# ==========================================
+fix_env_file() {
+    local ENV_FILE=$1
+    
+    if [ ! -f "$ENV_FILE" ]; then
+        return
+    fi
+    
+    log_backup "INFO" "Fixing .env file: $ENV_FILE"
+    
+    # Create temp file
+    local TEMP_FILE=$(mktemp)
+    
+    # Read and fix broken lines
+    local prev_line=""
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Check if previous line ends with UVICORN_ or SSL_ without value
+        if [[ "$prev_line" =~ ^UVICORN_$ ]] || [[ "$prev_line" =~ ^SSL_$ ]]; then
+            # Merge with current line
+            echo "${prev_line}${line}" >> "$TEMP_FILE"
+            prev_line=""
+        elif [[ "$line" =~ ^UVICORN_$ ]] || [[ "$line" =~ ^SSL_$ ]]; then
+            # Save for next iteration
+            prev_line="$line"
+        else
+            if [ -n "$prev_line" ]; then
+                echo "$prev_line" >> "$TEMP_FILE"
+            fi
+            echo "$line" >> "$TEMP_FILE"
+            prev_line=""
+        fi
+    done < "$ENV_FILE"
+    
+    # Write last line if exists
+    if [ -n "$prev_line" ]; then
+        echo "$prev_line" >> "$TEMP_FILE"
+    fi
+    
+    # Also fix with sed for any remaining issues
+    sed -i ':a;N;$!ba;s/UVICORN_\nSSL_CERTFILE/UVICORN_SSL_CERTFILE/g' "$TEMP_FILE"
+    sed -i ':a;N;$!ba;s/UVICORN_\nSSL_KEYFILE/UVICORN_SSL_KEYFILE/g' "$TEMP_FILE"
+    sed -i ':a;N;$!ba;s/UVICORN_\n/UVICORN_/g' "$TEMP_FILE"
+    sed -i ':a;N;$!ba;s/SSL_\n/SSL_/g' "$TEMP_FILE"
+    
+    # Fix spaces around = 
+    sed -i 's/[[:space:]]*=[[:space:]]*/=/g' "$TEMP_FILE"
+    
+    # Fix UVICORN_ SSL_ pattern (space instead of underscore continuation)
+    sed -i 's/UVICORN_ SSL_CERTFILE/UVICORN_SSL_CERTFILE/g' "$TEMP_FILE"
+    sed -i 's/UVICORN_ SSL_KEYFILE/UVICORN_SSL_KEYFILE/g' "$TEMP_FILE"
+    
+    # Remove duplicate empty lines
+    cat -s "$TEMP_FILE" > "$ENV_FILE"
+    rm -f "$TEMP_FILE"
+    
+    log_backup "SUCCESS" "Fixed .env file: $ENV_FILE"
+}
+
+# ==========================================
+# FIX DOCKER COMPOSE (Update IPs)
+# ==========================================
+fix_docker_compose() {
+    local COMPOSE_FILE="$PANEL_DIR/docker-compose.yml"
+    
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        log_backup "WARNING" "docker-compose.yml not found"
+        return
+    fi
+    
+    # Get current server IP
+    local NEW_IP=$(get_server_ip)
+    
+    if [ -z "$NEW_IP" ]; then
+        log_backup "WARNING" "Could not detect server IP"
+        return
+    fi
+    
+    log_backup "INFO" "Updating docker-compose with new IP: $NEW_IP"
+    
+    # Update PGADMIN_LISTEN_ADDRESS
+    if grep -q "PGADMIN_LISTEN_ADDRESS" "$COMPOSE_FILE"; then
+        sed -i "s/PGADMIN_LISTEN_ADDRESS:.*/PGADMIN_LISTEN_ADDRESS: $NEW_IP/g" "$COMPOSE_FILE"
+        log_backup "SUCCESS" "Updated PGADMIN_LISTEN_ADDRESS to $NEW_IP"
+    fi
+    
+    # Update any IP:port patterns (like 185.117.0.100:8010)
+    sed -i -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:8010/${NEW_IP}:8010/g" "$COMPOSE_FILE"
+    sed -i -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:7431/${NEW_IP}:7431/g" "$COMPOSE_FILE"
+    
+    # Update gunicorn bind address if exists
+    sed -i -E "s/--bind [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:/--bind ${NEW_IP}:/g" "$COMPOSE_FILE"
+    
+    log_backup "SUCCESS" "Updated docker-compose.yml with IP: $NEW_IP"
 }
 
 # ==========================================
@@ -68,9 +189,12 @@ send_to_telegram() {
     fi
     
     if [ -n "$FILE" ] && [ -f "$FILE" ]; then
-        # Send file
-        local CAPTION="✅ MRM Backup\n🖥 $(hostname)\n📅 $(date '+%Y-%m-%d %H:%M')\n📦 $(basename "$FILE")"
-        local RESULT=$(curl -s -F chat_id="$CH" -F caption="$CAPTION" -F parse_mode="HTML" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        local CAPTION="✅ MRM Backup
+🖥 $(hostname)
+📅 $(date '+%Y-%m-%d %H:%M')
+📦 $(basename "$FILE")"
+        
+        local RESULT=$(curl -s -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
         
         if echo "$RESULT" | grep -q '"ok":true'; then
             log_backup "SUCCESS" "File sent to Telegram: $(basename "$FILE")"
@@ -80,11 +204,9 @@ send_to_telegram() {
             return 1
         fi
     elif [ -n "$MESSAGE" ]; then
-        # Send message only
         curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
             -d chat_id="$CH" \
-            -d text="$MESSAGE" \
-            -d parse_mode="HTML" > /dev/null
+            -d text="$MESSAGE" > /dev/null
         return $?
     fi
     
@@ -145,7 +267,6 @@ setup_telegram() {
         return
     fi
     
-    # Save config
     cat > "$TG_CONFIG" << EOF
 TG_TOKEN="$TK"
 TG_CHAT="$CI"
@@ -155,7 +276,6 @@ EOF
     ui_success "Telegram configured!"
     log_backup "INFO" "Telegram bot configured"
     
-    # Test connection
     echo ""
     read -p "Test connection now? (Y/n): " TEST
     if [[ ! "$TEST" =~ ^[Nn]$ ]]; then
@@ -172,7 +292,11 @@ apply_smart_fix() {
     echo -e "${CYAN}Applying Intelligent System Repairs...${NC}"
     log_backup "INFO" "Starting smart fix"
 
-    # A. Secure Port Detection & Firewall
+    # A. Get current server IP
+    local SERVER_IP=$(get_server_ip)
+    echo -e "${BLUE}Detected Server IP: ${CYAN}$SERVER_IP${NC}"
+
+    # B. Secure Port Detection & Firewall
     ui_spinner_start "Configuring Firewall..."
     local SSH_PORT=$(ss -tlnp | grep sshd | grep -Po '(?<=:)\d+' | head -1)
     [ -z "$SSH_PORT" ] && SSH_PORT=22
@@ -183,30 +307,29 @@ apply_smart_fix() {
     ui_spinner_stop
     ui_success "Firewall configured (SSH: $SSH_PORT)"
 
-    # B. Fix Panel .env
-    if [ -f "$PANEL_ENV" ]; then
-        ui_spinner_start "Fixing Panel .env..."
-        sed -i 's|\(postgresql+asyncpg://[^"?]*\)\(["\s]*\)$|\1?ssl=disable\2|' "$PANEL_ENV"
-        sed -i 's/\([^[:space:]]\)\(UVICORN_\)/\1\n\2/g' "$PANEL_ENV"
-        sed -i 's/\([^[:space:]]\)\(SSL_\)/\1\n\2/g' "$PANEL_ENV"
-        ui_spinner_stop
-        ui_success "Panel .env repaired"
-    fi
+    # C. Fix Panel .env
+    ui_spinner_start "Fixing .env files..."
+    fix_env_file "$PANEL_ENV"
+    fix_env_file "$NODE_ENV"
+    ui_spinner_stop
+    ui_success ".env files repaired"
 
-    # C. Fix Node .env
+    # D. Fix docker-compose.yml IPs
+    ui_spinner_start "Updating docker-compose IPs..."
+    fix_docker_compose
+    ui_spinner_stop
+    ui_success "Docker compose updated with IP: $SERVER_IP"
+
+    # E. Fix Node .env
     if [ -f "$NODE_ENV" ]; then
-        ui_spinner_start "Fixing Node .env..."
-        # Remove spaces around '='
+        ui_spinner_start "Fixing Node configuration..."
         sed -i 's/=[[:space:]]*/=/g' "$NODE_ENV"
         sed -i 's/[[:space:]]*=/=/g' "$NODE_ENV"
-        # Ensure SSL paths are clean
-        sed -i "s|SSL_CERT_FILE=.*|SSL_CERT_FILE=$NODE_DEF_CERTS/ssl_cert.pem|g" "$NODE_ENV"
-        sed -i "s|SSL_KEY_FILE=.*|SSL_KEY_FILE=$NODE_DEF_CERTS/ssl_key.pem|g" "$NODE_ENV"
         ui_spinner_stop
-        ui_success "Node .env repaired"
+        ui_success "Node .env fixed"
     fi
     
-    # D. Generate Node SSL key if missing
+    # F. Generate Node SSL key if missing
     if [ -d "$NODE_DIR" ]; then
         mkdir -p "$NODE_DEF_CERTS"
         if [ ! -f "$NODE_DEF_CERTS/ssl_key.pem" ]; then
@@ -217,7 +340,7 @@ apply_smart_fix() {
         fi
     fi
 
-    # E. Nginx Proxy Repair
+    # G. Nginx Proxy Repair
     local NG_CONF="/etc/nginx/conf.d/panel_separate.conf"
     if [ -f "$NG_CONF" ]; then
         ui_spinner_start "Fixing Nginx config..."
@@ -277,7 +400,7 @@ do_backup() {
         [ "$MODE" != "auto" ] && ui_spinner_start "Backing up node files..."
         mkdir -p "$B_PATH/node" "$B_PATH/node-data"
         cp -a "$NODE_DIR/." "$B_PATH/node/" 2>/dev/null
-        cp -a "$NODE_DEF_CERTS/../." "$B_PATH/node-data/" 2>/dev/null
+        [ -d "$(dirname "$NODE_DEF_CERTS")" ] && cp -a "$(dirname "$NODE_DEF_CERTS")/." "$B_PATH/node-data/" 2>/dev/null
         [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Node files backed up"
     fi
 
@@ -298,14 +421,16 @@ do_backup() {
     fi
 
     # 6. Save metadata
+    local SERVER_IP=$(get_server_ip)
     cat > "$B_PATH/backup_info.txt" << EOF
 Backup Date: $(date '+%Y-%m-%d %H:%M:%S')
 Hostname: $(hostname)
+Server IP: $SERVER_IP
 Panel: $(basename "$PANEL_DIR")
 Panel Dir: $PANEL_DIR
 Data Dir: $DATA_DIR
 Node Dir: $NODE_DIR
-MRM Version: 2.2
+MRM Version: 3.0
 EOF
 
     # 7. Create archive
@@ -402,6 +527,10 @@ do_restore() {
     
     log_backup "INFO" "Starting restore from: $(basename "$SELECTED")"
 
+    # Get new server IP before restore
+    local NEW_SERVER_IP=$(get_server_ip)
+    echo -e "${BLUE}Current Server IP: ${CYAN}$NEW_SERVER_IP${NC}"
+
     # Extract backup
     local WORK_DIR="/tmp/mrm_restore_$(date +%s)"
     mkdir -p "$WORK_DIR"
@@ -425,6 +554,14 @@ do_restore() {
         echo -e "${CYAN}Backup Info:${NC}"
         cat "$ROOT/backup_info.txt"
         echo ""
+        
+        # Show IP change warning
+        local OLD_IP=$(grep "Server IP:" "$ROOT/backup_info.txt" | awk '{print $3}')
+        if [ -n "$OLD_IP" ] && [ "$OLD_IP" != "$NEW_SERVER_IP" ]; then
+            echo -e "${YELLOW}⚠ IP Changed: $OLD_IP → $NEW_SERVER_IP${NC}"
+            echo -e "${GREEN}Will auto-update configurations...${NC}"
+            echo ""
+        fi
     fi
 
     # Stop services
@@ -479,12 +616,27 @@ do_restore() {
         ui_success "Nginx config restored"
     fi
 
+    # ⭐ FIX CONFIGURATIONS (Important!)
+    echo ""
+    echo -e "${CYAN}Fixing configurations for new server...${NC}"
+    
+    ui_spinner_start "Fixing .env files..."
+    fix_env_file "$PANEL_ENV"
+    fix_env_file "$NODE_ENV"
+    ui_spinner_stop
+    ui_success ".env files fixed"
+    
+    ui_spinner_start "Updating IPs in docker-compose..."
+    fix_docker_compose
+    ui_spinner_stop
+    ui_success "Docker compose IPs updated"
+
     # Apply smart fixes
     apply_smart_fix
 
     # Start services
     ui_spinner_start "Starting services..."
-    if [ -d "$NODE_DIR" ]; then
+    if [ -d "$NODE_DIR" ] && [ -f "$NODE_DIR/docker-compose.yml" ]; then
         cd "$NODE_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
     fi
     cd "$PANEL_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
@@ -514,9 +666,12 @@ do_restore() {
     echo ""
     echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║              ✔ RESTORE COMPLETED!                        ║${NC}"
+    echo -e "${GREEN}╠══════════════════════════════════════════════════════════╣${NC}"
+    echo -e "${GREEN}║${NC} Server IP: ${CYAN}$NEW_SERVER_IP${NC}"
+    echo -e "${GREEN}║${NC} Configurations auto-fixed for new server"
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${YELLOW}Safety backup saved at: $SAFETY_BACKUP${NC}"
+    echo -e "${YELLOW}Safety backup: $SAFETY_BACKUP${NC}"
     
     pause
 }
@@ -557,7 +712,6 @@ setup_cron() {
         *) ui_error "Invalid selection"; pause; return ;;
     esac
     
-    # Update crontab
     (crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH"
      [ -n "$CRON_TIME" ] && echo "$CRON_TIME $SCRIPT_PATH auto > /dev/null 2>&1"
     ) | crontab -
@@ -676,7 +830,8 @@ backup_menu() {
     init_backup_logging
     
     while true; do
-        ui_header "BACKUP & RESTORE v7.0"
+        clear
+        ui_header "BACKUP & RESTORE v7.1"
         setup_env
         
         # Show status
@@ -685,8 +840,10 @@ backup_menu() {
         [ -f "$TG_CONFIG" ] && TG_STATUS="${GREEN}Configured${NC}"
         local CRON_STATUS="${RED}Disabled${NC}"
         crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH" && CRON_STATUS="${GREEN}Active${NC}"
+        local SERVER_IP=$(get_server_ip)
         
-        echo -e "Panel: ${CYAN}$(basename "$PANEL_DIR")${NC} | Backups: ${CYAN}$BACKUP_COUNT${NC} | Telegram: $TG_STATUS | Cron: $CRON_STATUS"
+        echo -e "Panel: ${CYAN}$(basename "$PANEL_DIR")${NC} | IP: ${CYAN}$SERVER_IP${NC}"
+        echo -e "Backups: ${CYAN}$BACKUP_COUNT${NC} | Telegram: $TG_STATUS | Cron: $CRON_STATUS"
         echo ""
         
         echo "1)  📦 Create Full Backup"
