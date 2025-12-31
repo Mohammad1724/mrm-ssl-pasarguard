@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# Installer for MRM Manager v1.1
+# ==========================================
+# MRM Manager Installer v3.0
+# ==========================================
+
 INSTALL_DIR="/opt/mrm-manager"
-# لینک مستقیم به فایل‌های خام (حتماً چک کنید که فایل‌ها در این مسیر باشند)
 REPO_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/manager"
 
 # Colors
@@ -18,21 +20,19 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing MRM Manager v1.3...${NC}"
+echo -e "${BLUE}Installing MRM Manager v3.0...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-# List of all files to install
+# Core files only (node.sh and port_manager.sh removed)
 FILES=(
     "utils.sh"
     "ui.sh"
     "ssl.sh"
-    "node.sh"
-    "theme.sh"
-    "site.sh"
-    "inbound.sh"
     "backup.sh"
+    "inbound.sh"
     "domain_separator.sh"
-    "port_manager.sh"
+    "site.sh"
+    "theme.sh"
     "migrator.sh"
     "main.sh"
 )
@@ -42,12 +42,11 @@ OPT_FILES=(
     "index.html"
 )
 
-# Function to install a file
 install_file() {
     local FILE=$1
     local IS_OPTIONAL=$2
 
-    # 1. Try Local Install (Priority)
+    # Try Local Install
     if [ -f "./$FILE" ]; then
         cp "./$FILE" "$INSTALL_DIR/$FILE"
         chmod +x "$INSTALL_DIR/$FILE"
@@ -55,9 +54,8 @@ install_file() {
         return 0
     fi
 
-    # 2. Try Online Install (GitHub)
-    # -s: Silent, -L: Follow Redirects, -k: Insecure SSL (just in case), -f: Fail fast
-    if curl -s -L -k -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
+    # Try Online Install
+    if curl -s -L -f -o "$INSTALL_DIR/$FILE" "$REPO_URL/$FILE"; then
         chmod +x "$INSTALL_DIR/$FILE"
         echo -e "${GREEN}✔ Downloaded: $FILE${NC}"
         return 0
@@ -66,8 +64,7 @@ install_file() {
             echo -e "${YELLOW}⚠ Skipped optional: $FILE${NC}"
             return 0
         else
-            echo -e "${RED}✘ Failed to download: $FILE${NC}"
-            echo -e "${YELLOW}  Looking at: $REPO_URL/$FILE${NC}"
+            echo -e "${RED}✘ Failed: $FILE${NC}"
             return 1
         fi
     fi
@@ -77,11 +74,8 @@ echo -e "${YELLOW}Fetching files...${NC}"
 
 # Install Core Files
 for FILE in "${FILES[@]}"; do
-    install_file "$FILE" "false"
-    if [ $? -ne 0 ]; then
-        echo ""
-        echo -e "${RED}CRITICAL ERROR: Could not install core files.${NC}"
-        echo -e "Please check if '${YELLOW}$FILE${NC}' exists in your GitHub repo."
+    if ! install_file "$FILE" "false"; then
+        echo -e "${RED}CRITICAL: Could not install $FILE${NC}"
         exit 1
     fi
 done
@@ -91,7 +85,11 @@ for FILE in "${OPT_FILES[@]}"; do
     install_file "$FILE" "true"
 done
 
-# Create shortcut command
+# Remove old files if exist
+rm -f "$INSTALL_DIR/node.sh" 2>/dev/null
+rm -f "$INSTALL_DIR/port_manager.sh" 2>/dev/null
+
+# Create shortcut
 ln -sf "$INSTALL_DIR/main.sh" /usr/local/bin/mrm
 chmod +x /usr/local/bin/mrm
 
