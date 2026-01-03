@@ -181,6 +181,7 @@ setup_telegram_backup_mirza() {
 # --- Main Menu ---
 mirza_menu() {
     while true; do
+        clear
         mirza_logo
         echo -e "${YELLOW}      Mirza Pro Manager - Version 3.4.1${NC}\n"
         echo -e "${GREEN}╔══════════════════════════════════════════════════════╗${NC}"
