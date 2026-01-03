@@ -1182,6 +1182,7 @@ ssl_menu() {
     init_logging
     
     while true; do
+        clear
         ui_header "SSL MANAGEMENT"
         detect_active_panel > /dev/null
         
