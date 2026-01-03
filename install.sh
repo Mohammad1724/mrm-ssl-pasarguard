@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM Manager Installer v3.0
+# MRM Manager Installer v3.1
 # ==========================================
 
 INSTALL_DIR="/opt/mrm-manager"
@@ -20,10 +20,10 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${BLUE}Installing MRM Manager v3.0...${NC}"
+echo -e "${BLUE}Installing MRM Manager v3.1...${NC}"
 mkdir -p "$INSTALL_DIR"
 
-# Core files only (node.sh and port_manager.sh removed)
+# Core Files List
 FILES=(
     "utils.sh"
     "ui.sh"
@@ -34,6 +34,7 @@ FILES=(
     "site.sh"
     "theme.sh"
     "migrator.sh"
+    "mirza.sh"
     "main.sh"
 )
 
@@ -64,7 +65,7 @@ install_file() {
             echo -e "${YELLOW}⚠ Skipped optional: $FILE${NC}"
             return 0
         else
-            echo -e "${RED}✘ Failed: $FILE${NC}"
+            echo -e "${RED}✘ Failed to download core file: $FILE${NC}"
             return 1
         fi
     fi
@@ -72,24 +73,23 @@ install_file() {
 
 echo -e "${YELLOW}Fetching files...${NC}"
 
-# Install Core Files
+# Install All Files
 for FILE in "${FILES[@]}"; do
     if ! install_file "$FILE" "false"; then
-        echo -e "${RED}CRITICAL: Could not install $FILE${NC}"
+        echo -e "${RED}CRITICAL ERROR: Installation failed at $FILE${NC}"
         exit 1
     fi
 done
 
-# Install Optional Files
 for FILE in "${OPT_FILES[@]}"; do
     install_file "$FILE" "true"
 done
 
-# Remove old files if exist
+# Cleanup old files
 rm -f "$INSTALL_DIR/node.sh" 2>/dev/null
 rm -f "$INSTALL_DIR/port_manager.sh" 2>/dev/null
 
-# Create shortcut
+# Create shortcut command
 ln -sf "$INSTALL_DIR/main.sh" /usr/local/bin/mrm
 chmod +x /usr/local/bin/mrm
 
