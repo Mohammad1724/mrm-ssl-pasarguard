@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM MANAGER v3.0 - Simplified Edition
+# MRM MANAGER v3.1 - Full Pro Edition
 # ==========================================
 
 # Load Modules
@@ -14,6 +14,7 @@ source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/theme.sh
 source /opt/mrm-manager/migrator.sh
+source /opt/mrm-manager/mirza.sh
 
 # Detect panel on startup
 detect_active_panel > /dev/null
@@ -25,7 +26,7 @@ edit_file() {
     if [ -f "$1" ]; then 
         nano "$1"
     else 
-        echo -e "${RED}File not found: $1${NC}"
+        ui_error "File not found: $1"
         pause
     fi
 }
@@ -93,7 +94,6 @@ auto_fix() {
     ufw allow 22,80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
     
-    # Remove bad rules
     for r in "192.0.0.0/8" "102.0.0.0/8" "198.0.0.0/8" "172.0.0.0/8"; do
         ufw delete deny from "$r" >/dev/null 2>&1 || true
         ufw delete deny out to "$r" >/dev/null 2>&1 || true
@@ -106,10 +106,6 @@ auto_fix() {
         sed -i 's|\(postgresql+asyncpg://[^"?]*\)\(["\s]*\)$|\1?ssl=disable\2|' "$PANEL_ENV"
         sed -i 's/\([^[:space:]]\)\(UVICORN_\)/\1\n\2/g' "$PANEL_ENV"
         sed -i 's/\([^[:space:]]\)\(SSL_\)/\1\n\2/g' "$PANEL_ENV"
-    fi
-    if [ -f "$NODE_ENV" ]; then
-        sed -i 's/=[[:space:]]*/=/g' "$NODE_ENV"
-        sed -i 's/[[:space:]]*=/=/g' "$NODE_ENV"
     fi
     ui_spinner_stop
     ui_success ".env Files Fixed"
@@ -206,13 +202,14 @@ main_menu() {
     
     while true; do
         clear
-        ui_header "MRM MANAGER v3.0"
+        ui_header "MRM MANAGER v3.1"
         ui_status_bar
         
         echo "1) 🔐 SSL Certificates"
         echo "2) 💾 Backup & Restore"
-        echo "3) ⚙️  Panel Control"
-        echo "4) 🛠️  Tools"
+        echo "3) 🤖 Mirza Pro (Telegram Bot)"
+        echo "4) ⚙️  Panel Control"
+        echo "5) 🛠️  Tools"
         echo ""
         echo "0) Exit"
         echo ""
@@ -221,8 +218,9 @@ main_menu() {
         case $OPT in
             1) ssl_menu ;;
             2) backup_menu ;;
-            3) panel_menu ;;
-            4) tools_menu ;;
+            3) mirza_menu ;;
+            4) panel_menu ;;
+            5) tools_menu ;;
             0) 
                 clear
                 echo -e "${GREEN}Goodbye!${NC}"
@@ -231,7 +229,6 @@ main_menu() {
         esac
     done
 }
-# ==========================================
-# RUN
-# ==========================================
+
+# Run
 main_menu
