@@ -8,14 +8,14 @@
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&family=Roboto+Mono:wght@500;700&display=swap');
 
         :root {
-            --bg-deep: #1a1f26; /* روشن‌تر برای معلوم شدن کادرها */
+            --bg-deep: #1a1f26;
             --bg-void: #0a0a0f;
             --neon-cyan: #00f2ff;
             --neon-purple: #7000ff;
             --neon-success: #0aff00;
             --glass-hud: rgba(20, 20, 30, 0.5);
-            --glass-panel: rgba(30, 41, 59, 0.7); /* متمایز از پس‌زمینه */
-            --glass-border: rgba(255, 255, 255, 0.12); /* معلوم شدن خطوط کادر */
+            --glass-panel: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.12);
             --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4); 
             --lamp-purple: 0 25px 60px -15px rgba(112, 0, 255, 0.4);
             --lamp-success: 0 25px 60px -15px rgba(10, 255, 0, 0.4);
@@ -124,8 +124,6 @@
             box-shadow: 0 10px 40px rgba(0,0,0,0.3);
         }
 
-        /* بخش Before و After که خطوط بنفش بودند حذف شد */
-
         .panel.span-2 { grid-column: span 2; }
 
         .hud-profile {
@@ -154,7 +152,7 @@
         .hud-info h2 { 
             font-family: var(--font-tech); 
             font-size: 18px; font-weight: 700; 
-            color: var(--neon-cyan) !important; /* رنگ فیروزه‌ای ثابت */
+            color: var(--neon-cyan) !important;
             letter-spacing: 1px;
             margin-bottom: 6px;
             word-break: break-all;
@@ -238,7 +236,6 @@
             text-align: center;
             position: relative;
         }
-        /* خط گوشه Chip حذف شد */
         .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
         .chip-val { font-family: var(--font-tech); font-size: 16px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
         .chip.expiry .chip-val { font-size: 13px; }
@@ -454,6 +451,7 @@
     </div>
 
     <!-- MODALS -->
+    <!-- Modal: انتخاب سیستم عامل برای اتصال مستقیم -->
     <div class="mod" id="osModal" onclick="if(event.target===this)cm('osModal')">
         <div class="mbox">
             <div id="osSelection">
@@ -463,30 +461,91 @@
                     <div class="os-btn" onclick="showApps('ios')"><span>🍎 iOS</span></div>
                 </div>
             </div>
-            <div id="androidApps" style="display: none;"><div class="mtitle">برنامه‌های اندروید</div><div class="app-list">
-                <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
-                <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                <div class="app-opt" onclick="openApp('v2raytun')">v2rayTun</div>
-                <div class="app-opt" onclick="openApp('happ')">Happ</div>
-                <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-            </div></div>
-            <div id="iosApps" style="display: none;"><div class="mtitle">برنامه‌های آیفون</div><div class="app-list">
-                <div class="app-opt" onclick="openApp('streisand')">Streisand</div>
-                <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-                <div class="app-opt" onclick="openApp('shadowrocket')">Shadowrocket</div>
-                <div class="app-opt" onclick="openApp('stash')">Stash</div>
-                <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
-            </div></div>
+            <div id="androidApps" style="display: none;">
+                <div class="mtitle">برنامه‌های اندروید</div>
+                <div class="app-list">
+                    <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
+                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
+                    <div class="app-opt" onclick="openApp('v2raytun')">v2rayTun</div>
+                    <div class="app-opt" onclick="openApp('happ')">Happ</div>
+                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
+                </div>
+            </div>
+            <div id="iosApps" style="display: none;">
+                <div class="mtitle">برنامه‌های آیفون</div>
+                <div class="app-list">
+                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
+                    <div class="app-opt" onclick="openApp('streisand')">Streisand</div>
+                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
+                    <div class="app-opt" onclick="openApp('shadowrocket')">Shadowrocket</div>
+                    <div class="app-opt" onclick="openApp('stash')">Stash</div>
+                    <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
+                </div>
+            </div>
             <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('osModal')">بستن</button>
         </div>
     </div>
 
-    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')"><div class="mbox"><div class="mtitle">دانلود اندروید</div><div class="app-list"><a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a><a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button></div></div>
-    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')"><div class="mbox"><div class="mtitle">دانلود آیفون</div><div class="app-list"><a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a><a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button></div></div>
-    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')"><div class="mbox"><div class="mtitle">دانلود ویندوز</div><div class="app-list"><a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a><a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button></div></div>
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')"><div class="mbox"><div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px;"><img id="qi" src="" width="160"></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('qrm')">بستن</button></div></div>
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')"><div class="mbox"><div class="mtitle">کانفیگ‌ها</div><div id="cl"></div><button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button></div></div>
+    <!-- Modal: دانلود اندروید -->
+    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
+        <div class="mbox">
+            <div class="mtitle">دانلود اندروید</div>
+            <div class="app-list">
+                <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
+                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
+                <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-opt">v2rayTun</a>
+                <a href="https://github.com/nicefeel/nicefeel.github.io/releases" target="_blank" class="app-opt">Happ</a>
+            </div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button>
+        </div>
+    </div>
+
+    <!-- Modal: دانلود آیفون -->
+    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
+        <div class="mbox">
+            <div class="mtitle">دانلود آیفون</div>
+            <div class="app-list">
+                <a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532" target="_blank" class="app-opt">Hiddify</a>
+                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
+                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
+                <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="app-opt">Shadowrocket</a>
+                <a href="https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349" target="_blank" class="app-opt">Stash</a>
+                <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="app-opt">FoXray</a>
+            </div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button>
+        </div>
+    </div>
+
+    <!-- Modal: دانلود ویندوز -->
+    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
+        <div class="mbox">
+            <div class="mtitle">دانلود ویندوز</div>
+            <div class="app-list">
+                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
+                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
+            </div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button>
+        </div>
+    </div>
+
+    <!-- Modal: QR Code -->
+    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
+        <div class="mbox">
+            <div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px;">
+                <img id="qi" src="" width="160">
+            </div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('qrm')">بستن</button>
+        </div>
+    </div>
+
+    <!-- Modal: کانفیگ‌ها -->
+    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
+        <div class="mbox">
+            <div class="mtitle">کانفیگ‌ها</div>
+            <div id="cl"></div>
+            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button>
+        </div>
+    </div>
 
     <div class="tst" id="toast">کپی شد ✓</div>
     <input type="text" id="cph" readonly>
@@ -503,45 +562,81 @@
         var username = '{{ user.username }}';
         if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
         var finalSubUrl = subUrl;
-        if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { finalSubUrl += '#' + username; }
+        if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { 
+            finalSubUrl += '#' + username; 
+        }
         document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(finalSubUrl);
 
         var root = document.documentElement;
         var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'light') { root.classList.add('light'); tb.textContent = '🌙'; } 
+        if (localStorage.getItem('theme') === 'light') { 
+            root.classList.add('light'); 
+            tb.textContent = '🌙'; 
+        } 
         tb.onclick = function () {
-            if (root.classList.contains('light')) { root.classList.remove('light'); tb.textContent = '☀️'; localStorage.setItem('theme', 'dark'); }
-            else { root.classList.add('light'); tb.textContent = '🌙'; localStorage.setItem('theme', 'light'); }
+            if (root.classList.contains('light')) { 
+                root.classList.remove('light'); 
+                tb.textContent = '☀️'; 
+                localStorage.setItem('theme', 'dark'); 
+            } else { 
+                root.classList.add('light'); 
+                tb.textContent = '🌙'; 
+                localStorage.setItem('theme', 'light'); 
+            }
         };
 
         var tot = parseInt(totStr) || 0;
         var use = parseInt(useStr) || 0;
         var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
 
-        var tPer = 0; var expDate = null; var createdDate = null;
-        var daysLeftText = 'نامحدود'; var totalDays = 30;
+        var tPer = 0; 
+        var expDate = null; 
+        var createdDate = null;
+        var daysLeftText = 'نامحدود'; 
+        var totalDays = 30;
+        
         if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
             try {
                 expDate = new Date(expStr);
-                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) createdDate = new Date(createdStr);
+                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) {
+                    createdDate = new Date(createdStr);
+                }
                 if (!isNaN(expDate.getTime())) {
-                    var now = new Date(); var diffMs = expDate - now;
+                    var now = new Date(); 
+                    var diffMs = expDate - now;
                     var days = diffMs / (1000 * 60 * 60 * 24);
-                    if (createdDate && !isNaN(createdDate.getTime())) totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
-                    if (days <= 0) { tPer = 0; daysLeftText = 'منقضی'; } 
-                    else { tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); daysLeftText = Math.ceil(days) + ' روز'; }
+                    if (createdDate && !isNaN(createdDate.getTime())) {
+                        totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
+                    }
+                    if (days <= 0) { 
+                        tPer = 0; 
+                        daysLeftText = 'منقضی'; 
+                    } else { 
+                        tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); 
+                        daysLeftText = Math.ceil(days) + ' روز'; 
+                    }
                 }
             } catch (e) {}
-        } else { tPer = 100; daysLeftText = 'نامحدود'; }
+        } else { 
+            tPer = 100; 
+            daysLeftText = 'نامحدود'; 
+        }
 
         document.getElementById('usagePercent').innerText = Math.round(per) + '%';
         document.getElementById('usageFill').style.width = per + '%';
-        var tp = document.getElementById('timePercent'); var tf = document.getElementById('timeFill');
-        if (daysLeftText === 'نامحدود') { tp.innerText = '∞'; tf.style.width = '100%'; } 
-        else { tp.innerText = Math.round(tPer) + '%'; tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; }
+        var tp = document.getElementById('timePercent'); 
+        var tf = document.getElementById('timeFill');
+        if (daysLeftText === 'نامحدود') { 
+            tp.innerText = '∞'; 
+            tf.style.width = '100%'; 
+        } else { 
+            tp.innerText = Math.round(tPer) + '%'; 
+            tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; 
+        }
 
         function fb(b) {
-            if (tot === 0) return 'نامحدود'; if (b <= 0) return '0 B';
+            if (tot === 0) return 'نامحدود'; 
+            if (b <= 0) return '0 B';
             var u = ['B', 'KB', 'MB', 'GB', 'TB'];
             var i = Math.floor(Math.log(b) / Math.log(1024));
             return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
@@ -554,10 +649,13 @@
             if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
             navigator.clipboard.writeText(t).then(() => st(btn));
         }
+        
         function st(btn) {
             var t = document.getElementById('toast');
-            t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1500);
+            t.classList.add('show'); 
+            setTimeout(() => t.classList.remove('show'), 1500);
         }
+        
         function om(i) { 
             if (i === 'osModal') {
                 document.getElementById('osSelection').style.display = 'block';
@@ -566,37 +664,83 @@
             }
             document.getElementById(i).style.display = 'flex'; 
         }
-        function cm(i) { document.getElementById(i).style.display = 'none'; }
+        
+        function cm(i) { 
+            document.getElementById(i).style.display = 'none'; 
+        }
+        
         function showApps(os) {
             document.getElementById('osSelection').style.display = 'none';
             document.getElementById(os === 'android' ? 'androidApps' : 'iosApps').style.display = 'block';
         }
+        
         function openApp(app) {
-            var t = finalSubUrl; var n = document.title; var link = '';
-            if (app === 'v2rayng') link = 'v2rayng://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'hiddify') link = 'hiddify://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'v2raytun') link = 'v2raytun://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'happ') link = 'happ://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'v2box') link = 'v2box://install-sub?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'streisand') link = 'streisand://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'shadowrocket') link = 'shadowrocket://add/' + t + '?remark=' + encodeURIComponent(n);
-            else if (app === 'stash') link = 'stash://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else if (app === 'foxray') link = 'foxray://install-config?url=' + encodeURIComponent(t) + '&name=' + encodeURIComponent(n);
-            else link = t;
+            var t = finalSubUrl;
+            var n = document.title;
+            var encodedUrl = encodeURIComponent(t);
+            var encodedName = encodeURIComponent(n);
+            var base64Url = btoa(t);
+            var link = '';
+            
+            // ========== Android Apps ==========
+            if (app === 'v2rayng') {
+                link = 'v2rayng://install-sub?url=' + encodedUrl + '&name=' + encodedName;
+            }
+            else if (app === 'hiddify') {
+                // Hiddify - works for both Android & iOS
+                link = 'hiddify://import/' + t;
+            }
+            else if (app === 'v2raytun') {
+                // v2rayTun - correct format with base64
+                link = 'v2raytun://import/' + base64Url;
+            }
+            else if (app === 'happ') {
+                link = 'happ://add/' + base64Url;
+            }
+            else if (app === 'v2box') {
+                link = 'v2box://install-sub?url=' + encodedUrl + '&name=' + encodedName;
+            }
+            // ========== iOS Apps ==========
+            else if (app === 'streisand') {
+                // Streisand - correct format
+                link = 'streisand://import/' + t;
+            }
+            else if (app === 'shadowrocket') {
+                // Shadowrocket - sub:// with base64
+                link = 'sub://' + base64Url + '#' + encodedName;
+            }
+            else if (app === 'stash') {
+                link = 'stash://install-config?url=' + encodedUrl + '&name=' + encodedName;
+            }
+            else if (app === 'foxray') {
+                link = 'foxray://import/' + t;
+            }
+            else {
+                link = t;
+            }
+            
             window.location.href = link;
         }
+        
         function sc() {
-            om('cfm'); var l = document.getElementById('cl'); l.innerHTML = '...';
+            om('cfm'); 
+            var l = document.getElementById('cl'); 
+            l.innerHTML = '...';
             fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
                 if (t) {
                     l.innerHTML = '';
                     t.split('\n').forEach(x => {
                         var z = x.trim();
                         if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            var n = 'کانفیگ'; if (z.indexOf('#') > -1) n = decodeURIComponent(z.split('#')[1]);
-                            var div = document.createElement('div'); div.className = 'app-opt';
+                            var n = 'کانفیگ'; 
+                            if (z.indexOf('#') > -1) {
+                                n = decodeURIComponent(z.split('#')[1]);
+                            }
+                            var div = document.createElement('div'); 
+                            div.className = 'app-opt';
                             div.innerHTML = '<span>' + n + '</span><span>کپی</span>';
-                            div.onclick = function() { hc(z, this); }; l.appendChild(div);
+                            div.onclick = function() { hc(z, this); }; 
+                            l.appendChild(div);
                         }
                     });
                 }
