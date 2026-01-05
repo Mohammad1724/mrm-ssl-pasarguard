@@ -679,12 +679,35 @@ do_restore() {
 # ==========================================
 # CRON SCHEDULER
 # ==========================================
-setup_cron() {
+
+# ==========================================
+# VIEW LOGS
+# ==========================================
+view_backup_logs() {
+    ui_header "BACKUP LOGS"
+    
+    if [ -f "$BACKUP_LOG" ]; then
+        echo -e "${YELLOW}Last 30 entries:${NC}"
+        echo ""
+        tail -n 30 "$BACKUP_LOG"
+    else
+        ui_warning "No logs found"
+    fi
+    
+    pause
+}
+
+# ==========================================
+# LIST BACKUPS
+# ==========================================
+list_setup_cron() {
     ui_header "BACKUP SCHEDULER"
     
+    local ACTUAL_BACKUP_SCRIPT="/opt/mrm-manager/backup.sh"
+    
     echo "Current cron status:"
-    if crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
-        local CURRENT=$(crontab -l | grep "$SCRIPT_PATH")
+    if crontab -l 2>/dev/null | grep -q "$ACTUAL_BACKUP_SCRIPT"; then
+        local CURRENT=$(crontab -l | grep "$ACTUAL_BACKUP_SCRIPT")
         echo -e "${GREEN}Active:${NC} $CURRENT"
     else
         echo -e "${YELLOW}No scheduled backup${NC}"
@@ -712,8 +735,9 @@ setup_cron() {
         *) ui_error "Invalid selection"; pause; return ;;
     esac
     
-    (crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH"
-     [ -n "$CRON_TIME" ] && echo "$CRON_TIME $SCRIPT_PATH auto > /dev/null 2>&1"
+    (crontab -l 2>/dev/null | grep -v "/opt/mrm-manager/"
+     
+     [ -n "$CRON_TIME" ] && echo "$CRON_TIME /usr/bin/bash $ACTUAL_BACKUP_SCRIPT auto >> /var/log/mrm-backup-cron.log 2>&1"
     ) | crontab -
     
     if [ -n "$CRON_TIME" ]; then
@@ -725,29 +749,7 @@ setup_cron() {
     fi
     
     pause
-}
-
-# ==========================================
-# VIEW LOGS
-# ==========================================
-view_backup_logs() {
-    ui_header "BACKUP LOGS"
-    
-    if [ -f "$BACKUP_LOG" ]; then
-        echo -e "${YELLOW}Last 30 entries:${NC}"
-        echo ""
-        tail -n 30 "$BACKUP_LOG"
-    else
-        ui_warning "No logs found"
-    fi
-    
-    pause
-}
-
-# ==========================================
-# LIST BACKUPS
-# ==========================================
-list_backups() {
+}backups() {
     ui_header "AVAILABLE BACKUPS"
     
     local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
