@@ -5,6 +5,12 @@
 # With Auto-Fix for ENV & Docker Compose
 # ==========================================
 
+# ==========================================
+# FIX FOR CRON ENVIRONMENT
+# ==========================================
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+export HOME="${HOME:-/root}"
+
 # Load modules
 source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ui.sh
@@ -15,6 +21,9 @@ TG_CONFIG="/root/.mrm_telegram"
 TEMP_BASE="/tmp/mrm_workspace"
 SCRIPT_PATH="$(readlink -f "$0")"
 BACKUP_LOG="/var/log/mrm-backup.log"
+
+# Find curl with full path for cron compatibility
+CURL_BIN=$(command -v curl 2>/dev/null || echo "/usr/bin/curl")
 
 # ==========================================
 # LOGGING
@@ -35,10 +44,10 @@ log_backup() {
 # ==========================================
 setup_env() {
     detect_active_panel > /dev/null
-    
+
     DOCKER_CMD="docker compose"
     ! docker compose version >/dev/null 2>&1 && DOCKER_CMD="docker-compose"
-    
+
     log_backup "INFO" "Environment: PANEL_DIR=$PANEL_DIR, DATA_DIR=$DATA_DIR"
 }
 
@@ -51,23 +60,23 @@ get_env_val() {
 # ==========================================
 get_server_ip() {
     local IP=""
-    
+
     # Try multiple sources
-    IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null)
-    
+    IP=$($CURL_BIN -s --connect-timeout 5 ifconfig.me 2>/dev/null)
+
     if [ -z "$IP" ]; then
-        IP=$(curl -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+        IP=$($CURL_BIN -s --connect-timeout 5 icanhazip.com 2>/dev/null)
     fi
-    
+
     if [ -z "$IP" ]; then
-        IP=$(curl -s --connect-timeout 5 ipinfo.io/ip 2>/dev/null)
+        IP=$($CURL_BIN -s --connect-timeout 5 ipinfo.io/ip 2>/dev/null)
     fi
-    
+
     if [ -z "$IP" ]; then
         # Get from network interface
         IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+')
     fi
-    
+
     echo "$IP"
 }
 
@@ -76,16 +85,16 @@ get_server_ip() {
 # ==========================================
 fix_env_file() {
     local ENV_FILE=$1
-    
+
     if [ ! -f "$ENV_FILE" ]; then
         return
     fi
-    
+
     log_backup "INFO" "Fixing .env file: $ENV_FILE"
-    
+
     # Create temp file
     local TEMP_FILE=$(mktemp)
-    
+
     # Read and fix broken lines
     local prev_line=""
     while IFS= read -r line || [ -n "$line" ]; do
@@ -105,29 +114,29 @@ fix_env_file() {
             prev_line=""
         fi
     done < "$ENV_FILE"
-    
+
     # Write last line if exists
     if [ -n "$prev_line" ]; then
         echo "$prev_line" >> "$TEMP_FILE"
     fi
-    
+
     # Also fix with sed for any remaining issues
     sed -i ':a;N;$!ba;s/UVICORN_\nSSL_CERTFILE/UVICORN_SSL_CERTFILE/g' "$TEMP_FILE"
     sed -i ':a;N;$!ba;s/UVICORN_\nSSL_KEYFILE/UVICORN_SSL_KEYFILE/g' "$TEMP_FILE"
     sed -i ':a;N;$!ba;s/UVICORN_\n/UVICORN_/g' "$TEMP_FILE"
     sed -i ':a;N;$!ba;s/SSL_\n/SSL_/g' "$TEMP_FILE"
-    
+
     # Fix spaces around = 
     sed -i 's/[[:space:]]*=[[:space:]]*/=/g' "$TEMP_FILE"
-    
+
     # Fix UVICORN_ SSL_ pattern (space instead of underscore continuation)
     sed -i 's/UVICORN_ SSL_CERTFILE/UVICORN_SSL_CERTFILE/g' "$TEMP_FILE"
     sed -i 's/UVICORN_ SSL_KEYFILE/UVICORN_SSL_KEYFILE/g' "$TEMP_FILE"
-    
+
     # Remove duplicate empty lines
     cat -s "$TEMP_FILE" > "$ENV_FILE"
     rm -f "$TEMP_FILE"
-    
+
     log_backup "SUCCESS" "Fixed .env file: $ENV_FILE"
 }
 
@@ -136,35 +145,35 @@ fix_env_file() {
 # ==========================================
 fix_docker_compose() {
     local COMPOSE_FILE="$PANEL_DIR/docker-compose.yml"
-    
+
     if [ ! -f "$COMPOSE_FILE" ]; then
         log_backup "WARNING" "docker-compose.yml not found"
         return
     fi
-    
+
     # Get current server IP
     local NEW_IP=$(get_server_ip)
-    
+
     if [ -z "$NEW_IP" ]; then
         log_backup "WARNING" "Could not detect server IP"
         return
     fi
-    
+
     log_backup "INFO" "Updating docker-compose with new IP: $NEW_IP"
-    
+
     # Update PGADMIN_LISTEN_ADDRESS
     if grep -q "PGADMIN_LISTEN_ADDRESS" "$COMPOSE_FILE"; then
         sed -i "s/PGADMIN_LISTEN_ADDRESS:.*/PGADMIN_LISTEN_ADDRESS: $NEW_IP/g" "$COMPOSE_FILE"
         log_backup "SUCCESS" "Updated PGADMIN_LISTEN_ADDRESS to $NEW_IP"
     fi
-    
+
     # Update any IP:port patterns (like 185.117.0.100:8010)
     sed -i -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:8010/${NEW_IP}:8010/g" "$COMPOSE_FILE"
     sed -i -E "s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:7431/${NEW_IP}:7431/g" "$COMPOSE_FILE"
-    
+
     # Update gunicorn bind address if exists
     sed -i -E "s/--bind [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:/--bind ${NEW_IP}:/g" "$COMPOSE_FILE"
-    
+
     log_backup "SUCCESS" "Updated docker-compose.yml with IP: $NEW_IP"
 }
 
@@ -174,42 +183,50 @@ fix_docker_compose() {
 send_to_telegram() {
     local FILE="$1"
     local MESSAGE="${2:-}"
-    
+
     if [ ! -f "$TG_CONFIG" ]; then
-        log_backup "WARNING" "Telegram not configured"
+        log_backup "WARNING" "Telegram not configured - file: $TG_CONFIG"
         return 1
     fi
-    
-    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    
+
+    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
+    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
+
     if [ -z "$TK" ] || [ -z "$CH" ]; then
-        log_backup "ERROR" "Invalid Telegram config"
+        log_backup "ERROR" "Invalid Telegram config - Token: ${TK:0:10}... Chat: $CH"
         return 1
     fi
-    
+
+    log_backup "INFO" "Attempting Telegram send - Chat: $CH, File: $FILE"
+
     if [ -n "$FILE" ] && [ -f "$FILE" ]; then
         local CAPTION="✅ MRM Backup
 🖥 $(hostname)
 📅 $(date '+%Y-%m-%d %H:%M')
 📦 $(basename "$FILE")"
-        
-        local RESULT=$(curl -s -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
-        
+
+        local RESULT=$($CURL_BIN -s -m 300 \
+            -F chat_id="$CH" \
+            -F caption="$CAPTION" \
+            -F document=@"$FILE" \
+            "https://api.telegram.org/bot$TK/sendDocument" 2>&1)
+
+        log_backup "DEBUG" "Telegram API Response: $RESULT"
+
         if echo "$RESULT" | grep -q '"ok":true'; then
             log_backup "SUCCESS" "File sent to Telegram: $(basename "$FILE")"
             return 0
         else
-            log_backup "ERROR" "Failed to send file to Telegram"
+            log_backup "ERROR" "Failed to send file to Telegram: $RESULT"
             return 1
         fi
     elif [ -n "$MESSAGE" ]; then
-        curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+        $CURL_BIN -s -m 30 -X POST "https://api.telegram.org/bot$TK/sendMessage" \
             -d chat_id="$CH" \
-            -d text="$MESSAGE" > /dev/null
+            -d text="$MESSAGE" > /dev/null 2>&1
         return $?
     fi
-    
+
     return 1
 }
 
@@ -218,18 +235,18 @@ test_telegram() {
         ui_error "Telegram not configured!"
         return 1
     fi
-    
+
     ui_spinner_start "Testing Telegram connection..."
-    
-    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    
-    local RESULT=$(curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+
+    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
+    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"' | tr -d ' ')
+
+    local RESULT=$($CURL_BIN -s -m 30 -X POST "https://api.telegram.org/bot$TK/sendMessage" \
         -d chat_id="$CH" \
         -d text="🧪 MRM Backup Test - $(date '+%Y-%m-%d %H:%M')" 2>&1)
-    
+
     ui_spinner_stop
-    
+
     if echo "$RESULT" | grep -q '"ok":true'; then
         ui_success "Telegram connection successful!"
         return 0
@@ -242,7 +259,7 @@ test_telegram() {
 
 setup_telegram() {
     ui_header "SETUP TELEGRAM BOT"
-    
+
     echo -e "${CYAN}To get Bot Token:${NC}"
     echo "  1. Message @BotFather on Telegram"
     echo "  2. Send /newbot and follow instructions"
@@ -252,36 +269,36 @@ setup_telegram() {
     echo "  1. Message @userinfobot on Telegram"
     echo "  2. It will show your Chat ID"
     echo ""
-    
+
     read -p "Enter Bot Token: " TK
     if [ -z "$TK" ]; then
         ui_error "Token is required!"
         pause
         return
     fi
-    
+
     read -p "Enter Chat ID: " CI
     if [ -z "$CI" ]; then
         ui_error "Chat ID is required!"
         pause
         return
     fi
-    
+
     cat > "$TG_CONFIG" << EOF
 TG_TOKEN="$TK"
 TG_CHAT="$CI"
 EOF
     chmod 600 "$TG_CONFIG"
-    
+
     ui_success "Telegram configured!"
     log_backup "INFO" "Telegram bot configured"
-    
+
     echo ""
     read -p "Test connection now? (Y/n): " TEST
     if [[ ! "$TEST" =~ ^[Nn]$ ]]; then
         test_telegram
     fi
-    
+
     pause
 }
 
@@ -300,7 +317,7 @@ apply_smart_fix() {
     ui_spinner_start "Configuring Firewall..."
     local SSH_PORT=$(ss -tlnp | grep sshd | grep -Po '(?<=:)\d+' | head -1)
     [ -z "$SSH_PORT" ] && SSH_PORT=22
-    
+
     ufw allow "$SSH_PORT"/tcp >/dev/null 2>&1
     ufw allow 80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
@@ -328,7 +345,7 @@ apply_smart_fix() {
         ui_spinner_stop
         ui_success "Node .env fixed"
     fi
-    
+
     # F. Generate Node SSL key if missing
     if [ -d "$NODE_DIR" ]; then
         mkdir -p "$NODE_DEF_CERTS"
@@ -358,23 +375,30 @@ apply_smart_fix() {
 # ==========================================
 do_backup() {
     local MODE="${1:-manual}"
-    setup_env
+    
+    # Initialize environment first
     init_backup_logging
+    log_backup "INFO" "========== Backup started (mode: $MODE) =========="
     
+    # Setup environment with error handling
+    if ! setup_env 2>/dev/null; then
+        log_backup "ERROR" "Failed to setup environment"
+    fi
+
     [ "$MODE" != "auto" ] && ui_header "FULL SYSTEM BACKUP"
-    
+
     log_backup "INFO" "Starting backup (mode: $MODE)"
-    
+
     local TS=$(date +%Y%m%d_%H%M%S)
     local B_NAME="MRM_Full_${TS}"
     local B_PATH="$TEMP_BASE/$B_NAME"
-    
+
     mkdir -p "$B_PATH/database" "$B_PATH/panel" "$B_PATH/data"
     mkdir -p "$BACKUP_DIR"
 
     # 1. Export Database
     [ "$MODE" != "auto" ] && ui_spinner_start "Exporting database..."
-    
+
     if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null; then
         local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
         if [ -n "$DB_CONT" ]; then
@@ -386,7 +410,7 @@ do_backup() {
         [ -f "$DATA_DIR/db.sqlite3" ] && cp "$DATA_DIR/db.sqlite3" "$B_PATH/database/"
         log_backup "INFO" "SQLite exported"
     fi
-    
+
     [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Database exported"
 
     # 2. Collect Panel Files
@@ -439,23 +463,33 @@ EOF
     local BACKUP_SIZE=$(du -h "$BACKUP_DIR/$B_NAME.tar.gz" | cut -f1)
     [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Archive created ($BACKUP_SIZE)"
 
+    log_backup "INFO" "Archive created: $B_NAME.tar.gz ($BACKUP_SIZE)"
+
     # 8. Cleanup temp
     rm -rf "$TEMP_BASE"
 
-    # 9. Send to Telegram
+    # 9. Send to Telegram (Fixed for auto mode)
     if [ -f "$TG_CONFIG" ]; then
+        log_backup "INFO" "Telegram config found, attempting to send..."
+        
         [ "$MODE" != "auto" ] && ui_spinner_start "Sending to Telegram..."
+        
         if send_to_telegram "$BACKUP_DIR/$B_NAME.tar.gz"; then
             [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Backup sent to Telegram!"
+            log_backup "SUCCESS" "Backup sent to Telegram successfully"
         else
             [ "$MODE" != "auto" ] && ui_spinner_stop && ui_warning "Failed to send to Telegram"
+            log_backup "ERROR" "Failed to send backup to Telegram"
         fi
+    else
+        log_backup "WARNING" "Telegram config not found at: $TG_CONFIG"
     fi
 
     # 10. Cleanup old backups (keep last 5)
     ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
-    
+
     log_backup "SUCCESS" "Backup completed: $B_NAME.tar.gz ($BACKUP_SIZE)"
+    log_backup "INFO" "========== Backup finished =========="
 
     if [ "$MODE" != "auto" ]; then
         echo ""
@@ -475,10 +509,10 @@ EOF
 do_restore() {
     setup_env
     ui_header "FULL SYSTEM RESTORE"
-    
+
     # List available backups
     local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
-    
+
     if [ ${#FILES[@]} -eq 0 ]; then
         ui_error "No backups found in $BACKUP_DIR"
         echo ""
@@ -488,7 +522,7 @@ do_restore() {
         pause
         return
     fi
-    
+
     echo -e "${YELLOW}Available Backups:${NC}"
     echo ""
     for i in "${!FILES[@]}"; do
@@ -496,19 +530,19 @@ do_restore() {
         local DATE=$(stat -c %y "${FILES[$i]}" | cut -d' ' -f1)
         echo "$((i+1))) $(basename "${FILES[$i]}") [$SIZE] - $DATE"
     done
-    
+
     echo ""
     read -p "Select backup to restore (0 to cancel): " CH
-    
+
     [ "$CH" == "0" ] && return
-    
+
     local SELECTED="${FILES[$((CH-1))]}"
     if [ -z "$SELECTED" ] || [ ! -f "$SELECTED" ]; then
         ui_error "Invalid selection!"
         pause
         return
     fi
-    
+
     echo ""
     echo -e "${RED}╔══════════════════════════════════════════════════════════╗${NC}"
     echo -e "${RED}║              ⚠️  WARNING  ⚠️                              ║${NC}"
@@ -518,13 +552,13 @@ do_restore() {
     echo -e "${RED}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
     read -p "Type 'CONFIRM' to proceed: " CONF
-    
+
     if [ "$CONF" != "CONFIRM" ]; then
         echo "Cancelled."
         pause
         return
     fi
-    
+
     log_backup "INFO" "Starting restore from: $(basename "$SELECTED")"
 
     # Get new server IP before restore
@@ -534,13 +568,13 @@ do_restore() {
     # Extract backup
     local WORK_DIR="/tmp/mrm_restore_$(date +%s)"
     mkdir -p "$WORK_DIR"
-    
+
     ui_spinner_start "Extracting backup..."
     tar -xzf "$SELECTED" -C "$WORK_DIR"
     ui_spinner_stop
-    
+
     local ROOT=$(ls -d "$WORK_DIR"/* | head -1)
-    
+
     if [ ! -d "$ROOT" ]; then
         ui_error "Invalid backup archive!"
         rm -rf "$WORK_DIR"
@@ -554,7 +588,7 @@ do_restore() {
         echo -e "${CYAN}Backup Info:${NC}"
         cat "$ROOT/backup_info.txt"
         echo ""
-        
+
         # Show IP change warning
         local OLD_IP=$(grep "Server IP:" "$ROOT/backup_info.txt" | awk '{print $3}')
         if [ -n "$OLD_IP" ] && [ "$OLD_IP" != "$NEW_SERVER_IP" ]; then
@@ -619,13 +653,13 @@ do_restore() {
     # ⭐ FIX CONFIGURATIONS (Important!)
     echo ""
     echo -e "${CYAN}Fixing configurations for new server...${NC}"
-    
+
     ui_spinner_start "Fixing .env files..."
     fix_env_file "$PANEL_ENV"
     fix_env_file "$NODE_ENV"
     ui_spinner_stop
     ui_success ".env files fixed"
-    
+
     ui_spinner_start "Updating IPs in docker-compose..."
     fix_docker_compose
     ui_spinner_stop
@@ -647,7 +681,7 @@ do_restore() {
     if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
         echo -e "${YELLOW}Waiting for database to initialize...${NC}"
         sleep 15
-        
+
         ui_spinner_start "Importing database..."
         local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
         if [ -n "$DB_CONT" ]; then
@@ -660,7 +694,7 @@ do_restore() {
 
     # Cleanup
     rm -rf "$WORK_DIR"
-    
+
     log_backup "SUCCESS" "Restore completed from: $(basename "$SELECTED")"
 
     echo ""
@@ -672,47 +706,24 @@ do_restore() {
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}Safety backup: $SAFETY_BACKUP${NC}"
-    
+
     pause
 }
 
 # ==========================================
 # CRON SCHEDULER
 # ==========================================
-
-# ==========================================
-# VIEW LOGS
-# ==========================================
-view_backup_logs() {
-    ui_header "BACKUP LOGS"
-    
-    if [ -f "$BACKUP_LOG" ]; then
-        echo -e "${YELLOW}Last 30 entries:${NC}"
-        echo ""
-        tail -n 30 "$BACKUP_LOG"
-    else
-        ui_warning "No logs found"
-    fi
-    
-    pause
-}
-
-# ==========================================
-# LIST BACKUPS
-# ==========================================
-list_setup_cron() {
+setup_cron() {
     ui_header "BACKUP SCHEDULER"
-    
-    local ACTUAL_BACKUP_SCRIPT="/opt/mrm-manager/backup.sh"
-    
+
     echo "Current cron status:"
-    if crontab -l 2>/dev/null | grep -q "$ACTUAL_BACKUP_SCRIPT"; then
-        local CURRENT=$(crontab -l | grep "$ACTUAL_BACKUP_SCRIPT")
+    if crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH"; then
+        local CURRENT=$(crontab -l | grep "$SCRIPT_PATH")
         echo -e "${GREEN}Active:${NC} $CURRENT"
     else
         echo -e "${YELLOW}No scheduled backup${NC}"
     fi
-    
+
     echo ""
     echo "Select backup interval:"
     echo "1) Every 6 hours"
@@ -723,7 +734,7 @@ list_setup_cron() {
     echo "0) Cancel"
     echo ""
     read -p "Select: " c
-    
+
     local CRON_TIME=""
     case $c in
         1) CRON_TIME="0 */6 * * *" ;;
@@ -734,12 +745,12 @@ list_setup_cron() {
         0) return ;;
         *) ui_error "Invalid selection"; pause; return ;;
     esac
-    
-    (crontab -l 2>/dev/null | grep -v "/opt/mrm-manager/"
-     
-     [ -n "$CRON_TIME" ] && echo "$CRON_TIME /usr/bin/bash $ACTUAL_BACKUP_SCRIPT auto >> /var/log/mrm-backup-cron.log 2>&1"
+
+    # Fixed cron entry - redirect to log file instead of /dev/null
+    (crontab -l 2>/dev/null | grep -v "$SCRIPT_PATH"
+     [ -n "$CRON_TIME" ] && echo "$CRON_TIME /bin/bash $SCRIPT_PATH auto >> $BACKUP_LOG 2>&1"
     ) | crontab -
-    
+
     if [ -n "$CRON_TIME" ]; then
         ui_success "Scheduled backup enabled: $CRON_TIME"
         log_backup "INFO" "Cron scheduled: $CRON_TIME"
@@ -747,33 +758,55 @@ list_setup_cron() {
         ui_success "Scheduled backup disabled"
         log_backup "INFO" "Cron disabled"
     fi
-    
+
     pause
-}backups() {
+}
+
+# ==========================================
+# VIEW LOGS
+# ==========================================
+view_backup_logs() {
+    ui_header "BACKUP LOGS"
+
+    if [ -f "$BACKUP_LOG" ]; then
+        echo -e "${YELLOW}Last 30 entries:${NC}"
+        echo ""
+        tail -n 30 "$BACKUP_LOG"
+    else
+        ui_warning "No logs found"
+    fi
+
+    pause
+}
+
+# ==========================================
+# LIST BACKUPS
+# ==========================================
+list_backups() {
     ui_header "AVAILABLE BACKUPS"
-    
+
     local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
-    
+
     if [ ${#FILES[@]} -eq 0 ]; then
         ui_warning "No backups found"
         pause
         return
     fi
-    
+
     echo -e "${GREEN}ID │ Filename                              │ Size   │ Date${NC}"
     echo "───┼─────────────────────────────────────────┼────────┼───────────"
-    
+
     for i in "${!FILES[@]}"; do
         local NAME=$(basename "${FILES[$i]}")
         local SIZE=$(du -h "${FILES[$i]}" | cut -f1)
         local DATE=$(stat -c %y "${FILES[$i]}" | cut -d' ' -f1)
         printf "%-2s │ %-39s │ %-6s │ %s\n" "$((i+1))" "$NAME" "$SIZE" "$DATE"
     done
-    
+
     echo ""
     echo -e "Total: ${CYAN}${#FILES[@]}${NC} backups"
     echo -e "Location: ${CYAN}$BACKUP_DIR${NC}"
-    
+
     pause
 }
 
@@ -782,38 +815,38 @@ list_setup_cron() {
 # ==========================================
 delete_backup() {
     ui_header "DELETE BACKUP"
-    
+
     local FILES=($(ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null))
-    
+
     if [ ${#FILES[@]} -eq 0 ]; then
         ui_warning "No backups found"
         pause
         return
     fi
-    
+
     echo -e "${YELLOW}Select backup to delete:${NC}"
     echo ""
-    
+
     for i in "${!FILES[@]}"; do
         local SIZE=$(du -h "${FILES[$i]}" | cut -f1)
         echo "$((i+1))) $(basename "${FILES[$i]}") [$SIZE]"
     done
-    
+
     echo ""
     read -p "Select (0 to cancel): " SEL
-    
+
     [ "$SEL" == "0" ] && return
-    
+
     local SELECTED="${FILES[$((SEL-1))]}"
     if [ -z "$SELECTED" ]; then
         ui_error "Invalid selection"
         pause
         return
     fi
-    
+
     echo ""
     read -p "Delete $(basename "$SELECTED")? (y/N): " CONFIRM
-    
+
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
         rm -f "$SELECTED"
         ui_success "Backup deleted"
@@ -821,7 +854,7 @@ delete_backup() {
     else
         echo "Cancelled"
     fi
-    
+
     pause
 }
 
@@ -830,12 +863,12 @@ delete_backup() {
 # ==========================================
 backup_menu() {
     init_backup_logging
-    
+
     while true; do
         clear
         ui_header "BACKUP & RESTORE v7.1"
         setup_env
-        
+
         # Show status
         local BACKUP_COUNT=$(ls "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l)
         local TG_STATUS="${RED}Not Configured${NC}"
@@ -843,11 +876,11 @@ backup_menu() {
         local CRON_STATUS="${RED}Disabled${NC}"
         crontab -l 2>/dev/null | grep -q "$SCRIPT_PATH" && CRON_STATUS="${GREEN}Active${NC}"
         local SERVER_IP=$(get_server_ip)
-        
+
         echo -e "Panel: ${CYAN}$(basename "$PANEL_DIR")${NC} | IP: ${CYAN}$SERVER_IP${NC}"
         echo -e "Backups: ${CYAN}$BACKUP_COUNT${NC} | Telegram: $TG_STATUS | Cron: $CRON_STATUS"
         echo ""
-        
+
         echo "1)  📦 Create Full Backup"
         echo "2)  📥 Restore from Backup"
         echo "3)  📋 List All Backups"
@@ -861,7 +894,7 @@ backup_menu() {
         echo "0)  ↩️  Back"
         echo ""
         read -p "Select: " opt
-        
+
         case $opt in
             1) do_backup "manual" ;;
             2) do_restore ;;
@@ -883,10 +916,6 @@ backup_menu() {
 # ==========================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [ "$1" == "auto" ]; then
-        source /opt/mrm-manager/utils.sh
-        source /opt/mrm-manager/ui.sh
-        setup_env
-        init_backup_logging
         do_backup "auto"
     else
         backup_menu
