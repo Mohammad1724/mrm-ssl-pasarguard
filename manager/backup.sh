@@ -2,13 +2,8 @@
 
 # ==========================================
 # MRM BACKUP & RESTORE PRO v7.2
-# With Auto-Fix for ENV & Docker Compose
-# FIXED: Auto backup Telegram sending
 # ==========================================
 
-# ==========================================
-# FIX FOR CRON ENVIRONMENT
-# ==========================================
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 export HOME="${HOME:-/root}"
 export LANG="en_US.UTF-8"
