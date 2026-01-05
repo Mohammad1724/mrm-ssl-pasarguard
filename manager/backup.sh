@@ -881,6 +881,10 @@ backup_menu() {
 # ==========================================
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [ "$1" == "auto" ]; then
+        source /opt/mrm-manager/utils.sh
+        source /opt/mrm-manager/ui.sh
+        setup_env
+        init_backup_logging
         do_backup "auto"
     else
         backup_menu
