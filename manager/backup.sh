@@ -2,11 +2,6 @@
 
 # ==========================================
 # MRM BACKUP & RESTORE PRO v7.1
-# With Auto-Fix for ENV & Docker Compose
-# ==========================================
-
-# ==========================================
-# FIX FOR CRON / NON-INTERACTIVE ENV
 # ==========================================
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 export HOME="${HOME:-/root}"
