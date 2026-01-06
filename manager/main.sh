@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM MANAGER v3.1 - Full Pro Edition
+# MRM MANAGER v3.2 - Full Pro Edition
 # ==========================================
 
 # Load Modules
@@ -9,12 +9,14 @@ source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ui.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/backup.sh
-source /opt/mrm-manager/inbound/main.sh
 source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/theme.sh
 source /opt/mrm-manager/migrator.sh
 source /opt/mrm-manager/mirza.sh
+
+# Load Inbound Module (NEW STRUCTURE)
+source /opt/mrm-manager/inbound/main.sh
 
 # Detect panel on startup
 detect_active_panel > /dev/null
@@ -36,7 +38,7 @@ edit_file() {
 # ==========================================
 optimize_network() {
     ui_header "NETWORK OPTIMIZATION"
-    
+
     ui_spinner_start "Enabling BBR..."
     if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
         echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
@@ -89,11 +91,11 @@ EOF
 # ==========================================
 auto_fix() {
     ui_header "AUTO FIX"
-    
+
     ui_spinner_start "Configuring Firewall..."
     ufw allow 22,80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
-    
+
     for r in "192.0.0.0/8" "102.0.0.0/8" "198.0.0.0/8" "172.0.0.0/8"; do
         ufw delete deny from "$r" >/dev/null 2>&1 || true
         ufw delete deny out to "$r" >/dev/null 2>&1 || true
@@ -126,25 +128,24 @@ auto_fix() {
 # ==========================================
 panel_menu() {
     while true; do
-        clear
         ui_header "PANEL CONTROL"
         detect_active_panel > /dev/null
-        
-        echo -e "Panel: ${CYAN}$PANEL_DIR${NC}"
+
+        echo -e "Active Panel: ${UI_CYAN}$PANEL_DIR${UI_NC}"
         echo ""
-        echo "1) Restart Panel"
-        echo "2) Stop Panel"
-        echo "3) Start Panel"
-        echo "4) View Logs (Live)"
-        echo "5) Create Admin"
-        echo "6) Reset Admin Password"
-        echo "7) Edit .env"
-        echo "8) Edit docker-compose.yml"
+        echo "1) 🔄 Restart Panel"
+        echo "2) ⏹️  Stop Panel"
+        echo "3) ▶️  Start Panel"
+        echo "4) 📋 View Logs (Live)"
+        echo "5) 👤 Create Admin"
+        echo "6) 🔑 Reset Admin Password"
+        echo "7) 📝 Edit .env"
+        echo "8) 📝 Edit docker-compose.yml"
         echo ""
-        echo "0) Back"
+        echo "0) ↩️  Back"
         echo ""
         read -p "Select: " OPT
-        
+
         case $OPT in
             1) restart_service "panel"; pause ;;
             2) cd "$PANEL_DIR" && docker compose down; ui_success "Stopped"; pause ;;
@@ -164,9 +165,8 @@ panel_menu() {
 # ==========================================
 tools_menu() {
     while true; do
-        clear
         ui_header "TOOLS"
-        
+
         echo "1) 🌐 Domain Separator (Panel & Sub)"
         echo "2) 🎭 Fake Site Manager"
         echo "3) 📥 Inbound Wizard"
@@ -176,10 +176,10 @@ tools_menu() {
         echo "6) ⚡ Optimize Network (BBR)"
         echo "7) 🔧 Auto Fix"
         echo ""
-        echo "0) Back"
+        echo "0) ↩️  Back"
         echo ""
         read -p "Select: " OPT
-        
+
         case $OPT in
             1) domain_menu ;;
             2) site_menu ;;
@@ -199,12 +199,11 @@ tools_menu() {
 main_menu() {
     check_root
     install_deps
-    
+
     while true; do
-        clear
-        ui_header "MRM MANAGER v3.1"
+        ui_header "MRM MANAGER v3.2" 50
         ui_status_bar
-        
+
         echo "1) 🔐 SSL Certificates"
         echo "2) 💾 Backup & Restore"
         echo "3) 🤖 Mirza Pro (Telegram Bot)"
@@ -214,7 +213,7 @@ main_menu() {
         echo "0) Exit"
         echo ""
         read -p "Select: " OPT
-        
+
         case $OPT in
             1) ssl_menu ;;
             2) backup_menu ;;
