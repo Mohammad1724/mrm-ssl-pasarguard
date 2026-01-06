@@ -2,6 +2,7 @@
 
 # ============================================
 # INBOUND MANAGER - Library Functions
+# Version: 2.1 (Fixed Display)
 # ============================================
 
 # ============ CONFIG PATHS ============
@@ -20,7 +21,11 @@ inbound_init_paths() {
 
     INBOUND_BACKUP_DIR="$DATA_DIR/backups/inbounds"
     INBOUND_EXPORT_DIR="$DATA_DIR/exports"
-    mkdir -p "$INBOUND_BACKUP_DIR" "$INBOUND_EXPORT_DIR"
+    mkdir -p "$INBOUND_BACKUP_DIR" "$INBOUND_EXPORT_DIR" 2>/dev/null
+    
+    export XRAY_CONFIG
+    export INBOUND_BACKUP_DIR
+    export INBOUND_EXPORT_DIR
 }
 
 # ============ GENERATORS ============
@@ -66,7 +71,6 @@ gen_x25519_keys() {
         fi
     fi
 
-    # Fallback: local xray
     if command -v xray &> /dev/null; then
         xray x25519 2>/dev/null
         return 0
@@ -78,10 +82,10 @@ gen_x25519_keys() {
 
 # ============ BACKUP ============
 backup_xray_config() {
+    inbound_init_paths
     if [ -f "$XRAY_CONFIG" ]; then
         local BACKUP_FILE="$INBOUND_BACKUP_DIR/config_$(date +%Y%m%d_%H%M%S).json"
         cp "$XRAY_CONFIG" "$BACKUP_FILE"
-        ui_success "Config backed up: $BACKUP_FILE"
     fi
 }
 
@@ -91,10 +95,8 @@ check_inbound_requirements() {
 
     for cmd in python3 openssl jq; do
         if ! command -v $cmd &> /dev/null; then
-            ui_warning "Installing $cmd..."
-            apt-get install -y $cmd -qq > /dev/null
+            apt-get install -y $cmd -qq > /dev/null 2>&1
             if ! command -v $cmd &> /dev/null; then
-                ui_error "Failed to install $cmd!"
                 MISSING=true
             fi
         fi
@@ -103,14 +105,11 @@ check_inbound_requirements() {
     inbound_init_paths
 
     if [ ! -f "$XRAY_CONFIG" ]; then
-        ui_warning "Config not found, creating empty config..."
+        mkdir -p "$(dirname "$XRAY_CONFIG")"
         echo '{"inbounds":[],"outbounds":[{"protocol":"freedom","tag":"direct"}],"routing":{"rules":[]}}' > "$XRAY_CONFIG"
     fi
 
-    if [ "$MISSING" = true ]; then
-        pause
-        return 1
-    fi
+    [ "$MISSING" = true ] && return 1
     return 0
 }
 
@@ -142,17 +141,18 @@ input_port() {
     local DEFAULT=${1:-$(gen_random_port)}
 
     while true; do
-        local PORT=$(ui_input "Port" "$DEFAULT")
+        read -p "  Port [$DEFAULT]: " PORT
+        [ -z "$PORT" ] && PORT="$DEFAULT"
 
         if ! [[ "$PORT" =~ ^[0-9]+$ ]] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then
-            ui_error "Invalid port number!"
+            echo -e "  ${UI_RED}✘ Invalid port!${UI_NC}"
             continue
         fi
 
         local CHECK=$(check_port_available "$PORT")
         if [[ "$CHECK" == USED:* ]]; then
             local EXISTING=$(echo "$CHECK" | cut -d: -f2)
-            ui_error "Port $PORT is used by '$EXISTING'"
+            echo -e "  ${UI_RED}✘ Port used by '$EXISTING'${UI_NC}"
             continue
         fi
 
@@ -161,125 +161,248 @@ input_port() {
     done
 }
 
-# ============ CERTIFICATE HELPER ============
-get_available_certs() {
-    local DOMAINS=()
+# ============ SIMPLE INPUT ============
+simple_input() {
+    local LABEL=$1
+    local DEFAULT=$2
+    local RESULT=""
+    
+    if [ -n "$DEFAULT" ]; then
+        read -p "  $LABEL [$DEFAULT]: " RESULT
+        [ -z "$RESULT" ] && RESULT="$DEFAULT"
+    else
+        read -p "  $LABEL: " RESULT
+    fi
+    echo "$RESULT"
+}
 
-    # Check panel certs directory
+simple_confirm() {
+    local MSG=$1
+    local DEFAULT=${2:-n}
+    local PROMPT="[y/N]"
+    [ "$DEFAULT" == "y" ] && PROMPT="[Y/n]"
+    
+    read -p "  $MSG $PROMPT: " REPLY
+    [ -z "$REPLY" ] && REPLY=$DEFAULT
+    [[ "$REPLY" =~ ^[Yy]$ ]] && return 0 || return 1
+}
+
+# ============ CERTIFICATE FUNCTIONS ============
+
+get_all_ssl_domains() {
+    local DOMAINS=()
+    
+    # Panel certs
     if [ -d "$PANEL_DEF_CERTS" ]; then
         for d in "$PANEL_DEF_CERTS"/*/; do
+            [ -d "$d" ] || continue
+            local name=$(basename "$d")
             if [ -f "${d}fullchain.pem" ] || [ -f "${d}cert.pem" ]; then
-                DOMAINS+=("$(basename "$d")")
+                DOMAINS+=("$name")
             fi
         done
     fi
-
-    # Check letsencrypt
+    
+    # Marzban certs
+    for dir in "/var/lib/marzban/certs" "/var/lib/rebecca/certs"; do
+        if [ -d "$dir" ]; then
+            for d in "$dir"/*/; do
+                [ -d "$d" ] || continue
+                local name=$(basename "$d")
+                if [ -f "${d}fullchain.pem" ] && [[ ! " ${DOMAINS[*]} " =~ " $name " ]]; then
+                    DOMAINS+=("$name")
+                fi
+            done
+        fi
+    done
+    
+    # Letsencrypt
     if [ -d "/etc/letsencrypt/live" ]; then
         for d in /etc/letsencrypt/live/*/; do
+            [ -d "$d" ] || continue
             local name=$(basename "$d")
+            [[ "$name" == "README" ]] && continue
             if [ -f "${d}fullchain.pem" ] && [[ ! " ${DOMAINS[*]} " =~ " $name " ]]; then
                 DOMAINS+=("$name")
             fi
         done
     fi
-
+    
     echo "${DOMAINS[@]}"
 }
 
 find_cert_paths() {
     local DOMAIN=$1
-
+    
+    # Panel certs
     if [ -f "$PANEL_DEF_CERTS/$DOMAIN/fullchain.pem" ]; then
         echo "$PANEL_DEF_CERTS/$DOMAIN/fullchain.pem|$PANEL_DEF_CERTS/$DOMAIN/privkey.pem"
-    elif [ -f "$PANEL_DEF_CERTS/$DOMAIN/cert.pem" ]; then
-        echo "$PANEL_DEF_CERTS/$DOMAIN/cert.pem|$PANEL_DEF_CERTS/$DOMAIN/key.pem"
-    elif [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
+        return
+    fi
+    
+    # Marzban/Rebecca
+    for dir in "/var/lib/marzban/certs" "/var/lib/rebecca/certs"; do
+        if [ -f "$dir/$DOMAIN/fullchain.pem" ]; then
+            echo "$dir/$DOMAIN/fullchain.pem|$dir/$DOMAIN/privkey.pem"
+            return
+        fi
+    done
+    
+    # Letsencrypt
+    if [ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" ]; then
         echo "/etc/letsencrypt/live/$DOMAIN/fullchain.pem|/etc/letsencrypt/live/$DOMAIN/privkey.pem"
-    else
+        return
+    fi
+    
+    echo ""
+}
+
+get_cert_expiry() {
+    local CERT_FILE=$1
+    if [ -f "$CERT_FILE" ]; then
+        openssl x509 -enddate -noout -in "$CERT_FILE" 2>/dev/null | cut -d= -f2 | cut -d' ' -f1-3
+    fi
+}
+
+select_tls_certificates() {
+    local DOMAINS_STR=$(get_all_ssl_domains)
+    local DOMAINS=($DOMAINS_STR)
+    
+    if [ ${#DOMAINS[@]} -eq 0 ]; then
         echo ""
+        echo -e "  ${UI_YELLOW}⚠ No SSL certificates found!${UI_NC}"
+        echo "  Get SSL from: Main Menu → SSL Certificates"
+        echo ""
+        return 2
     fi
-}
-
-# ============ PROTOCOL/TRANSPORT LISTS ============
-declare -A PROTOCOLS=(
-    [1]="vless|VLESS|Most secure, recommended"
-    [2]="vmess|VMess|Good compatibility"
-    [3]="trojan|Trojan|Simple and fast"
-    [4]="shadowsocks|Shadowsocks|Classic protocol"
-    [5]="socks|SOCKS5|Standard SOCKS proxy"
-    [6]="http|HTTP|Simple HTTP proxy"
-    [7]="dokodemo-door|Dokodemo|Transparent proxy"
-)
-
-declare -A TRANSPORTS=(
-    [1]="tcp|TCP|Direct connection"
-    [2]="ws|WebSocket|CDN compatible"
-    [3]="grpc|gRPC|Low latency"
-    [4]="xhttp|XHTTP|Best anti-detection"
-    [5]="httpupgrade|HTTPUpgrade|CDN compatible"
-    [6]="h2|HTTP/2|Multiplexing"
-    [7]="kcp|mKCP|UDP based"
-    [8]="quic|QUIC|UDP + TLS"
-)
-
-declare -A SECURITIES=(
-    [1]="reality|Reality|Best anti-detection"
-    [2]="tls|TLS|Standard encryption"
-    [3]="none|None|No encryption"
-)
-
-# ============ SELECTION HELPERS ============
-select_protocol() {
+    
     echo ""
-    echo -e "${UI_CYAN}Select Protocol:${UI_NC}"
-    for key in $(echo "${!PROTOCOLS[@]}" | tr ' ' '\n' | sort -n); do
-        IFS='|' read -r code name desc <<< "${PROTOCOLS[$key]}"
-        printf "  %s) %-12s ${UI_DIM}%s${UI_NC}\n" "$key" "$name" "$desc"
+    echo -e "  ${UI_CYAN}Available SSL Certificates:${UI_NC}"
+    echo ""
+    
+    local i=1
+    for domain in "${DOMAINS[@]}"; do
+        local PATHS=$(find_cert_paths "$domain")
+        local EXPIRY=""
+        if [ -n "$PATHS" ]; then
+            local CERT=$(echo "$PATHS" | cut -d'|' -f1)
+            EXPIRY=$(get_cert_expiry "$CERT")
+        fi
+        
+        if [ -n "$EXPIRY" ]; then
+            printf "    %2d) %-30s ${UI_DIM}%s${UI_NC}\n" "$i" "$domain" "$EXPIRY"
+        else
+            printf "    %2d) %s\n" "$i" "$domain"
+        fi
+        ((i++))
     done
+    
     echo ""
-
-    local OPT=$(ui_input "Select" "1")
-    if [ -n "${PROTOCOLS[$OPT]}" ]; then
-        IFS='|' read -r code _ _ <<< "${PROTOCOLS[$OPT]}"
-        echo "$code"
-    else
-        echo "vless"
-    fi
-}
-
-select_transport() {
+    printf "    %2d) ${UI_YELLOW}Enter manually${UI_NC}\n" "$i"
+    printf "     0) Cancel\n"
     echo ""
-    echo -e "${UI_CYAN}Select Transport:${UI_NC}"
-    for key in $(echo "${!TRANSPORTS[@]}" | tr ' ' '\n' | sort -n); do
-        IFS='|' read -r code name desc <<< "${TRANSPORTS[$key]}"
-        printf "  %s) %-12s ${UI_DIM}%s${UI_NC}\n" "$key" "$name" "$desc"
+    echo -e "  ${UI_DIM}Tip: 1,2,3 or 1-3 for multiple${UI_NC}"
+    echo ""
+    
+    read -p "  Select [1]: " SELECTION
+    [ -z "$SELECTION" ] && SELECTION="1"
+    
+    [[ "$SELECTION" == "0" ]] && return 1
+    [[ "$SELECTION" == "$i" ]] && return 2
+    
+    # Parse selection
+    local SELECTED=()
+    IFS=',' read -ra PARTS <<< "$SELECTION"
+    for part in "${PARTS[@]}"; do
+        part=$(echo "$part" | xargs)
+        if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((j=${BASH_REMATCH[1]}; j<=${BASH_REMATCH[2]}; j++)); do
+                [ "$j" -ge 1 ] && [ "$j" -le ${#DOMAINS[@]} ] && SELECTED+=("${DOMAINS[$((j-1))]}")
+            done
+        elif [[ "$part" =~ ^[0-9]+$ ]]; then
+            [ "$part" -ge 1 ] && [ "$part" -le ${#DOMAINS[@]} ] && SELECTED+=("${DOMAINS[$((part-1))]}")
+        fi
     done
-    echo ""
-
-    local OPT=$(ui_input "Select" "1")
-    if [ -n "${TRANSPORTS[$OPT]}" ]; then
-        IFS='|' read -r code _ _ <<< "${TRANSPORTS[$OPT]}"
-        echo "$code"
-    else
-        echo "tcp"
-    fi
+    
+    [ ${#SELECTED[@]} -eq 0 ] && return 1
+    
+    echo "${SELECTED[@]}"
+    return 0
 }
 
-select_security() {
+# ============ PROTOCOL/TRANSPORT DISPLAY ============
+
+show_protocols() {
+    echo ""
+    echo -e "  ${UI_CYAN}Protocol:${UI_NC}"
+    echo "    1) VLESS      ${UI_DIM}(Recommended)${UI_NC}"
+    echo "    2) VMess"
+    echo "    3) Trojan"
+    echo "    4) Shadowsocks"
+    echo "    5) SOCKS5"
+    echo "    6) HTTP"
+    echo "    7) Dokodemo-door"
+    echo ""
+}
+
+show_transports() {
+    echo ""
+    echo -e "  ${UI_CYAN}Transport:${UI_NC}"
+    echo "    1) TCP         ${UI_DIM}(Direct)${UI_NC}"
+    echo "    2) WebSocket   ${UI_DIM}(CDN OK)${UI_NC}"
+    echo "    3) gRPC        ${UI_DIM}(Low latency)${UI_NC}"
+    echo "    4) XHTTP       ${UI_DIM}(Anti-detect)${UI_NC}"
+    echo "    5) HTTPUpgrade ${UI_DIM}(CDN OK)${UI_NC}"
+    echo "    6) HTTP/2"
+    echo "    7) mKCP        ${UI_DIM}(UDP)${UI_NC}"
+    echo "    8) QUIC        ${UI_DIM}(UDP+TLS)${UI_NC}"
+    echo ""
+}
+
+show_security() {
     local TRANSPORT=$1
     echo ""
-    echo -e "${UI_CYAN}Select Security:${UI_NC}"
-
-    # Reality only works with tcp, grpc, h2
+    echo -e "  ${UI_CYAN}Security:${UI_NC}"
     if [[ "$TRANSPORT" =~ ^(tcp|grpc|h2)$ ]]; then
-        echo "  1) Reality     ${UI_DIM}Best anti-detection${UI_NC}"
+        echo "    1) Reality     ${UI_DIM}(Best)${UI_NC}"
     fi
-    echo "  2) TLS         ${UI_DIM}Standard encryption${UI_NC}"
-    echo "  3) None        ${UI_DIM}No encryption (CDN)${UI_NC}"
+    echo "    2) TLS"
+    echo "    3) None        ${UI_DIM}(For CDN)${UI_NC}"
     echo ""
+}
 
-    local OPT=$(ui_input "Select" "2")
+get_protocol() {
+    local OPT=$1
+    case $OPT in
+        1) echo "vless" ;;
+        2) echo "vmess" ;;
+        3) echo "trojan" ;;
+        4) echo "shadowsocks" ;;
+        5) echo "socks" ;;
+        6) echo "http" ;;
+        7) echo "dokodemo-door" ;;
+        *) echo "vless" ;;
+    esac
+}
+
+get_transport() {
+    local OPT=$1
+    case $OPT in
+        1) echo "tcp" ;;
+        2) echo "ws" ;;
+        3) echo "grpc" ;;
+        4) echo "xhttp" ;;
+        5) echo "httpupgrade" ;;
+        6) echo "h2" ;;
+        7) echo "kcp" ;;
+        8) echo "quic" ;;
+        *) echo "tcp" ;;
+    esac
+}
+
+get_security() {
+    local OPT=$1
+    local TRANSPORT=$2
     case $OPT in
         1) [[ "$TRANSPORT" =~ ^(tcp|grpc|h2)$ ]] && echo "reality" || echo "tls" ;;
         2) echo "tls" ;;
