@@ -165,6 +165,7 @@ panel_menu() {
 # ==========================================
 tools_menu() {
     while true; do
+        clear
         ui_header "TOOLS"
 
         echo "1) 🌐 Domain Separator (Panel & Sub)"
