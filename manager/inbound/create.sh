@@ -2,15 +2,16 @@
 
 # ============================================
 # INBOUND MANAGER - Create Functions
+# Version: 2.1 (Fixed Display)
 # ============================================
 
-# ============ STREAM SETTINGS BUILDERS ============
+# ============ STREAM SETTINGS ============
 
 build_tcp_settings() {
     local USE_HTTP=$1
     if [ "$USE_HTTP" == "y" ]; then
-        local HOST=$(ui_input "HTTP Host" "www.google.com")
-        local PATH=$(ui_input "HTTP Path" "/")
+        local HOST=$(simple_input "HTTP Host" "www.google.com")
+        local PATH=$(simple_input "HTTP Path" "/")
         echo "{\"header\":{\"type\":\"http\",\"request\":{\"path\":[\"$PATH\"],\"headers\":{\"Host\":[\"$HOST\"]}}}}"
     else
         echo "{\"header\":{\"type\":\"none\"}}"
@@ -18,191 +19,154 @@ build_tcp_settings() {
 }
 
 build_ws_settings() {
-    local PATH=$(ui_input "WS Path" "/ws")
-    local HOST=$(ui_input "Host Header (optional)" "")
-    if [ -n "$HOST" ]; then
-        echo "{\"path\":\"$PATH\",\"headers\":{\"Host\":\"$HOST\"}}"
-    else
-        echo "{\"path\":\"$PATH\"}"
-    fi
+    local PATH=$(simple_input "WS Path" "/ws")
+    local HOST=$(simple_input "Host Header (Enter=skip)" "")
+    [ -n "$HOST" ] && echo "{\"path\":\"$PATH\",\"headers\":{\"Host\":\"$HOST\"}}" || echo "{\"path\":\"$PATH\"}"
 }
 
 build_grpc_settings() {
-    local SVC=$(ui_input "Service Name" "grpc")
-    if ui_confirm "Enable Multi Mode?" "n"; then
-        echo "{\"serviceName\":\"$SVC\",\"multiMode\":true}"
-    else
-        echo "{\"serviceName\":\"$SVC\"}"
-    fi
+    local SVC=$(simple_input "Service Name" "grpc")
+    simple_confirm "Multi Mode?" "n" && echo "{\"serviceName\":\"$SVC\",\"multiMode\":true}" || echo "{\"serviceName\":\"$SVC\"}"
 }
 
 build_xhttp_settings() {
-    local PATH=$(ui_input "XHTTP Path" "/xhttp")
+    local PATH=$(simple_input "XHTTP Path" "/xhttp")
     echo ""
-    echo "Mode: 1) auto  2) packet-up  3) stream-up  4) stream-one"
-    local MODE_OPT=$(ui_input "Select" "1")
+    echo "    Mode: 1) auto  2) packet-up  3) stream-up"
+    read -p "    Select [1]: " MODE_OPT
     local MODE="auto"
-    case $MODE_OPT in
-        2) MODE="packet-up" ;;
-        3) MODE="stream-up" ;;
-        4) MODE="stream-one" ;;
-    esac
+    case $MODE_OPT in 2) MODE="packet-up" ;; 3) MODE="stream-up" ;; esac
     echo "{\"path\":\"$PATH\",\"mode\":\"$MODE\"}"
 }
 
 build_httpupgrade_settings() {
-    local PATH=$(ui_input "HTTPUpgrade Path" "/hu")
-    local HOST=$(ui_input "Host (optional)" "")
-    if [ -n "$HOST" ]; then
-        echo "{\"path\":\"$PATH\",\"host\":\"$HOST\"}"
-    else
-        echo "{\"path\":\"$PATH\"}"
-    fi
+    local PATH=$(simple_input "Path" "/hu")
+    echo "{\"path\":\"$PATH\"}"
 }
 
 build_h2_settings() {
-    local PATH=$(ui_input "H2 Path" "/h2")
+    local PATH=$(simple_input "H2 Path" "/h2")
     echo "{\"path\":\"$PATH\"}"
 }
 
 build_kcp_settings() {
-    echo "Header: 1) none 2) srtp 3) utp 4) wechat-video 5) dtls 6) wireguard"
-    local H_OPT=$(ui_input "Select" "1")
+    echo ""
+    echo "    Header: 1) none 2) srtp 3) utp 4) wechat-video 5) dtls 6) wireguard"
+    read -p "    Select [1]: " H_OPT
     local HEADER="none"
-    case $H_OPT in
-        2) HEADER="srtp" ;; 3) HEADER="utp" ;; 4) HEADER="wechat-video" ;;
-        5) HEADER="dtls" ;; 6) HEADER="wireguard" ;;
-    esac
-    local SEED=$(ui_input "Seed/Password (optional)" "")
-    if [ -n "$SEED" ]; then
-        echo "{\"header\":{\"type\":\"$HEADER\"},\"seed\":\"$SEED\",\"mtu\":1350,\"tti\":50}"
-    else
-        echo "{\"header\":{\"type\":\"$HEADER\"},\"mtu\":1350,\"tti\":50}"
-    fi
+    case $H_OPT in 2) HEADER="srtp" ;; 3) HEADER="utp" ;; 4) HEADER="wechat-video" ;; 5) HEADER="dtls" ;; 6) HEADER="wireguard" ;; esac
+    echo "{\"header\":{\"type\":\"$HEADER\"},\"mtu\":1350,\"tti\":50}"
 }
 
 build_quic_settings() {
-    echo "Header: 1) none 2) srtp 3) utp 4) wechat-video 5) dtls 6) wireguard"
-    local H_OPT=$(ui_input "Select" "1")
-    local HEADER="none"
-    case $H_OPT in 2) HEADER="srtp" ;; 3) HEADER="utp" ;; 4) HEADER="wechat-video" ;; 5) HEADER="dtls" ;; 6) HEADER="wireguard" ;; esac
-    echo "{\"security\":\"none\",\"header\":{\"type\":\"$HEADER\"}}"
+    echo "{\"security\":\"none\",\"header\":{\"type\":\"none\"}}"
 }
 
-# ============ SECURITY BUILDERS ============
+# ============ SECURITY SETTINGS ============
 
 build_reality_settings() {
     echo ""
-    ui_info "Reality Settings"
+    echo -e "  ${UI_CYAN}── Reality Settings ──${UI_NC}"
+    echo ""
 
-    local DEST=$(ui_input "SNI Domain" "www.google.com")
+    local DEST=$(simple_input "SNI Domain" "www.google.com")
     local CLEAN_DEST=$(echo "$DEST" | sed 's/^www\.//')
 
-    ui_spinner_start "Generating X25519 Keys..."
+    echo -e "  ${UI_DIM}Generating keys...${UI_NC}"
     local KEYS=$(gen_x25519_keys)
-    ui_spinner_stop
-
     local PRIV=$(echo "$KEYS" | grep "Private" | awk '{print $3}')
     local PUB=$(echo "$KEYS" | grep "Public" | awk '{print $3}')
 
     if [[ "$PRIV" == "ERROR" ]] || [[ -z "$PRIV" ]]; then
-        ui_error "Failed to generate keys!"
-        PRIV=$(ui_input "Enter Private Key manually" "")
-        PUB=$(ui_input "Enter Public Key manually" "")
+        echo -e "  ${UI_RED}✘ Key generation failed!${UI_NC}"
+        PRIV=$(simple_input "Private Key" "")
+        PUB=$(simple_input "Public Key" "")
+    else
+        echo -e "  ${UI_GREEN}✔ Keys generated${UI_NC}"
     fi
 
     local SID=$(gen_short_id)
-
-    # Save for display later
     echo "$PUB" > /tmp/reality_pub
     echo "$SID" > /tmp/reality_sid
 
-    echo "Fingerprint: 1) chrome 2) firefox 3) safari 4) ios 5) android 6) random"
-    local FP_OPT=$(ui_input "Select" "1")
+    echo ""
+    echo "    Fingerprint: 1) chrome 2) firefox 3) safari 4) random"
+    read -p "    Select [1]: " FP_OPT
     local FP="chrome"
-    case $FP_OPT in 2) FP="firefox" ;; 3) FP="safari" ;; 4) FP="ios" ;; 5) FP="android" ;; 6) FP="random" ;; esac
+    case $FP_OPT in 2) FP="firefox" ;; 3) FP="safari" ;; 4) FP="random" ;; esac
 
     cat << EOF
-{
-    "show": false,
-    "dest": "$DEST:443",
-    "xver": 0,
-    "serverNames": ["$DEST", "www.$CLEAN_DEST"],
-    "privateKey": "$PRIV",
-    "shortIds": ["$SID"],
-    "fingerprint": "$FP"
-}
+{"show":false,"dest":"$DEST:443","xver":0,"serverNames":["$DEST","www.$CLEAN_DEST"],"privateKey":"$PRIV","shortIds":["$SID"],"fingerprint":"$FP"}
 EOF
 }
 
 build_tls_settings() {
     echo ""
-    ui_info "TLS Settings"
-
-    local CERTS_JSON="[]"
+    echo -e "  ${UI_CYAN}── TLS Certificates ──${UI_NC}"
+    
     local CERTS_ARRAY=()
-
-    local AVAILABLE=$(get_available_certs)
-    if [ -n "$AVAILABLE" ]; then
-        echo "Available certificates: $AVAILABLE"
-    fi
-
-    echo "Enter domains (empty to finish):"
-    while true; do
-        local DOMAIN=$(ui_input "Domain" "")
-        [ -z "$DOMAIN" ] && break
-
-        local PATHS=$(find_cert_paths "$DOMAIN")
-        if [ -n "$PATHS" ]; then
-            local CERT=$(echo "$PATHS" | cut -d'|' -f1)
-            local KEY=$(echo "$PATHS" | cut -d'|' -f2)
-            CERTS_ARRAY+=("{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}")
-            ui_success "Added: $DOMAIN"
-        else
-            ui_error "Certificate not found for $DOMAIN"
-            local CERT=$(ui_input "Cert file path" "")
-            local KEY=$(ui_input "Key file path" "")
-            if [ -f "$CERT" ] && [ -f "$KEY" ]; then
+    local RESULT
+    RESULT=$(select_tls_certificates)
+    local STATUS=$?
+    
+    if [ $STATUS -eq 0 ] && [ -n "$RESULT" ]; then
+        for domain in $RESULT; do
+            local PATHS=$(find_cert_paths "$domain")
+            if [ -n "$PATHS" ]; then
+                local CERT=$(echo "$PATHS" | cut -d'|' -f1)
+                local KEY=$(echo "$PATHS" | cut -d'|' -f2)
                 CERTS_ARRAY+=("{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}")
-                ui_success "Added manually"
+                echo -e "  ${UI_GREEN}✔ Added: $domain${UI_NC}"
             fi
-        fi
-    done
-
-    if [ ${#CERTS_ARRAY[@]} -gt 0 ]; then
-        CERTS_JSON=$(printf '%s\n' "${CERTS_ARRAY[@]}" | jq -s '.')
+        done
+    elif [ $STATUS -eq 2 ]; then
+        echo ""
+        echo "  Enter domains (empty=done):"
+        while true; do
+            local DOMAIN=$(simple_input "Domain" "")
+            [ -z "$DOMAIN" ] && break
+            local PATHS=$(find_cert_paths "$DOMAIN")
+            if [ -n "$PATHS" ]; then
+                local CERT=$(echo "$PATHS" | cut -d'|' -f1)
+                local KEY=$(echo "$PATHS" | cut -d'|' -f2)
+                CERTS_ARRAY+=("{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}")
+                echo -e "  ${UI_GREEN}✔ Added: $DOMAIN${UI_NC}"
+            else
+                echo -e "  ${UI_YELLOW}Not found, enter paths:${UI_NC}"
+                local CERT=$(simple_input "Cert path" "")
+                local KEY=$(simple_input "Key path" "")
+                [ -f "$CERT" ] && [ -f "$KEY" ] && CERTS_ARRAY+=("{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}")
+            fi
+        done
     fi
-
+    
+    local CERTS_JSON="[]"
+    [ ${#CERTS_ARRAY[@]} -gt 0 ] && CERTS_JSON=$(printf '%s\n' "${CERTS_ARRAY[@]}" | jq -s '.')
+    
     echo "{\"certificates\":$CERTS_JSON,\"alpn\":[\"h2\",\"http/1.1\"]}"
 }
 
-# ============ CLIENT BUILDERS ============
+# ============ CLIENT SETTINGS ============
 
 build_vless_client() {
     local FLOW=$1
     local UUID=$(gen_uuid)
     local EMAIL="user_$(date +%s)"
 
-    EMAIL=$(ui_input "Email" "$EMAIL")
-    UUID=$(ui_input "UUID" "$UUID")
+    EMAIL=$(simple_input "Email" "$EMAIL")
+    UUID=$(simple_input "UUID" "$UUID")
 
     echo "$UUID" > /tmp/last_uuid
     echo "$EMAIL" > /tmp/last_email
 
-    if [ -n "$FLOW" ]; then
-        echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\",\"flow\":\"$FLOW\"}"
-    else
-        echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\"}"
-    fi
+    [ -n "$FLOW" ] && echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\",\"flow\":\"$FLOW\"}" || echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\"}"
 }
 
 build_vmess_client() {
     local UUID=$(gen_uuid)
     local EMAIL="user_$(date +%s)"
-
-    EMAIL=$(ui_input "Email" "$EMAIL")
-    UUID=$(ui_input "UUID" "$UUID")
-
+    EMAIL=$(simple_input "Email" "$EMAIL")
+    UUID=$(simple_input "UUID" "$UUID")
     echo "$UUID" > /tmp/last_uuid
     echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\",\"alterId\":0}"
 }
@@ -210,23 +174,20 @@ build_vmess_client() {
 build_trojan_client() {
     local PASS=$(gen_password)
     local EMAIL="user_$(date +%s)"
-
-    EMAIL=$(ui_input "Email" "$EMAIL")
-    PASS=$(ui_input "Password" "$PASS")
-
+    EMAIL=$(simple_input "Email" "$EMAIL")
+    PASS=$(simple_input "Password" "$PASS")
     echo "$PASS" > /tmp/last_pass
     echo "{\"password\":\"$PASS\",\"email\":\"$EMAIL\"}"
 }
 
 build_ss_settings() {
-    echo "Method: 1) 2022-blake3-aes-128-gcm 2) aes-256-gcm 3) chacha20-poly1305"
-    local M_OPT=$(ui_input "Select" "1")
+    echo ""
+    echo "    Method: 1) 2022-blake3-aes-128-gcm 2) aes-256-gcm 3) chacha20-poly1305"
+    read -p "    Select [1]: " M_OPT
     local METHOD="2022-blake3-aes-128-gcm"
     case $M_OPT in 2) METHOD="aes-256-gcm" ;; 3) METHOD="chacha20-poly1305" ;; esac
-
     local PASS=$(gen_ss_password)
-    PASS=$(ui_input "Password" "$PASS")
-
+    PASS=$(simple_input "Password" "$PASS")
     echo "$PASS" > /tmp/last_pass
     echo "{\"method\":\"$METHOD\",\"password\":\"$PASS\",\"network\":\"tcp,udp\"}"
 }
@@ -234,48 +195,65 @@ build_ss_settings() {
 # ============ ADVANCED CREATOR ============
 
 create_advanced_inbound() {
-    ui_header "CREATE INBOUND" 55
-
+    clear
     check_inbound_requirements || return
 
+    echo ""
+    echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+    echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}CREATE CUSTOM INBOUND${UI_NC}               ${UI_CYAN}║${UI_NC}"
+    echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+
     # Step 1: Protocol
-    echo -e "${UI_YELLOW}Step 1: Protocol${UI_NC}"
-    local PROTOCOL=$(select_protocol)
-    ui_success "Selected: $PROTOCOL"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 1/7: Protocol${UI_NC}"
+    show_protocols
+    read -p "  Select [1]: " P_OPT
+    [ -z "$P_OPT" ] && P_OPT="1"
+    local PROTOCOL=$(get_protocol "$P_OPT")
+    echo -e "  ${UI_GREEN}✔${UI_NC} Protocol: $PROTOCOL"
 
     # Step 2: Transport
-    echo -e "\n${UI_YELLOW}Step 2: Transport${UI_NC}"
-    local TRANSPORT=$(select_transport)
-    ui_success "Selected: $TRANSPORT"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 2/7: Transport${UI_NC}"
+    show_transports
+    read -p "  Select [1]: " T_OPT
+    [ -z "$T_OPT" ] && T_OPT="1"
+    local TRANSPORT=$(get_transport "$T_OPT")
+    echo -e "  ${UI_GREEN}✔${UI_NC} Transport: $TRANSPORT"
 
     # Step 3: Security
-    echo -e "\n${UI_YELLOW}Step 3: Security${UI_NC}"
-    local SECURITY=$(select_security "$TRANSPORT")
-    ui_success "Selected: $SECURITY"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 3/7: Security${UI_NC}"
+    show_security "$TRANSPORT"
+    read -p "  Select [2]: " S_OPT
+    [ -z "$S_OPT" ] && S_OPT="2"
+    local SECURITY=$(get_security "$S_OPT" "$TRANSPORT")
+    echo -e "  ${UI_GREEN}✔${UI_NC} Security: $SECURITY"
 
     # Validate
     if [[ "$SECURITY" == "reality" ]] && [[ ! "$TRANSPORT" =~ ^(tcp|grpc|h2)$ ]]; then
-        ui_error "Reality only works with TCP, gRPC, or H2!"
-        pause; return
+        echo -e "  ${UI_RED}✘ Reality needs TCP/gRPC/H2!${UI_NC}"
+        pause
+        return
     fi
 
     # Step 4: Basic Info
-    echo -e "\n${UI_YELLOW}Step 4: Basic Info${UI_NC}"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 4/7: Basic Info${UI_NC}"
+    echo ""
     local DEFAULT_TAG="${PROTOCOL^^}_${TRANSPORT^^}_$(date +%s)"
-    local TAG=$(ui_input "Tag" "$DEFAULT_TAG")
+    local TAG=$(simple_input "Tag" "$DEFAULT_TAG")
     local PORT=$(input_port "")
-    local LISTEN=$(ui_input "Listen" "0.0.0.0")
+    local LISTEN=$(simple_input "Listen" "0.0.0.0")
+    echo -e "  ${UI_GREEN}✔${UI_NC} Tag: $TAG, Port: $PORT"
 
     # Step 5: Transport Settings
-    echo -e "\n${UI_YELLOW}Step 5: Transport Settings${UI_NC}"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 5/7: Transport Settings${UI_NC}"
     local TRANSPORT_SETTINGS="{}"
     case $TRANSPORT in
         tcp)
-            if ui_confirm "Use HTTP Camouflage?" "n"; then
-                TRANSPORT_SETTINGS=$(build_tcp_settings "y")
-            else
-                TRANSPORT_SETTINGS=$(build_tcp_settings "n")
-            fi
+            simple_confirm "HTTP Camouflage?" "n" && TRANSPORT_SETTINGS=$(build_tcp_settings "y") || TRANSPORT_SETTINGS=$(build_tcp_settings "n")
             ;;
         ws) TRANSPORT_SETTINGS=$(build_ws_settings) ;;
         grpc) TRANSPORT_SETTINGS=$(build_grpc_settings) ;;
@@ -285,9 +263,11 @@ create_advanced_inbound() {
         kcp) TRANSPORT_SETTINGS=$(build_kcp_settings) ;;
         quic) TRANSPORT_SETTINGS=$(build_quic_settings) ;;
     esac
+    echo -e "  ${UI_GREEN}✔${UI_NC} Transport configured"
 
     # Step 6: Security Settings
-    echo -e "\n${UI_YELLOW}Step 6: Security Settings${UI_NC}"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 6/7: Security Settings${UI_NC}"
     local SECURITY_SETTINGS="{}"
     local FLOW=""
 
@@ -300,9 +280,12 @@ create_advanced_inbound() {
             SECURITY_SETTINGS=$(build_tls_settings)
             ;;
     esac
+    echo -e "  ${UI_GREEN}✔${UI_NC} Security configured"
 
     # Step 7: Client Settings
-    echo -e "\n${UI_YELLOW}Step 7: Client Settings${UI_NC}"
+    echo ""
+    echo -e "  ${UI_GREEN}Step 7/7: Client Settings${UI_NC}"
+    echo ""
     local SETTINGS=""
 
     case $PROTOCOL in
@@ -322,75 +305,66 @@ create_advanced_inbound() {
             SETTINGS=$(build_ss_settings)
             ;;
         socks)
-            if ui_confirm "Require Auth?" "n"; then
-                local USER=$(ui_input "Username" "")
-                local PASS=$(ui_input "Password" "")
+            if simple_confirm "Require Auth?" "n"; then
+                local USER=$(simple_input "Username" "")
+                local PASS=$(simple_input "Password" "")
                 SETTINGS="{\"auth\":\"password\",\"accounts\":[{\"user\":\"$USER\",\"pass\":\"$PASS\"}],\"udp\":true}"
             else
                 SETTINGS="{\"auth\":\"noauth\",\"udp\":true}"
             fi
             ;;
         http)
-            if ui_confirm "Require Auth?" "n"; then
-                local USER=$(ui_input "Username" "")
-                local PASS=$(ui_input "Password" "")
-                SETTINGS="{\"accounts\":[{\"user\":\"$USER\",\"pass\":\"$PASS\"}]}"
-            else
-                SETTINGS="{}"
-            fi
+            SETTINGS="{}"
             ;;
         dokodemo-door)
-            local ADDR=$(ui_input "Target Address" "")
-            local TPORT=$(ui_input "Target Port" "")
-            local NET=$(ui_input "Network" "tcp,udp")
-            SETTINGS="{\"address\":\"$ADDR\",\"port\":$TPORT,\"network\":\"$NET\"}"
+            local ADDR=$(simple_input "Target Address" "")
+            local TPORT=$(simple_input "Target Port" "")
+            SETTINGS="{\"address\":\"$ADDR\",\"port\":$TPORT,\"network\":\"tcp,udp\"}"
             ;;
     esac
+    echo -e "  ${UI_GREEN}✔${UI_NC} Client configured"
 
     # Sniffing
     local SNIFFING='{"enabled":true,"destOverride":["http","tls","quic","fakedns"]}'
-    if ! ui_confirm "Enable Sniffing?" "y"; then
-        SNIFFING='{"enabled":false}'
-    fi
 
     # Create
+    echo ""
+    echo -e "  ${UI_DIM}Creating inbound...${UI_NC}"
     backup_xray_config
 
-    python3 << PYEOF
+    local RESULT=$(python3 << PYEOF
 import json
 import sys
 
 config_path = "$XRAY_CONFIG"
-tag = "$TAG"
-port = $PORT
-listen_addr = "$LISTEN"
-protocol = "$PROTOCOL"
-transport = "$TRANSPORT"
-security = "$SECURITY"
 
 settings = $SETTINGS
 transport_settings = $TRANSPORT_SETTINGS
 security_settings = $SECURITY_SETTINGS
 sniffing = $SNIFFING
 
-stream_settings = {"network": transport, "security": security}
+stream_settings = {"network": "$TRANSPORT", "security": "$SECURITY"}
 
-transport_key = f"{transport}Settings"
-if transport == "ws": transport_key = "wsSettings"
-elif transport == "h2": transport_key = "httpSettings"
-elif transport == "kcp": transport_key = "kcpSettings"
+transport_key = "${TRANSPORT}Settings"
+if "$TRANSPORT" == "ws": transport_key = "wsSettings"
+elif "$TRANSPORT" == "h2": transport_key = "httpSettings"
+elif "$TRANSPORT" == "kcp": transport_key = "kcpSettings"
 
 stream_settings[transport_key] = transport_settings
 
-if security == "reality":
+if "$SECURITY" == "reality":
     stream_settings["realitySettings"] = security_settings
-elif security == "tls":
+elif "$SECURITY" == "tls":
     stream_settings["tlsSettings"] = security_settings
 
 new_inbound = {
-    "tag": tag, "listen": listen_addr, "port": port,
-    "protocol": protocol, "settings": settings,
-    "streamSettings": stream_settings, "sniffing": sniffing
+    "tag": "$TAG",
+    "listen": "$LISTEN",
+    "port": $PORT,
+    "protocol": "$PROTOCOL",
+    "settings": settings,
+    "streamSettings": stream_settings,
+    "sniffing": sniffing
 }
 
 try:
@@ -399,39 +373,42 @@ try:
     if 'inbounds' not in config:
         config['inbounds'] = []
     for ib in config['inbounds']:
-        if ib.get('port') == port:
-            print(f"CONFLICT")
+        if ib.get('port') == $PORT:
+            print(f"CONFLICT:{ib.get('tag')}")
             sys.exit(1)
     config['inbounds'].append(new_inbound)
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
     print("SUCCESS")
 except Exception as e:
-    print(f"ERROR: {e}")
+    print(f"ERROR:{e}")
     sys.exit(1)
 PYEOF
+)
 
-    if [ $? -eq 0 ]; then
+    echo ""
+    if [[ "$RESULT" == "SUCCESS" ]]; then
+        echo -e "  ${UI_GREEN}╔════════════════════════════════════════╗${UI_NC}"
+        echo -e "  ${UI_GREEN}║     ✔ INBOUND CREATED!                 ║${UI_NC}"
+        echo -e "  ${UI_GREEN}╚════════════════════════════════════════╝${UI_NC}"
         echo ""
-        ui_success "Inbound Created!"
+        echo -e "  Tag:       ${UI_CYAN}$TAG${UI_NC}"
+        echo -e "  Protocol:  ${UI_CYAN}$PROTOCOL${UI_NC}"
+        echo -e "  Transport: ${UI_CYAN}$TRANSPORT${UI_NC}"
+        echo -e "  Security:  ${UI_CYAN}$SECURITY${UI_NC}"
+        echo -e "  Port:      ${UI_CYAN}$PORT${UI_NC}"
+        
+        [ -f /tmp/last_uuid ] && echo -e "  UUID:      ${UI_CYAN}$(cat /tmp/last_uuid)${UI_NC}"
+        [ -f /tmp/last_pass ] && echo -e "  Password:  ${UI_CYAN}$(cat /tmp/last_pass)${UI_NC}"
+        [ -f /tmp/reality_pub ] && echo -e "  PublicKey: ${UI_CYAN}$(cat /tmp/reality_pub)${UI_NC}"
+        [ -f /tmp/reality_sid ] && echo -e "  ShortID:   ${UI_CYAN}$(cat /tmp/reality_sid)${UI_NC}"
+        
+        rm -f /tmp/last_uuid /tmp/last_pass /tmp/last_email /tmp/reality_pub /tmp/reality_sid 2>/dev/null
+        
         echo ""
-        echo -e "Tag:       ${UI_CYAN}$TAG${UI_NC}"
-        echo -e "Protocol:  ${UI_CYAN}$PROTOCOL${UI_NC}"
-        echo -e "Transport: ${UI_CYAN}$TRANSPORT${UI_NC}"
-        echo -e "Security:  ${UI_CYAN}$SECURITY${UI_NC}"
-        echo -e "Port:      ${UI_CYAN}$PORT${UI_NC}"
-
-        [ -f /tmp/last_uuid ] && echo -e "UUID:      ${UI_CYAN}$(cat /tmp/last_uuid)${UI_NC}"
-        [ -f /tmp/last_pass ] && echo -e "Password:  ${UI_CYAN}$(cat /tmp/last_pass)${UI_NC}"
-        [ -f /tmp/reality_pub ] && echo -e "PublicKey: ${UI_CYAN}$(cat /tmp/reality_pub)${UI_NC}"
-        [ -f /tmp/reality_sid ] && echo -e "ShortID:   ${UI_CYAN}$(cat /tmp/reality_sid)${UI_NC}"
-
-        rm -f /tmp/last_uuid /tmp/last_pass /tmp/last_email /tmp/reality_pub /tmp/reality_sid
-
-        echo ""
-        if ui_confirm "Restart Panel?" "y"; then
-            restart_service "panel"
-        fi
+        simple_confirm "Restart Panel?" "y" && restart_service "panel"
+    else
+        echo -e "  ${UI_RED}✘ Failed: $RESULT${UI_NC}"
     fi
 
     pause
@@ -440,86 +417,83 @@ PYEOF
 # ============ QUICK PRESETS ============
 
 quick_reality_preset() {
-    ui_header "QUICK REALITY" 55
-
+    clear
     check_inbound_requirements || return
 
-    echo "Preset: 1) VLESS+Reality+TCP+Vision  2) VLESS+Reality+gRPC  3) VLESS+Reality+H2"
-    local PRESET=$(ui_input "Select" "1")
+    echo ""
+    echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+    echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}QUICK REALITY SETUP${UI_NC}                 ${UI_CYAN}║${UI_NC}"
+    echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+    echo ""
+    echo "  Preset:"
+    echo "    1) VLESS + TCP + Vision ${UI_DIM}(Best)${UI_NC}"
+    echo "    2) VLESS + gRPC"
+    echo "    3) VLESS + H2"
+    echo ""
+    read -p "  Select [1]: " PRESET
+    [ -z "$PRESET" ] && PRESET="1"
 
     local TRANSPORT="tcp"
     local FLOW="xtls-rprx-vision"
-    case $PRESET in
-        2) TRANSPORT="grpc"; FLOW="" ;;
-        3) TRANSPORT="h2"; FLOW="" ;;
-    esac
+    case $PRESET in 2) TRANSPORT="grpc"; FLOW="" ;; 3) TRANSPORT="h2"; FLOW="" ;; esac
 
-    local TAG=$(ui_input "Tag" "REALITY_$(date +%s)")
+    echo ""
+    local TAG=$(simple_input "Tag" "REALITY_$(date +%s)")
     local PORT=$(input_port "")
 
-    echo "SNI: 1) google.com 2) microsoft.com 3) apple.com 4) cloudflare.com 5) Custom"
-    local SNI_OPT=$(ui_input "Select" "1")
+    echo ""
+    echo "  SNI: 1) google 2) microsoft 3) apple 4) cloudflare 5) custom"
+    read -p "  Select [1]: " SNI_OPT
     local DEST="www.google.com"
     case $SNI_OPT in
         2) DEST="www.microsoft.com" ;;
         3) DEST="www.apple.com" ;;
         4) DEST="www.cloudflare.com" ;;
-        5) DEST=$(ui_input "Domain" "") ;;
+        5) DEST=$(simple_input "Domain" "") ;;
     esac
 
-    ui_spinner_start "Generating keys..."
+    echo ""
+    echo -e "  ${UI_DIM}Generating keys...${UI_NC}"
     local KEYS=$(gen_x25519_keys)
-    ui_spinner_stop
-
     local PRIV=$(echo "$KEYS" | grep "Private" | awk '{print $3}')
     local PUB=$(echo "$KEYS" | grep "Public" | awk '{print $3}')
     local SID=$(gen_short_id)
     local UUID=$(gen_uuid)
 
     if [[ "$PRIV" == "ERROR" ]] || [[ -z "$PRIV" ]]; then
-        ui_error "Failed to generate keys!"
-        pause; return
+        echo -e "  ${UI_RED}✘ Key generation failed!${UI_NC}"
+        pause
+        return
     fi
+    echo -e "  ${UI_GREEN}✔ Keys generated${UI_NC}"
 
     backup_xray_config
 
-    python3 << PYEOF
+    local RESULT=$(python3 << PYEOF
 import json
 import sys
 
 config_path = "$XRAY_CONFIG"
-tag = "$TAG"
-port = $PORT
-transport = "$TRANSPORT"
-flow = "$FLOW"
-dest = "$DEST"
-priv = "$PRIV"
-sid = "$SID"
-uuid = "$UUID"
 
-client = {"id": uuid, "email": f"user_{tag}"}
-if flow:
-    client["flow"] = flow
+client = {"id": "$UUID", "email": "user_$TAG"}
+if "$FLOW": client["flow"] = "$FLOW"
 
 stream = {
-    "network": transport,
+    "network": "$TRANSPORT",
     "security": "reality",
     "realitySettings": {
-        "show": False, "dest": f"{dest}:443", "xver": 0,
-        "serverNames": [dest], "privateKey": priv,
-        "shortIds": [sid], "fingerprint": "chrome"
+        "show": False, "dest": "$DEST:443", "xver": 0,
+        "serverNames": ["$DEST"], "privateKey": "$PRIV",
+        "shortIds": ["$SID"], "fingerprint": "chrome"
     }
 }
 
-if transport == "grpc":
-    stream["grpcSettings"] = {"serviceName": "grpc"}
-elif transport == "h2":
-    stream["httpSettings"] = {"path": "/"}
-else:
-    stream["tcpSettings"] = {"header": {"type": "none"}}
+if "$TRANSPORT" == "grpc": stream["grpcSettings"] = {"serviceName": "grpc"}
+elif "$TRANSPORT" == "h2": stream["httpSettings"] = {"path": "/"}
+else: stream["tcpSettings"] = {"header": {"type": "none"}}
 
 inbound = {
-    "tag": tag, "listen": "0.0.0.0", "port": port,
+    "tag": "$TAG", "listen": "0.0.0.0", "port": $PORT,
     "protocol": "vless",
     "settings": {"clients": [client], "decryption": "none"},
     "streamSettings": stream,
@@ -532,7 +506,7 @@ try:
     if 'inbounds' not in config:
         config['inbounds'] = []
     for ib in config['inbounds']:
-        if ib.get('port') == port:
+        if ib.get('port') == $PORT:
             print("CONFLICT")
             sys.exit(1)
     config['inbounds'].append(inbound)
@@ -543,90 +517,103 @@ except Exception as e:
     print(f"ERROR: {e}")
     sys.exit(1)
 PYEOF
+)
 
-    if [ $? -eq 0 ]; then
-        ui_success "Reality Inbound Created!"
+    echo ""
+    if [[ "$RESULT" == "OK" ]]; then
+        echo -e "  ${UI_GREEN}╔════════════════════════════════════════╗${UI_NC}"
+        echo -e "  ${UI_GREEN}║     ✔ REALITY CREATED!                 ║${UI_NC}"
+        echo -e "  ${UI_GREEN}╚════════════════════════════════════════╝${UI_NC}"
         echo ""
-        echo -e "Tag:        ${UI_CYAN}$TAG${UI_NC}"
-        echo -e "Port:       ${UI_CYAN}$PORT${UI_NC}"
-        echo -e "UUID:       ${UI_CYAN}$UUID${UI_NC}"
-        echo -e "SNI:        ${UI_CYAN}$DEST${UI_NC}"
-        echo -e "Public Key: ${UI_CYAN}$PUB${UI_NC}"
-        echo -e "Short ID:   ${UI_CYAN}$SID${UI_NC}"
+        echo -e "  Tag:        ${UI_CYAN}$TAG${UI_NC}"
+        echo -e "  Port:       ${UI_CYAN}$PORT${UI_NC}"
+        echo -e "  UUID:       ${UI_CYAN}$UUID${UI_NC}"
+        echo -e "  SNI:        ${UI_CYAN}$DEST${UI_NC}"
+        echo -e "  Public Key: ${UI_CYAN}$PUB${UI_NC}"
+        echo -e "  Short ID:   ${UI_CYAN}$SID${UI_NC}"
         echo ""
-        if ui_confirm "Restart Panel?" "y"; then
-            restart_service "panel"
-        fi
+        simple_confirm "Restart Panel?" "y" && restart_service "panel"
+    else
+        echo -e "  ${UI_RED}✘ Failed: $RESULT${UI_NC}"
     fi
+
     pause
 }
 
 quick_cdn_preset() {
-    ui_header "QUICK CDN" 55
-
+    clear
     check_inbound_requirements || return
 
-    echo "Preset: 1) VLESS+WS+NoTLS 2) VMess+WS+NoTLS 3) VLESS+WS+TLS 4) VMess+WS+TLS"
-    local PRESET=$(ui_input "Select" "1")
+    echo ""
+    echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+    echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}QUICK CDN SETUP${UI_NC}                     ${UI_CYAN}║${UI_NC}"
+    echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+    echo ""
+    echo "  Preset:"
+    echo "    1) VLESS + WS + NoTLS ${UI_DIM}(Port 80)${UI_NC}"
+    echo "    2) VMess + WS + NoTLS"
+    echo "    3) VLESS + WS + TLS ${UI_DIM}(Port 443)${UI_NC}"
+    echo "    4) VMess + WS + TLS"
+    echo ""
+    read -p "  Select [1]: " PRESET
+    [ -z "$PRESET" ] && PRESET="1"
 
     local PROTO="vless"
     local SECURITY="none"
-    case $PRESET in
-        2) PROTO="vmess" ;;
-        3) SECURITY="tls" ;;
-        4) PROTO="vmess"; SECURITY="tls" ;;
-    esac
+    case $PRESET in 2) PROTO="vmess" ;; 3) SECURITY="tls" ;; 4) PROTO="vmess"; SECURITY="tls" ;; esac
 
-    local TAG=$(ui_input "Tag" "CDN_${PROTO^^}_$(date +%s)")
-    local PORT=80
-    [ "$SECURITY" == "tls" ] && PORT=443
-    PORT=$(input_port "$PORT")
-    local PATH=$(ui_input "Path" "/ws")
+    echo ""
+    local TAG=$(simple_input "Tag" "CDN_${PROTO^^}_$(date +%s)")
+    local DEFAULT_PORT=80
+    [ "$SECURITY" == "tls" ] && DEFAULT_PORT=443
+    local PORT=$(input_port "$DEFAULT_PORT")
+    local PATH=$(simple_input "Path" "/ws")
     local UUID=$(gen_uuid)
 
     local TLS_SETTINGS="{}"
     if [ "$SECURITY" == "tls" ]; then
-        local DOMAIN=$(ui_input "Domain for TLS" "")
-        local PATHS=$(find_cert_paths "$DOMAIN")
-        if [ -n "$PATHS" ]; then
-            local CERT=$(echo "$PATHS" | cut -d'|' -f1)
-            local KEY=$(echo "$PATHS" | cut -d'|' -f2)
-            TLS_SETTINGS="{\"certificates\":[{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}]}"
+        local RESULT
+        RESULT=$(select_tls_certificates)
+        local STATUS=$?
+        
+        if [ $STATUS -eq 0 ] && [ -n "$RESULT" ]; then
+            local FIRST=$(echo "$RESULT" | awk '{print $1}')
+            local PATHS=$(find_cert_paths "$FIRST")
+            if [ -n "$PATHS" ]; then
+                local CERT=$(echo "$PATHS" | cut -d'|' -f1)
+                local KEY=$(echo "$PATHS" | cut -d'|' -f2)
+                TLS_SETTINGS="{\"certificates\":[{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}]}"
+                echo -e "  ${UI_GREEN}✔ Using: $FIRST${UI_NC}"
+            fi
         else
-            ui_error "Certificate not found!"
-            pause; return
+            echo -e "  ${UI_RED}✘ TLS needs certificate!${UI_NC}"
+            pause
+            return
         fi
     fi
 
     backup_xray_config
 
-    python3 << PYEOF
+    local RESULT=$(python3 << PYEOF
 import json
 import sys
 
 config_path = "$XRAY_CONFIG"
-tag = "$TAG"
-port = $PORT
-proto = "$PROTO"
-security = "$SECURITY"
-path = "$PATH"
-uuid = "$UUID"
-tls_settings = $TLS_SETTINGS
 
-if proto == "vmess":
-    client = {"id": uuid, "email": f"user_{tag}", "alterId": 0}
+if "$PROTO" == "vmess":
+    client = {"id": "$UUID", "email": "user_$TAG", "alterId": 0}
     settings = {"clients": [client]}
 else:
-    client = {"id": uuid, "email": f"user_{tag}"}
+    client = {"id": "$UUID", "email": "user_$TAG"}
     settings = {"clients": [client], "decryption": "none"}
 
-stream = {"network": "ws", "security": security, "wsSettings": {"path": path}}
-if security == "tls":
-    stream["tlsSettings"] = tls_settings
+stream = {"network": "ws", "security": "$SECURITY", "wsSettings": {"path": "$PATH"}}
+if "$SECURITY" == "tls":
+    stream["tlsSettings"] = $TLS_SETTINGS
 
 inbound = {
-    "tag": tag, "listen": "0.0.0.0", "port": port,
-    "protocol": proto, "settings": settings,
+    "tag": "$TAG", "listen": "0.0.0.0", "port": $PORT,
+    "protocol": "$PROTO", "settings": settings,
     "streamSettings": stream,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
@@ -637,7 +624,7 @@ try:
     if 'inbounds' not in config:
         config['inbounds'] = []
     for ib in config['inbounds']:
-        if ib.get('port') == port:
+        if ib.get('port') == $PORT:
             print("CONFLICT")
             sys.exit(1)
     config['inbounds'].append(inbound)
@@ -648,17 +635,23 @@ except Exception as e:
     print(f"ERROR: {e}")
     sys.exit(1)
 PYEOF
+)
 
-    if [ $? -eq 0 ]; then
-        ui_success "CDN Inbound Created!"
-        echo -e "Tag:  ${UI_CYAN}$TAG${UI_NC}"
-        echo -e "Port: ${UI_CYAN}$PORT${UI_NC}"
-        echo -e "Path: ${UI_CYAN}$PATH${UI_NC}"
-        echo -e "UUID: ${UI_CYAN}$UUID${UI_NC}"
+    echo ""
+    if [[ "$RESULT" == "OK" ]]; then
+        echo -e "  ${UI_GREEN}╔════════════════════════════════════════╗${UI_NC}"
+        echo -e "  ${UI_GREEN}║     ✔ CDN INBOUND CREATED!             ║${UI_NC}"
+        echo -e "  ${UI_GREEN}╚════════════════════════════════════════╝${UI_NC}"
         echo ""
-        if ui_confirm "Restart Panel?" "y"; then
-            restart_service "panel"
-        fi
+        echo -e "  Tag:      ${UI_CYAN}$TAG${UI_NC}"
+        echo -e "  Port:     ${UI_CYAN}$PORT${UI_NC}"
+        echo -e "  Path:     ${UI_CYAN}$PATH${UI_NC}"
+        echo -e "  UUID:     ${UI_CYAN}$UUID${UI_NC}"
+        echo ""
+        simple_confirm "Restart Panel?" "y" && restart_service "panel"
+    else
+        echo -e "  ${UI_RED}✘ Failed: $RESULT${UI_NC}"
     fi
+
     pause
 }
