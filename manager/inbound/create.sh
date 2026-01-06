@@ -2,7 +2,7 @@
 
 # ============================================
 # INBOUND MANAGER - Create Functions
-# Version: 2.1 (Fixed Display)
+# Version: 2.2 (Fixed Python Boolean)
 # ============================================
 
 # ============ STREAM SETTINGS ============
@@ -287,18 +287,19 @@ create_advanced_inbound() {
     echo -e "  ${UI_GREEN}Step 7/7: Client Settings${UI_NC}"
     echo ""
     local SETTINGS=""
+    local CLIENT=""
 
     case $PROTOCOL in
         vless)
-            local CLIENT=$(build_vless_client "$FLOW")
+            CLIENT=$(build_vless_client "$FLOW")
             SETTINGS="{\"clients\":[$CLIENT],\"decryption\":\"none\"}"
             ;;
         vmess)
-            local CLIENT=$(build_vmess_client)
+            CLIENT=$(build_vmess_client)
             SETTINGS="{\"clients\":[$CLIENT]}"
             ;;
         trojan)
-            local CLIENT=$(build_trojan_client)
+            CLIENT=$(build_trojan_client)
             SETTINGS="{\"clients\":[$CLIENT]}"
             ;;
         shadowsocks)
@@ -324,44 +325,97 @@ create_advanced_inbound() {
     esac
     echo -e "  ${UI_GREEN}✔${UI_NC} Client configured"
 
-    # Sniffing
-    local SNIFFING='{"enabled":true,"destOverride":["http","tls","quic","fakedns"]}'
-
     # Create
     echo ""
     echo -e "  ${UI_DIM}Creating inbound...${UI_NC}"
     backup_xray_config
 
-    local RESULT=$(python3 << PYEOF
+    # Write temp files for Python to read
+    echo "$TAG" > /tmp/inbound_tag
+    echo "$PORT" > /tmp/inbound_port
+    echo "$LISTEN" > /tmp/inbound_listen
+    echo "$PROTOCOL" > /tmp/inbound_protocol
+    echo "$TRANSPORT" > /tmp/inbound_transport
+    echo "$SECURITY" > /tmp/inbound_security
+    echo "$SETTINGS" > /tmp/inbound_settings
+    echo "$TRANSPORT_SETTINGS" > /tmp/inbound_transport_settings
+    echo "$SECURITY_SETTINGS" > /tmp/inbound_security_settings
+
+    local RESULT=$(python3 << 'PYEOF'
 import json
 import sys
+import os
 
-config_path = "$XRAY_CONFIG"
+# Read config path from environment
+config_path = os.environ.get('XRAY_CONFIG', '/var/lib/pasarguard/xray_config.json')
 
-settings = $SETTINGS
-transport_settings = $TRANSPORT_SETTINGS
-security_settings = $SECURITY_SETTINGS
-sniffing = $SNIFFING
+# Read values from temp files
+def read_file(path):
+    try:
+        with open(path, 'r') as f:
+            return f.read().strip()
+    except:
+        return ""
 
-stream_settings = {"network": "$TRANSPORT", "security": "$SECURITY"}
+tag = read_file('/tmp/inbound_tag')
+port = int(read_file('/tmp/inbound_port') or '0')
+listen_addr = read_file('/tmp/inbound_listen') or '0.0.0.0'
+protocol = read_file('/tmp/inbound_protocol')
+transport = read_file('/tmp/inbound_transport')
+security = read_file('/tmp/inbound_security')
 
-transport_key = "${TRANSPORT}Settings"
-if "$TRANSPORT" == "ws": transport_key = "wsSettings"
-elif "$TRANSPORT" == "h2": transport_key = "httpSettings"
-elif "$TRANSPORT" == "kcp": transport_key = "kcpSettings"
+# Parse JSON settings
+def parse_json(path):
+    try:
+        content = read_file(path)
+        if content:
+            return json.loads(content)
+    except:
+        pass
+    return {}
 
+settings = parse_json('/tmp/inbound_settings')
+transport_settings = parse_json('/tmp/inbound_transport_settings')
+security_settings = parse_json('/tmp/inbound_security_settings')
+
+# Build stream settings
+stream_settings = {
+    "network": transport,
+    "security": security
+}
+
+# Add transport settings with correct key
+transport_key_map = {
+    "ws": "wsSettings",
+    "h2": "httpSettings",
+    "kcp": "kcpSettings",
+    "tcp": "tcpSettings",
+    "grpc": "grpcSettings",
+    "xhttp": "xhttpSettings",
+    "httpupgrade": "httpupgradeSettings",
+    "quic": "quicSettings"
+}
+transport_key = transport_key_map.get(transport, f"{transport}Settings")
 stream_settings[transport_key] = transport_settings
 
-if "$SECURITY" == "reality":
+# Add security settings
+if security == "reality":
     stream_settings["realitySettings"] = security_settings
-elif "$SECURITY" == "tls":
+elif security == "tls":
     stream_settings["tlsSettings"] = security_settings
 
+# Build sniffing with Python True
+sniffing = {
+    "enabled": True,
+    "destOverride": ["http", "tls", "quic", "fakedns"]
+}
+
+# Build inbound
 new_inbound = {
-    "tag": "$TAG",
-    "listen": "$LISTEN",
-    "port": $PORT,
-    "protocol": "$PROTOCOL",
+    "tag": tag,
+    "listen": listen_addr,
+    "port": port,
+    "protocol": protocol,
     "settings": settings,
     "streamSettings": stream_settings,
     "sniffing": sniffing
@@ -370,21 +424,32 @@ new_inbound = {
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
+    
     if 'inbounds' not in config:
         config['inbounds'] = []
+    
+    # Check port conflict
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
+        if ib.get('port') == port:
             print(f"CONFLICT:{ib.get('tag')}")
             sys.exit(1)
+    
     config['inbounds'].append(new_inbound)
+    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+    
     print("SUCCESS")
 except Exception as e:
     print(f"ERROR:{e}")
     sys.exit(1)
 PYEOF
 )
+
+    # Cleanup temp files
+    rm -f /tmp/inbound_tag /tmp/inbound_port /tmp/inbound_listen /tmp/inbound_protocol \
+          /tmp/inbound_transport /tmp/inbound_security /tmp/inbound_settings \
+          /tmp/inbound_transport_settings /tmp/inbound_security_settings 2>/dev/null
 
     echo ""
     if [[ "$RESULT" == "SUCCESS" ]]; then
@@ -407,6 +472,9 @@ PYEOF
         
         echo ""
         simple_confirm "Restart Panel?" "y" && restart_service "panel"
+    elif [[ "$RESULT" == CONFLICT:* ]]; then
+        local EXISTING=$(echo "$RESULT" | cut -d: -f2)
+        echo -e "  ${UI_RED}✘ Port $PORT used by '$EXISTING'${UI_NC}"
     else
         echo -e "  ${UI_RED}✘ Failed: $RESULT${UI_NC}"
     fi
@@ -414,7 +482,7 @@ PYEOF
     pause
 }
 
-# ============ QUICK PRESETS ============
+# ============ QUICK REALITY PRESET ============
 
 quick_reality_preset() {
     clear
@@ -435,7 +503,10 @@ quick_reality_preset() {
 
     local TRANSPORT="tcp"
     local FLOW="xtls-rprx-vision"
-    case $PRESET in 2) TRANSPORT="grpc"; FLOW="" ;; 3) TRANSPORT="h2"; FLOW="" ;; esac
+    case $PRESET in 
+        2) TRANSPORT="grpc"; FLOW="" ;; 
+        3) TRANSPORT="h2"; FLOW="" ;; 
+    esac
 
     echo ""
     local TAG=$(simple_input "Tag" "REALITY_$(date +%s)")
@@ -469,31 +540,72 @@ quick_reality_preset() {
 
     backup_xray_config
 
-    local RESULT=$(python3 << PYEOF
+    # Write to temp files
+    echo "$TAG" > /tmp/r_tag
+    echo "$PORT" > /tmp/r_port
+    echo "$TRANSPORT" > /tmp/r_transport
+    echo "$FLOW" > /tmp/r_flow
+    echo "$DEST" > /tmp/r_dest
+    echo "$PRIV" > /tmp/r_priv
+    echo "$SID" > /tmp/r_sid
+    echo "$UUID" > /tmp/r_uuid
+
+    local RESULT=$(python3 << 'PYEOF'
 import json
 import sys
+import os
 
-config_path = "$XRAY_CONFIG"
+config_path = os.environ.get('XRAY_CONFIG', '/var/lib/pasarguard/xray_config.json')
 
-client = {"id": "$UUID", "email": "user_$TAG"}
-if "$FLOW": client["flow"] = "$FLOW"
+def read_file(path):
+    try:
+        with open(path, 'r') as f:
+            return f.read().strip()
+    except:
+        return ""
 
+tag = read_file('/tmp/r_tag')
+port = int(read_file('/tmp/r_port') or '0')
+transport = read_file('/tmp/r_transport')
+flow = read_file('/tmp/r_flow')
+dest = read_file('/tmp/r_dest')
+priv = read_file('/tmp/r_priv')
+sid = read_file('/tmp/r_sid')
+uuid = read_file('/tmp/r_uuid')
+
+# Build client
+client = {"id": uuid, "email": f"user_{tag}"}
+if flow:
+    client["flow"] = flow
+
+# Build stream settings
 stream = {
-    "network": "$TRANSPORT",
+    "network": transport,
     "security": "reality",
     "realitySettings": {
-        "show": False, "dest": "$DEST:443", "xver": 0,
-        "serverNames": ["$DEST"], "privateKey": "$PRIV",
-        "shortIds": ["$SID"], "fingerprint": "chrome"
+        "show": False,
+        "dest": f"{dest}:443",
+        "xver": 0,
+        "serverNames": [dest],
+        "privateKey": priv,
+        "shortIds": [sid],
+        "fingerprint": "chrome"
     }
 }
 
-if "$TRANSPORT" == "grpc": stream["grpcSettings"] = {"serviceName": "grpc"}
-elif "$TRANSPORT" == "h2": stream["httpSettings"] = {"path": "/"}
-else: stream["tcpSettings"] = {"header": {"type": "none"}}
+# Add transport-specific settings
+if transport == "grpc":
+    stream["grpcSettings"] = {"serviceName": "grpc"}
+elif transport == "h2":
+    stream["httpSettings"] = {"path": "/"}
+else:
+    stream["tcpSettings"] = {"header": {"type": "none"}}
 
+# Build inbound
 inbound = {
-    "tag": "$TAG", "listen": "0.0.0.0", "port": $PORT,
+    "tag": tag,
+    "listen": "0.0.0.0",
+    "port": port,
     "protocol": "vless",
     "settings": {"clients": [client], "decryption": "none"},
     "streamSettings": stream,
@@ -503,21 +615,29 @@ inbound = {
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
+    
     if 'inbounds' not in config:
         config['inbounds'] = []
+    
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
+        if ib.get('port') == port:
             print("CONFLICT")
             sys.exit(1)
+    
     config['inbounds'].append(inbound)
+    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+    
     print("OK")
 except Exception as e:
-    print(f"ERROR: {e}")
+    print(f"ERROR:{e}")
     sys.exit(1)
 PYEOF
 )
+
+    # Cleanup
+    rm -f /tmp/r_tag /tmp/r_port /tmp/r_transport /tmp/r_flow /tmp/r_dest /tmp/r_priv /tmp/r_sid /tmp/r_uuid 2>/dev/null
 
     echo ""
     if [[ "$RESULT" == "OK" ]]; then
@@ -540,6 +660,8 @@ PYEOF
     pause
 }
 
+# ============ QUICK CDN PRESET ============
+
 quick_cdn_preset() {
     clear
     check_inbound_requirements || return
@@ -560,7 +682,11 @@ quick_cdn_preset() {
 
     local PROTO="vless"
     local SECURITY="none"
-    case $PRESET in 2) PROTO="vmess" ;; 3) SECURITY="tls" ;; 4) PROTO="vmess"; SECURITY="tls" ;; esac
+    case $PRESET in 
+        2) PROTO="vmess" ;; 
+        3) SECURITY="tls" ;; 
+        4) PROTO="vmess"; SECURITY="tls" ;; 
+    esac
 
     echo ""
     local TAG=$(simple_input "Tag" "CDN_${PROTO^^}_$(date +%s)")
@@ -570,19 +696,20 @@ quick_cdn_preset() {
     local PATH=$(simple_input "Path" "/ws")
     local UUID=$(gen_uuid)
 
-    local TLS_SETTINGS="{}"
+    local TLS_CERT=""
+    local TLS_KEY=""
+    
     if [ "$SECURITY" == "tls" ]; then
-        local RESULT
-        RESULT=$(select_tls_certificates)
+        local CERT_RESULT
+        CERT_RESULT=$(select_tls_certificates)
         local STATUS=$?
         
-        if [ $STATUS -eq 0 ] && [ -n "$RESULT" ]; then
-            local FIRST=$(echo "$RESULT" | awk '{print $1}')
+        if [ $STATUS -eq 0 ] && [ -n "$CERT_RESULT" ]; then
+            local FIRST=$(echo "$CERT_RESULT" | awk '{print $1}')
             local PATHS=$(find_cert_paths "$FIRST")
             if [ -n "$PATHS" ]; then
-                local CERT=$(echo "$PATHS" | cut -d'|' -f1)
-                local KEY=$(echo "$PATHS" | cut -d'|' -f2)
-                TLS_SETTINGS="{\"certificates\":[{\"certificateFile\":\"$CERT\",\"keyFile\":\"$KEY\"}]}"
+                TLS_CERT=$(echo "$PATHS" | cut -d'|' -f1)
+                TLS_KEY=$(echo "$PATHS" | cut -d'|' -f2)
                 echo -e "  ${UI_GREEN}✔ Using: $FIRST${UI_NC}"
             fi
         else
@@ -594,26 +721,69 @@ quick_cdn_preset() {
 
     backup_xray_config
 
-    local RESULT=$(python3 << PYEOF
+    # Write to temp files
+    echo "$TAG" > /tmp/c_tag
+    echo "$PORT" > /tmp/c_port
+    echo "$PROTO" > /tmp/c_proto
+    echo "$SECURITY" > /tmp/c_security
+    echo "$PATH" > /tmp/c_path
+    echo "$UUID" > /tmp/c_uuid
+    echo "$TLS_CERT" > /tmp/c_cert
+    echo "$TLS_KEY" > /tmp/c_key
+
+    local RESULT=$(python3 << 'PYEOF'
 import json
 import sys
+import os
 
-config_path = "$XRAY_CONFIG"
+config_path = os.environ.get('XRAY_CONFIG', '/var/lib/pasarguard/xray_config.json')
 
-if "$PROTO" == "vmess":
-    client = {"id": "$UUID", "email": "user_$TAG", "alterId": 0}
+def read_file(path):
+    try:
+        with open(path, 'r') as f:
+            return f.read().strip()
+    except:
+        return ""
+
+tag = read_file('/tmp/c_tag')
+port = int(read_file('/tmp/c_port') or '0')
+proto = read_file('/tmp/c_proto')
+security = read_file('/tmp/c_security')
+ws_path = read_file('/tmp/c_path')
+uuid = read_file('/tmp/c_uuid')
+tls_cert = read_file('/tmp/c_cert')
+tls_key = read_file('/tmp/c_key')
+
+# Build client
+if proto == "vmess":
+    client = {"id": uuid, "email": f"user_{tag}", "alterId": 0}
     settings = {"clients": [client]}
 else:
-    client = {"id": "$UUID", "email": "user_$TAG"}
+    client = {"id": uuid, "email": f"user_{tag}"}
     settings = {"clients": [client], "decryption": "none"}
 
-stream = {"network": "ws", "security": "$SECURITY", "wsSettings": {"path": "$PATH"}}
-if "$SECURITY" == "tls":
-    stream["tlsSettings"] = $TLS_SETTINGS
+# Build stream settings
+stream = {
+    "network": "ws",
+    "security": security,
+    "wsSettings": {"path": ws_path}
+}
 
+# Add TLS settings if needed
+if security == "tls" and tls_cert and tls_key:
+    stream["tlsSettings"] = {
+        "certificates": [
+            {"certificateFile": tls_cert, "keyFile": tls_key}
+        ]
+    }
+
+# Build inbound
 inbound = {
-    "tag": "$TAG", "listen": "0.0.0.0", "port": $PORT,
-    "protocol": "$PROTO", "settings": settings,
+    "tag": tag,
+    "listen": "0.0.0.0",
+    "port": port,
+    "protocol": proto,
+    "settings": settings,
     "streamSettings": stream,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
@@ -621,21 +791,29 @@ inbound = {
 try:
     with open(config_path, 'r') as f:
         config = json.load(f)
+    
     if 'inbounds' not in config:
         config['inbounds'] = []
+    
     for ib in config['inbounds']:
-        if ib.get('port') == $PORT:
+        if ib.get('port') == port:
             print("CONFLICT")
             sys.exit(1)
+    
     config['inbounds'].append(inbound)
+    
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
+    
     print("OK")
 except Exception as e:
-    print(f"ERROR: {e}")
+    print(f"ERROR:{e}")
     sys.exit(1)
 PYEOF
 )
+
+    # Cleanup
+    rm -f /tmp/c_tag /tmp/c_port /tmp/c_proto /tmp/c_security /tmp/c_path /tmp/c_uuid /tmp/c_cert /tmp/c_key 2>/dev/null
 
     echo ""
     if [[ "$RESULT" == "OK" ]]; then
