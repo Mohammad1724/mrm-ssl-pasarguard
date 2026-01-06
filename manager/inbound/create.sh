@@ -2,7 +2,7 @@
 
 # ============================================
 # INBOUND MANAGER - Create Functions
-# Version: 2.2 (Fixed Python Boolean)
+# Version: 2.3 (Empty Clients - Panel Managed)
 # ============================================
 
 # ============ STREAM SETTINGS ============
@@ -146,52 +146,6 @@ build_tls_settings() {
     echo "{\"certificates\":$CERTS_JSON,\"alpn\":[\"h2\",\"http/1.1\"]}"
 }
 
-# ============ CLIENT SETTINGS ============
-
-build_vless_client() {
-    local FLOW=$1
-    local UUID=$(gen_uuid)
-    local EMAIL="user_$(date +%s)"
-
-    EMAIL=$(simple_input "Email" "$EMAIL")
-    UUID=$(simple_input "UUID" "$UUID")
-
-    echo "$UUID" > /tmp/last_uuid
-    echo "$EMAIL" > /tmp/last_email
-
-    [ -n "$FLOW" ] && echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\",\"flow\":\"$FLOW\"}" || echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\"}"
-}
-
-build_vmess_client() {
-    local UUID=$(gen_uuid)
-    local EMAIL="user_$(date +%s)"
-    EMAIL=$(simple_input "Email" "$EMAIL")
-    UUID=$(simple_input "UUID" "$UUID")
-    echo "$UUID" > /tmp/last_uuid
-    echo "{\"id\":\"$UUID\",\"email\":\"$EMAIL\",\"alterId\":0}"
-}
-
-build_trojan_client() {
-    local PASS=$(gen_password)
-    local EMAIL="user_$(date +%s)"
-    EMAIL=$(simple_input "Email" "$EMAIL")
-    PASS=$(simple_input "Password" "$PASS")
-    echo "$PASS" > /tmp/last_pass
-    echo "{\"password\":\"$PASS\",\"email\":\"$EMAIL\"}"
-}
-
-build_ss_settings() {
-    echo ""
-    echo "    Method: 1) 2022-blake3-aes-128-gcm 2) aes-256-gcm 3) chacha20-poly1305"
-    read -p "    Select [1]: " M_OPT
-    local METHOD="2022-blake3-aes-128-gcm"
-    case $M_OPT in 2) METHOD="aes-256-gcm" ;; 3) METHOD="chacha20-poly1305" ;; esac
-    local PASS=$(gen_ss_password)
-    PASS=$(simple_input "Password" "$PASS")
-    echo "$PASS" > /tmp/last_pass
-    echo "{\"method\":\"$METHOD\",\"password\":\"$PASS\",\"network\":\"tcp,udp\"}"
-}
-
 # ============ ADVANCED CREATOR ============
 
 create_advanced_inbound() {
@@ -205,7 +159,7 @@ create_advanced_inbound() {
 
     # Step 1: Protocol
     echo ""
-    echo -e "  ${UI_GREEN}Step 1/7: Protocol${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 1/6: Protocol${UI_NC}"
     show_protocols
     read -p "  Select [1]: " P_OPT
     [ -z "$P_OPT" ] && P_OPT="1"
@@ -214,7 +168,7 @@ create_advanced_inbound() {
 
     # Step 2: Transport
     echo ""
-    echo -e "  ${UI_GREEN}Step 2/7: Transport${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 2/6: Transport${UI_NC}"
     show_transports
     read -p "  Select [1]: " T_OPT
     [ -z "$T_OPT" ] && T_OPT="1"
@@ -223,7 +177,7 @@ create_advanced_inbound() {
 
     # Step 3: Security
     echo ""
-    echo -e "  ${UI_GREEN}Step 3/7: Security${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 3/6: Security${UI_NC}"
     show_security "$TRANSPORT"
     read -p "  Select [2]: " S_OPT
     [ -z "$S_OPT" ] && S_OPT="2"
@@ -239,7 +193,7 @@ create_advanced_inbound() {
 
     # Step 4: Basic Info
     echo ""
-    echo -e "  ${UI_GREEN}Step 4/7: Basic Info${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 4/6: Basic Info${UI_NC}"
     echo ""
     local DEFAULT_TAG="${PROTOCOL^^}_${TRANSPORT^^}_$(date +%s)"
     local TAG=$(simple_input "Tag" "$DEFAULT_TAG")
@@ -249,7 +203,7 @@ create_advanced_inbound() {
 
     # Step 5: Transport Settings
     echo ""
-    echo -e "  ${UI_GREEN}Step 5/7: Transport Settings${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 5/6: Transport Settings${UI_NC}"
     local TRANSPORT_SETTINGS="{}"
     case $TRANSPORT in
         tcp)
@@ -267,7 +221,7 @@ create_advanced_inbound() {
 
     # Step 6: Security Settings
     echo ""
-    echo -e "  ${UI_GREEN}Step 6/7: Security Settings${UI_NC}"
+    echo -e "  ${UI_GREEN}Step 6/6: Security Settings${UI_NC}"
     local SECURITY_SETTINGS="{}"
     local FLOW=""
 
@@ -282,28 +236,28 @@ create_advanced_inbound() {
     esac
     echo -e "  ${UI_GREEN}✔${UI_NC} Security configured"
 
-    # Step 7: Client Settings
-    echo ""
-    echo -e "  ${UI_GREEN}Step 7/7: Client Settings${UI_NC}"
-    echo ""
+    # Protocol Settings (clients empty - panel manages)
     local SETTINGS=""
-    local CLIENT=""
-
     case $PROTOCOL in
         vless)
-            CLIENT=$(build_vless_client "$FLOW")
-            SETTINGS="{\"clients\":[$CLIENT],\"decryption\":\"none\"}"
+            SETTINGS="{\"clients\":[],\"decryption\":\"none\"}"
             ;;
         vmess)
-            CLIENT=$(build_vmess_client)
-            SETTINGS="{\"clients\":[$CLIENT]}"
+            SETTINGS="{\"clients\":[]}"
             ;;
         trojan)
-            CLIENT=$(build_trojan_client)
-            SETTINGS="{\"clients\":[$CLIENT]}"
+            SETTINGS="{\"clients\":[]}"
             ;;
         shadowsocks)
-            SETTINGS=$(build_ss_settings)
+            echo ""
+            echo "    Method: 1) 2022-blake3-aes-128-gcm 2) aes-256-gcm 3) chacha20-poly1305"
+            read -p "    Select [1]: " M_OPT
+            local METHOD="2022-blake3-aes-128-gcm"
+            case $M_OPT in 2) METHOD="aes-256-gcm" ;; 3) METHOD="chacha20-poly1305" ;; esac
+            local PASS=$(gen_ss_password)
+            PASS=$(simple_input "Password" "$PASS")
+            echo "$PASS" > /tmp/last_pass
+            SETTINGS="{\"method\":\"$METHOD\",\"password\":\"$PASS\",\"network\":\"tcp,udp\"}"
             ;;
         socks)
             if simple_confirm "Require Auth?" "n"; then
@@ -323,20 +277,20 @@ create_advanced_inbound() {
             SETTINGS="{\"address\":\"$ADDR\",\"port\":$TPORT,\"network\":\"tcp,udp\"}"
             ;;
     esac
-    echo -e "  ${UI_GREEN}✔${UI_NC} Client configured"
 
     # Create
     echo ""
     echo -e "  ${UI_DIM}Creating inbound...${UI_NC}"
     backup_xray_config
 
-    # Write temp files for Python to read
+    # Write temp files for Python
     echo "$TAG" > /tmp/inbound_tag
     echo "$PORT" > /tmp/inbound_port
     echo "$LISTEN" > /tmp/inbound_listen
     echo "$PROTOCOL" > /tmp/inbound_protocol
     echo "$TRANSPORT" > /tmp/inbound_transport
     echo "$SECURITY" > /tmp/inbound_security
+    echo "$FLOW" > /tmp/inbound_flow
     echo "$SETTINGS" > /tmp/inbound_settings
     echo "$TRANSPORT_SETTINGS" > /tmp/inbound_transport_settings
     echo "$SECURITY_SETTINGS" > /tmp/inbound_security_settings
@@ -346,10 +300,8 @@ import json
 import sys
 import os
 
-# Read config path from environment
 config_path = os.environ.get('XRAY_CONFIG', '/var/lib/pasarguard/xray_config.json')
 
-# Read values from temp files
 def read_file(path):
     try:
         with open(path, 'r') as f:
@@ -357,14 +309,6 @@ def read_file(path):
     except:
         return ""
 
-tag = read_file('/tmp/inbound_tag')
-port = int(read_file('/tmp/inbound_port') or '0')
-listen_addr = read_file('/tmp/inbound_listen') or '0.0.0.0'
-protocol = read_file('/tmp/inbound_protocol')
-transport = read_file('/tmp/inbound_transport')
-security = read_file('/tmp/inbound_security')
-
-# Parse JSON settings
 def parse_json(path):
     try:
         content = read_file(path)
@@ -373,6 +317,14 @@ def parse_json(path):
     except:
         pass
     return {}
+
+tag = read_file('/tmp/inbound_tag')
+port = int(read_file('/tmp/inbound_port') or '0')
+listen_addr = read_file('/tmp/inbound_listen') or '0.0.0.0'
+protocol = read_file('/tmp/inbound_protocol')
+transport = read_file('/tmp/inbound_transport')
+security = read_file('/tmp/inbound_security')
+flow = read_file('/tmp/inbound_flow')
 
 settings = parse_json('/tmp/inbound_settings')
 transport_settings = parse_json('/tmp/inbound_transport_settings')
@@ -384,7 +336,7 @@ stream_settings = {
     "security": security
 }
 
-# Add transport settings with correct key
+# Add transport settings
 transport_key_map = {
     "ws": "wsSettings",
     "h2": "httpSettings",
@@ -404,11 +356,12 @@ if security == "reality":
 elif security == "tls":
     stream_settings["tlsSettings"] = security_settings
 
-# Build sniffing with Python True
-sniffing = {
-    "enabled": True,
-    "destOverride": ["http", "tls", "quic", "fakedns"]
-}
+# Add flow to settings if needed (for VLESS Reality TCP)
+if flow and protocol == "vless":
+    if "clients" not in settings:
+        settings["clients"] = []
+    # Flow is set at inbound level for empty clients
+    # Panel will add it to each client when creating users
 
 # Build inbound
 new_inbound = {
@@ -418,7 +371,10 @@ new_inbound = {
     "protocol": protocol,
     "settings": settings,
     "streamSettings": stream_settings,
-    "sniffing": sniffing
+    "sniffing": {
+        "enabled": True,
+        "destOverride": ["http", "tls", "quic", "fakedns"]
+    }
 }
 
 try:
@@ -428,7 +384,6 @@ try:
     if 'inbounds' not in config:
         config['inbounds'] = []
     
-    # Check port conflict
     for ib in config['inbounds']:
         if ib.get('port') == port:
             print(f"CONFLICT:{ib.get('tag')}")
@@ -448,7 +403,7 @@ PYEOF
 
     # Cleanup temp files
     rm -f /tmp/inbound_tag /tmp/inbound_port /tmp/inbound_listen /tmp/inbound_protocol \
-          /tmp/inbound_transport /tmp/inbound_security /tmp/inbound_settings \
+          /tmp/inbound_transport /tmp/inbound_security /tmp/inbound_flow /tmp/inbound_settings \
           /tmp/inbound_transport_settings /tmp/inbound_security_settings 2>/dev/null
 
     echo ""
@@ -463,13 +418,15 @@ PYEOF
         echo -e "  Security:  ${UI_CYAN}$SECURITY${UI_NC}"
         echo -e "  Port:      ${UI_CYAN}$PORT${UI_NC}"
         
-        [ -f /tmp/last_uuid ] && echo -e "  UUID:      ${UI_CYAN}$(cat /tmp/last_uuid)${UI_NC}"
+        [ -n "$FLOW" ] && echo -e "  Flow:      ${UI_CYAN}$FLOW${UI_NC}"
         [ -f /tmp/last_pass ] && echo -e "  Password:  ${UI_CYAN}$(cat /tmp/last_pass)${UI_NC}"
         [ -f /tmp/reality_pub ] && echo -e "  PublicKey: ${UI_CYAN}$(cat /tmp/reality_pub)${UI_NC}"
         [ -f /tmp/reality_sid ] && echo -e "  ShortID:   ${UI_CYAN}$(cat /tmp/reality_sid)${UI_NC}"
         
-        rm -f /tmp/last_uuid /tmp/last_pass /tmp/last_email /tmp/reality_pub /tmp/reality_sid 2>/dev/null
+        rm -f /tmp/last_pass /tmp/reality_pub /tmp/reality_sid 2>/dev/null
         
+        echo ""
+        echo -e "  ${UI_DIM}Note: Add users from Panel dashboard${UI_NC}"
         echo ""
         simple_confirm "Restart Panel?" "y" && restart_service "panel"
     elif [[ "$RESULT" == CONFLICT:* ]]; then
@@ -529,7 +486,6 @@ quick_reality_preset() {
     local PRIV=$(echo "$KEYS" | grep "Private" | awk '{print $3}')
     local PUB=$(echo "$KEYS" | grep "Public" | awk '{print $3}')
     local SID=$(gen_short_id)
-    local UUID=$(gen_uuid)
 
     if [[ "$PRIV" == "ERROR" ]] || [[ -z "$PRIV" ]]; then
         echo -e "  ${UI_RED}✘ Key generation failed!${UI_NC}"
@@ -540,7 +496,7 @@ quick_reality_preset() {
 
     backup_xray_config
 
-    # Write to temp files
+    # Write temp files
     echo "$TAG" > /tmp/r_tag
     echo "$PORT" > /tmp/r_port
     echo "$TRANSPORT" > /tmp/r_transport
@@ -548,7 +504,6 @@ quick_reality_preset() {
     echo "$DEST" > /tmp/r_dest
     echo "$PRIV" > /tmp/r_priv
     echo "$SID" > /tmp/r_sid
-    echo "$UUID" > /tmp/r_uuid
 
     local RESULT=$(python3 << 'PYEOF'
 import json
@@ -571,12 +526,6 @@ flow = read_file('/tmp/r_flow')
 dest = read_file('/tmp/r_dest')
 priv = read_file('/tmp/r_priv')
 sid = read_file('/tmp/r_sid')
-uuid = read_file('/tmp/r_uuid')
-
-# Build client
-client = {"id": uuid, "email": f"user_{tag}"}
-if flow:
-    client["flow"] = flow
 
 # Build stream settings
 stream = {
@@ -593,7 +542,7 @@ stream = {
     }
 }
 
-# Add transport-specific settings
+# Add transport settings
 if transport == "grpc":
     stream["grpcSettings"] = {"serviceName": "grpc"}
 elif transport == "h2":
@@ -601,13 +550,16 @@ elif transport == "h2":
 else:
     stream["tcpSettings"] = {"header": {"type": "none"}}
 
-# Build inbound
+# Build inbound with EMPTY clients
 inbound = {
     "tag": tag,
     "listen": "0.0.0.0",
     "port": port,
     "protocol": "vless",
-    "settings": {"clients": [client], "decryption": "none"},
+    "settings": {
+        "clients": [],  # Empty - Panel will manage
+        "decryption": "none"
+    },
     "streamSettings": stream,
     "sniffing": {"enabled": True, "destOverride": ["http", "tls", "quic"]}
 }
@@ -637,7 +589,7 @@ PYEOF
 )
 
     # Cleanup
-    rm -f /tmp/r_tag /tmp/r_port /tmp/r_transport /tmp/r_flow /tmp/r_dest /tmp/r_priv /tmp/r_sid /tmp/r_uuid 2>/dev/null
+    rm -f /tmp/r_tag /tmp/r_port /tmp/r_transport /tmp/r_flow /tmp/r_dest /tmp/r_priv /tmp/r_sid 2>/dev/null
 
     echo ""
     if [[ "$RESULT" == "OK" ]]; then
@@ -647,10 +599,13 @@ PYEOF
         echo ""
         echo -e "  Tag:        ${UI_CYAN}$TAG${UI_NC}"
         echo -e "  Port:       ${UI_CYAN}$PORT${UI_NC}"
-        echo -e "  UUID:       ${UI_CYAN}$UUID${UI_NC}"
+        echo -e "  Transport:  ${UI_CYAN}$TRANSPORT${UI_NC}"
+        [ -n "$FLOW" ] && echo -e "  Flow:       ${UI_CYAN}$FLOW${UI_NC}"
         echo -e "  SNI:        ${UI_CYAN}$DEST${UI_NC}"
         echo -e "  Public Key: ${UI_CYAN}$PUB${UI_NC}"
         echo -e "  Short ID:   ${UI_CYAN}$SID${UI_NC}"
+        echo ""
+        echo -e "  ${UI_DIM}Note: Add users from Panel dashboard${UI_NC}"
         echo ""
         simple_confirm "Restart Panel?" "y" && restart_service "panel"
     else
@@ -694,7 +649,6 @@ quick_cdn_preset() {
     [ "$SECURITY" == "tls" ] && DEFAULT_PORT=443
     local PORT=$(input_port "$DEFAULT_PORT")
     local PATH=$(simple_input "Path" "/ws")
-    local UUID=$(gen_uuid)
 
     local TLS_CERT=""
     local TLS_KEY=""
@@ -721,13 +675,12 @@ quick_cdn_preset() {
 
     backup_xray_config
 
-    # Write to temp files
+    # Write temp files
     echo "$TAG" > /tmp/c_tag
     echo "$PORT" > /tmp/c_port
     echo "$PROTO" > /tmp/c_proto
     echo "$SECURITY" > /tmp/c_security
     echo "$PATH" > /tmp/c_path
-    echo "$UUID" > /tmp/c_uuid
     echo "$TLS_CERT" > /tmp/c_cert
     echo "$TLS_KEY" > /tmp/c_key
 
@@ -750,31 +703,25 @@ port = int(read_file('/tmp/c_port') or '0')
 proto = read_file('/tmp/c_proto')
 security = read_file('/tmp/c_security')
 ws_path = read_file('/tmp/c_path')
-uuid = read_file('/tmp/c_uuid')
 tls_cert = read_file('/tmp/c_cert')
 tls_key = read_file('/tmp/c_key')
 
-# Build client
+# Build settings with EMPTY clients
 if proto == "vmess":
-    client = {"id": uuid, "email": f"user_{tag}", "alterId": 0}
-    settings = {"clients": [client]}
+    settings = {"clients": []}
 else:
-    client = {"id": uuid, "email": f"user_{tag}"}
-    settings = {"clients": [client], "decryption": "none"}
+    settings = {"clients": [], "decryption": "none"}
 
-# Build stream settings
+# Build stream
 stream = {
     "network": "ws",
     "security": security,
     "wsSettings": {"path": ws_path}
 }
 
-# Add TLS settings if needed
 if security == "tls" and tls_cert and tls_key:
     stream["tlsSettings"] = {
-        "certificates": [
-            {"certificateFile": tls_cert, "keyFile": tls_key}
-        ]
+        "certificates": [{"certificateFile": tls_cert, "keyFile": tls_key}]
     }
 
 # Build inbound
@@ -813,7 +760,7 @@ PYEOF
 )
 
     # Cleanup
-    rm -f /tmp/c_tag /tmp/c_port /tmp/c_proto /tmp/c_security /tmp/c_path /tmp/c_uuid /tmp/c_cert /tmp/c_key 2>/dev/null
+    rm -f /tmp/c_tag /tmp/c_port /tmp/c_proto /tmp/c_security /tmp/c_path /tmp/c_cert /tmp/c_key 2>/dev/null
 
     echo ""
     if [[ "$RESULT" == "OK" ]]; then
@@ -821,10 +768,13 @@ PYEOF
         echo -e "  ${UI_GREEN}║     ✔ CDN INBOUND CREATED!             ║${UI_NC}"
         echo -e "  ${UI_GREEN}╚════════════════════════════════════════╝${UI_NC}"
         echo ""
-        echo -e "  Tag:      ${UI_CYAN}$TAG${UI_NC}"
-        echo -e "  Port:     ${UI_CYAN}$PORT${UI_NC}"
-        echo -e "  Path:     ${UI_CYAN}$PATH${UI_NC}"
-        echo -e "  UUID:     ${UI_CYAN}$UUID${UI_NC}"
+        echo -e "  Tag:       ${UI_CYAN}$TAG${UI_NC}"
+        echo -e "  Protocol:  ${UI_CYAN}$PROTO${UI_NC}"
+        echo -e "  Security:  ${UI_CYAN}$SECURITY${UI_NC}"
+        echo -e "  Port:      ${UI_CYAN}$PORT${UI_NC}"
+        echo -e "  Path:      ${UI_CYAN}$PATH${UI_NC}"
+        echo ""
+        echo -e "  ${UI_DIM}Note: Add users from Panel dashboard${UI_NC}"
         echo ""
         simple_confirm "Restart Panel?" "y" && restart_service "panel"
     else
