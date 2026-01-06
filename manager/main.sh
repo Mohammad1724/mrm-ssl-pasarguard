@@ -128,6 +128,7 @@ auto_fix() {
 # ==========================================
 panel_menu() {
     while true; do
+        clear
         ui_header "PANEL CONTROL"
         detect_active_panel > /dev/null
 
@@ -202,6 +203,7 @@ main_menu() {
     install_deps
 
     while true; do
+        clear
         ui_header "MRM MANAGER v3.2" 50
         ui_status_bar
 
