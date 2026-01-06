@@ -2,6 +2,7 @@
 
 # ============================================
 # INBOUND MANAGER - Main Menu
+# Version: 2.1 (Clean UI)
 # ============================================
 
 INBOUND_DIR="$(dirname "${BASH_SOURCE[0]}")"
@@ -23,48 +24,126 @@ source "$INBOUND_DIR/tools.sh"
 # ============================================
 inbound_menu() {
     while true; do
-        ui_header "INBOUND MANAGER" 55
+        clear
+        echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}INBOUND MANAGER${UI_NC}                     ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╠══════════════════════════════════════════════╣${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   1) ➕ Create Inbound                       ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   2) 📋 List & Manage                        ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   3) 🔗 Generate Share Link                  ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   4) 💾 Backup / Restore                     ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   0) ↩️  Back                                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+        echo ""
+        read -p "Select: " OPT
 
-        echo -e "${UI_YELLOW}── Quick Presets ──${UI_NC}"
-        echo "  1) ⚡ Quick Reality Setup"
-        echo "  2) 🌐 Quick CDN Setup"
-        echo ""
-        echo -e "${UI_YELLOW}── Advanced ──${UI_NC}"
-        echo "  3) 🔧 Create Custom Inbound"
-        echo ""
-        echo -e "${UI_YELLOW}── Manage ──${UI_NC}"
-        echo "  4) 📋 List Inbounds"
-        echo "  5) 🔍 View Details"
-        echo "  6) ✏️  Edit Inbound"
-        echo "  7) 📑 Clone Inbound"
-        echo "  8) 🗑️  Delete Inbound"
-        echo ""
-        echo -e "${UI_YELLOW}── Tools ──${UI_NC}"
-        echo "  9) 🔗 Generate Share Link"
-        echo " 10) 📤 Export Inbound"
-        echo " 11) 📥 Import Inbound"
-        echo " 12) 💾 Backup All"
-        echo " 13) ♻️  Restore Backup"
-        echo ""
-        echo "  0) ↩️  Back"
-        echo ""
+        case $OPT in
+            1) create_menu ;;
+            2) manage_menu ;;
+            3) generate_share_link ;;
+            4) backup_menu_inbound ;;
+            0) return ;;
+            *) ;;
+        esac
+    done
+}
 
+# ============================================
+# CREATE SUBMENU
+# ============================================
+create_menu() {
+    while true; do
+        clear
+        echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}CREATE INBOUND${UI_NC}                      ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╠══════════════════════════════════════════════╣${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   ${UI_GREEN}── Quick Presets ──${UI_NC}                       ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   1) ⚡ Reality (Recommended)                ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   2) 🌐 CDN (WebSocket/HTTPUpgrade)          ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   ${UI_GREEN}── Advanced ──${UI_NC}                            ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   3) 🔧 Custom (All Options)                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   0) ↩️  Back                                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+        echo ""
         read -p "Select: " OPT
 
         case $OPT in
             1) quick_reality_preset ;;
             2) quick_cdn_preset ;;
             3) create_advanced_inbound ;;
-            4) list_inbounds ;;
-            5) view_inbound_details ;;
-            6) edit_inbound ;;
-            7) clone_inbound ;;
-            8) delete_inbound ;;
-            9) generate_share_link ;;
-            10) export_inbound ;;
-            11) import_inbound ;;
-            12) backup_all_inbounds ;;
-            13) restore_inbounds ;;
+            0) return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ============================================
+# MANAGE SUBMENU
+# ============================================
+manage_menu() {
+    while true; do
+        clear
+        echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}MANAGE INBOUNDS${UI_NC}                     ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╠══════════════════════════════════════════════╣${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   1) 📋 List All                             ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   2) 🔍 View Details                         ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   3) ✏️  Edit                                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   4) 📑 Clone                                ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   5) 🗑️  Delete                               ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   0) ↩️  Back                                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+        echo ""
+        read -p "Select: " OPT
+
+        case $OPT in
+            1) list_inbounds ;;
+            2) view_inbound_details ;;
+            3) edit_inbound ;;
+            4) clone_inbound ;;
+            5) delete_inbound ;;
+            0) return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ============================================
+# BACKUP SUBMENU
+# ============================================
+backup_menu_inbound() {
+    while true; do
+        clear
+        echo -e "${UI_CYAN}╔══════════════════════════════════════════════╗${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}         ${UI_YELLOW}BACKUP / RESTORE${UI_NC}                    ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╠══════════════════════════════════════════════╣${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   1) 💾 Backup All Inbounds                  ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   2) ♻️  Restore from Backup                  ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   3) 📤 Export Single Inbound                ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   4) 📥 Import Inbound                       ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}   0) ↩️  Back                                 ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}║${UI_NC}                                              ${UI_CYAN}║${UI_NC}"
+        echo -e "${UI_CYAN}╚══════════════════════════════════════════════╝${UI_NC}"
+        echo ""
+        read -p "Select: " OPT
+
+        case $OPT in
+            1) backup_all_inbounds ;;
+            2) restore_inbounds ;;
+            3) export_inbound ;;
+            4) import_inbound ;;
             0) return ;;
             *) ;;
         esac
