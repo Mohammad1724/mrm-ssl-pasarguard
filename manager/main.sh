@@ -9,7 +9,7 @@ source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ui.sh
 source /opt/mrm-manager/ssl.sh
 source /opt/mrm-manager/backup.sh
-source /opt/mrm-manager/inbound.sh
+source /opt/mrm-manager/inbound/main.sh
 source /opt/mrm-manager/domain_separator.sh
 source /opt/mrm-manager/site.sh
 source /opt/mrm-manager/theme.sh
