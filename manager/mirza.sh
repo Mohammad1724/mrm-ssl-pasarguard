@@ -122,19 +122,24 @@ export_db() {
     mirza_logo
     if [ -f "$MIRZA_CONFIG_FILE" ]; then
         echo -e "${YELLOW}Exporting Database...${NC}"
-        # استخراج اطلاعات از فایل کانفیگ
-        DB_NAME=$(grep "\$dbname" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        DB_USER=$(grep "\$usernamedb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        DB_PASS=$(grep "\$passworddb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
         
-        # خروجی گرفتن
-        mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "$MIRZA_PATH/mirzapro_backup.sql"
+        # استخراج دقیق مقادیر (فقط مقدار داخل کوتیشن را برمی‌دارد)
+        DB_NAME=$(grep -w "\$dbname" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
+        DB_USER=$(grep -w "\$usernamedb" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
+        DB_PASS=$(grep -w "\$passworddb" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
         
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✔ Database exported successfully!${NC}"
-            echo -e "${CYAN}Location: $MIRZA_PATH/mirzapro_backup.sql${NC}"
+        if [ -z "$DB_PASS" ]; then
+             echo -e "${RED}❌ Could not find password in config.php${NC}"
         else
-            echo -e "${RED}❌ Export failed! Please check database credentials.${NC}"
+            # خروجی گرفتن
+            mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "/root/mirzapro_backup.sql"
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✔ Database exported successfully!${NC}"
+                echo -e "${CYAN}Location: /root/mirzapro_backup.sql${NC}"
+            else
+                echo -e "${RED}❌ Export failed! Access denied or MySQL issue.${NC}"
+            fi
         fi
     else
         echo -e "${RED}Error: Config file not found!${NC}"
@@ -145,32 +150,35 @@ export_db() {
 import_db() {
     mirza_logo
     echo -e "${CYAN}--- Import Database ---${NC}"
-    read -p "Enter full path to your .sql file (e.g. /root/backup.sql): " SQL_PATH
+    read -p "Enter full path to your .sql file: " SQL_PATH
     
     if [ -f "$SQL_PATH" ]; then
-        # استخراج اطلاعات دیتابیس
-        DB_NAME=$(grep "\$dbname" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        DB_USER=$(grep "\$usernamedb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        DB_PASS=$(grep "\$passworddb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
+        if [ -f "$MIRZA_CONFIG_FILE" ]; then
+            DB_NAME=$(grep -w "\$dbname" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
+            DB_USER=$(grep -w "\$usernamedb" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
+            DB_PASS=$(grep -w "\$passworddb" "$MIRZA_CONFIG_FILE" | head -n1 | cut -d"'" -f2)
 
-        echo -e "${YELLOW}Preparing database...${NC}"
-        # اطمینان از وجود دیتابیس (اگر نبود می‌سازد)
-        mysql -u root -e "CREATE DATABASE IF NOT EXISTS $DB_NAME; GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
+            echo -e "${YELLOW}Preparing database...${NC}"
+            mysql -u root -e "CREATE DATABASE IF NOT EXISTS $DB_NAME; GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS'; FLUSH PRIVILEGES;"
 
-        echo -e "${YELLOW}Importing data...${NC}"
-        # ایمپورت دیتابیس
-        mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_PATH"
+            echo -e "${YELLOW}Importing data...${NC}"
+            mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_PATH"
 
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}✔ Database imported successfully!${NC}"
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}✔ Database imported successfully!${NC}"
+            else
+                echo -e "${RED}❌ Import failed!${NC}"
+            fi
         else
-            echo -e "${RED}❌ Import failed! Check if the SQL file is valid.${NC}"
+            echo -e "${RED}Error: config.php not found to get credentials!${NC}"
         fi
     else
         echo -e "${RED}Error: SQL file not found at $SQL_PATH${NC}"
     fi
     read -p "Press Enter to continue..."
 }
+
+
 configure_backup() {
     mirza_logo
     echo -e "${CYAN}Setting up Telegram Auto-Backup...${NC}"
