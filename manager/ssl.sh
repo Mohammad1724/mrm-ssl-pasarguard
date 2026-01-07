@@ -301,7 +301,7 @@ _process_node() {
 
     log_info "Copying node certificates to $TARGET_DIR"
 
-    # FIXED: Use fullchain.pem and privkey.pem instead of server.crt/server.key
+    # ✅ اصلاح شد: fullchain.pem و privkey.pem
     if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/fullchain.pem" && \
        cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/privkey.pem"; then
 
@@ -337,7 +337,6 @@ _process_node() {
         log_error "Failed to copy node certificate files to $TARGET_DIR"
     fi
 }
-
 # ==========================================
 # PROCESS CONFIG SSL (INBOUNDS)
 # ==========================================
