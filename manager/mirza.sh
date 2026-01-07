@@ -63,7 +63,6 @@ install_mirza() {
 
     rm -rf "$MIRZA_PATH" && git clone https://github.com/Mmd-Amir/mirza_pro.git "$MIRZA_PATH"
 
-    # ساخت کانفیگ با رعایت تمام استانداردهای اصلاح شده
     cat > "$MIRZA_CONFIG_FILE" <<EOF
 <?php
 if(!defined("index")) define("index", true);
@@ -86,7 +85,6 @@ EOF
     chown -R www-data:www-data "$MIRZA_PATH"
     chmod -R 755 "$MIRZA_PATH"
 
-    # تنظیم آپاچی
     cat > /etc/apache2/sites-available/mirzapro.conf <<EOF
 <VirtualHost *:80>
     ServerName $DOMAIN
@@ -185,12 +183,9 @@ renew_ssl() {
 change_domain() {
     mirza_logo
     read -p "Enter New Domain: " NEW_DOMAIN
-    # ویرایش فایل کانفیگ
     sed -i "s|https://.*'|https://$NEW_DOMAIN'|g" "$MIRZA_CONFIG_FILE"
-    # ویرایش فایل آپاچی
     OLD_DOMAIN=$(grep "ServerName" /etc/apache2/sites-available/mirzapro.conf | awk '{print $2}')
     sed -i "s/$OLD_DOMAIN/$NEW_DOMAIN/g" /etc/apache2/sites-available/mirzapro.conf
-    # دریافت SSL جدید
     certbot --apache -d "$NEW_DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email
     systemctl restart apache2
     echo -e "${GREEN}✔ Domain changed to $NEW_DOMAIN${NC}"
@@ -224,7 +219,6 @@ migration_server() {
 
 remove_domain() {
     mirza_logo
-    echo -e "${RED}Removing Domain Configuration...${NC}"
     a2dissite mirzapro.conf
     rm /etc/apache2/sites-available/mirzapro.conf
     systemctl restart apache2
@@ -239,45 +233,47 @@ delete_crons() {
     read -p "Press Enter to continue..."
 }
 
-# --- Main Menu Loop ---
-while true; do
-    mirza_logo
-    check_ssl_status
-    echo -e "${GREEN}╔════════════════════════════════════════════════╗${NC}"
-    echo -e "${WHITE}║            MIRZA PRO - MAIN MENU               ║${NC}"
-    echo -e "${GREEN}╠════════════════════════════════════════════════╣${NC}"
-    echo -e "║                                                ║"
-    echo -e "║ 1)  Install Mirza Bot                          ║"
-    echo -e "║ 2)  Update Mirza Bot                           ║"
-    echo -e "║ 3)  Remove Mirza Bot                           ║"
-    echo -e "║ 4)  Export Database                            ║"
-    echo -e "║ 5)  Import Database                            ║"
-    echo -e "║ 6)  Configure Automated Backup                 ║"
-    echo -e "║ 7)  Renew SSL Certificates                     ║"
-    echo -e "║ 8)  Change Domain                              ║"
-    echo -e "║ 9)  Additional Bot Management                  ║"
-    echo -e "║ 10) Immigration (Server Migration)             ║"
-    echo -e "║ 11) Remove Domain                              ║"
-    echo -e "║ 12) Delete Cron Jobs                           ║"
-    echo -e "║ 13) Exit                                       ║"
-    echo -e "║                                                ║"
-    echo -e "${GREEN}╚════════════════════════════════════════════════╝${NC}"
-    read -p "❯ Select an option [1-13]: " choice
+# --- Main Menu Function ---
+mirza_menu() {
+    while true; do
+        mirza_logo
+        check_ssl_status
+        echo -e "${GREEN}╔════════════════════════════════════════════════╗${NC}"
+        echo -e "${WHITE}║            MIRZA PRO - MAIN MENU               ║${NC}"
+        echo -e "${GREEN}╠════════════════════════════════════════════════╣${NC}"
+        echo -e "║                                                ║"
+        echo -e "║ 1)  Install Mirza Bot                          ║"
+        echo -e "║ 2)  Update Mirza Bot                           ║"
+        echo -e "║ 3)  Remove Mirza Bot                           ║"
+        echo -e "║ 4)  Export Database                            ║"
+        echo -e "║ 5)  Import Database                            ║"
+        echo -e "║ 6)  Configure Automated Backup                 ║"
+        echo -e "║ 7)  Renew SSL Certificates                     ║"
+        echo -e "║ 8)  Change Domain                              ║"
+        echo -e "║ 9)  Additional Bot Management                  ║"
+        echo -e "║ 10) Immigration (Server Migration)             ║"
+        echo -e "║ 11) Remove Domain                              ║"
+        echo -e "║ 12) Delete Cron Jobs                           ║"
+        echo -e "║ 13) Exit                                       ║"
+        echo -e "║                                                ║"
+        echo -e "${GREEN}╚════════════════════════════════════════════════╝${NC}"
+        read -p "❯ Select an option [1-13]: " choice
 
-    case $choice in
-        1) install_mirza ;;
-        2) update_mirza ;;
-        3) remove_mirza ;;
-        4) export_db ;;
-        5) import_db ;;
-        6) configure_backup ;;
-        7) renew_ssl ;;
-        8) change_domain ;;
-        9) additional_mgmt ;;
-        10) migration_server ;;
-        11) remove_domain ;;
-        12) delete_crons ;;
-        13) exit 0 ;;
-        *) echo -e "${RED}Invalid Option!${NC}" && sleep 1 ;;
-    esac
-done
+        case $choice in
+            1) install_mirza ;;
+            2) update_mirza ;;
+            3) remove_mirza ;;
+            4) export_db ;;
+            5) import_db ;;
+            6) configure_backup ;;
+            7) renew_ssl ;;
+            8) change_domain ;;
+            9) additional_mgmt ;;
+            10) migration_server ;;
+            11) remove_domain ;;
+            12) delete_crons ;;
+            13) return ;;
+            *) echo -e "${RED}Invalid Option!${NC}" && sleep 1 ;;
+        esac
+    done
+}
