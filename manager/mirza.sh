@@ -29,20 +29,6 @@ EOF
     echo -e "${NC}"
 }
 
-# --- Check SSL Status ---
-check_ssl_status() {
-    if [ ! -f "$MIRZA_CONFIG_FILE" ]; then
-        echo -e "${RED}⚠️ Cannot check SSL: Config file not found${NC}"
-    else
-        DOMAIN=$(grep "domainhosts" "$MIRZA_CONFIG_FILE" | cut -d'/' -f3 | tr -d "'; ")
-        if openssl s_client -connect "${DOMAIN}:443" -servername "${DOMAIN}" 2>/dev/null | openssl x509 -noout -checkend 86400 > /dev/null; then
-            echo -e "${GREEN}✅ SSL is Active and Valid for $DOMAIN${NC}"
-        else
-            echo -e "${YELLOW}⚠️ SSL Expired or Not Found for $DOMAIN${NC}"
-        fi
-    fi
-}
-
 # --- Core Functions ---
 install_mirza() {
     mirza_logo
@@ -237,7 +223,6 @@ delete_crons() {
 mirza_menu() {
     while true; do
         mirza_logo
-        check_ssl_status
         echo -e "${GREEN}╔════════════════════════════════════════════════╗${NC}"
         echo -e "${WHITE}║            MIRZA PRO - MAIN MENU               ║${NC}"
         echo -e "${GREEN}╠════════════════════════════════════════════════╣${NC}"
