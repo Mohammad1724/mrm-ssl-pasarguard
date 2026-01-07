@@ -1,18 +1,5 @@
 #!/bin/bash
 
-# --- Configuration & Paths ---
-export PANEL_DIR="/opt/pasarguard"
-export PANEL_ENV="$PANEL_DIR/.env"
-export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
-export DATA_DIR="/var/lib/pasarguard"  # ✅ اضافه شد
-
-export NODE_DIR="/opt/pg-node"
-export NODE_ENV="$NODE_DIR/.env"
-export NODE_DEF_CERTS="/var/lib/pg-node/certs"
-
-# ✅ مسیر صحیح گیت‌هاب
-export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
-
 # --- Colors ---
 export RED='\033[0;31m'
 export GREEN='\033[0;32m'
@@ -22,6 +9,79 @@ export CYAN='\033[0;36m'
 export PURPLE='\033[0;35m'
 export ORANGE='\033[0;33m'
 export NC='\033[0m'
+
+# --- Panel Detection (MUST run first) ---
+detect_active_panel() {
+    # بررسی بر اساس docker compose که در حال اجرا است
+    if docker compose -f /opt/rebecca/docker-compose.yml ps -q 2>/dev/null | grep -q .; then
+        echo "rebecca"
+        export PANEL_DIR="/opt/rebecca"
+        export PANEL_ENV="/opt/rebecca/.env"
+        export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
+        export DATA_DIR="/var/lib/rebecca"
+        export NODE_DIR="/opt/rebecca-node"
+        export NODE_ENV="/opt/rebecca-node/.env"
+        export NODE_DEF_CERTS="/var/lib/rebecca-node/certs"
+    elif docker compose -f /opt/pasarguard/docker-compose.yml ps -q 2>/dev/null | grep -q .; then
+        echo "pasarguard"
+        export PANEL_DIR="/opt/pasarguard"
+        export PANEL_ENV="/opt/pasarguard/.env"
+        export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+        export DATA_DIR="/var/lib/pasarguard"
+        export NODE_DIR="/opt/pg-node"
+        export NODE_ENV="/opt/pg-node/.env"
+        export NODE_DEF_CERTS="/var/lib/pg-node/certs"
+    elif docker compose -f /opt/marzban/docker-compose.yml ps -q 2>/dev/null | grep -q .; then
+        echo "marzban"
+        export PANEL_DIR="/opt/marzban"
+        export PANEL_ENV="/opt/marzban/.env"
+        export PANEL_DEF_CERTS="/var/lib/marzban/certs"
+        export DATA_DIR="/var/lib/marzban"
+        export NODE_DIR="/opt/marzban-node"
+        export NODE_ENV="/opt/marzban-node/.env"
+        export NODE_DEF_CERTS="/var/lib/marzban-node/certs"
+    # Fallback: بررسی بر اساس وجود پوشه
+    elif [ -d "/opt/rebecca" ]; then
+        echo "rebecca"
+        export PANEL_DIR="/opt/rebecca"
+        export PANEL_ENV="/opt/rebecca/.env"
+        export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
+        export DATA_DIR="/var/lib/rebecca"
+        export NODE_DIR="/opt/rebecca-node"
+        export NODE_ENV="/opt/rebecca-node/.env"
+        export NODE_DEF_CERTS="/var/lib/rebecca-node/certs"
+    elif [ -d "/opt/pasarguard" ]; then
+        echo "pasarguard"
+        export PANEL_DIR="/opt/pasarguard"
+        export PANEL_ENV="/opt/pasarguard/.env"
+        export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+        export DATA_DIR="/var/lib/pasarguard"
+        export NODE_DIR="/opt/pg-node"
+        export NODE_ENV="/opt/pg-node/.env"
+        export NODE_DEF_CERTS="/var/lib/pg-node/certs"
+    elif [ -d "/opt/marzban" ]; then
+        echo "marzban"
+        export PANEL_DIR="/opt/marzban"
+        export PANEL_ENV="/opt/marzban/.env"
+        export PANEL_DEF_CERTS="/var/lib/marzban/certs"
+        export DATA_DIR="/var/lib/marzban"
+        export NODE_DIR="/opt/marzban-node"
+        export NODE_ENV="/opt/marzban-node/.env"
+        export NODE_DEF_CERTS="/var/lib/marzban-node/certs"
+    else
+        echo "unknown"
+        export PANEL_DIR=""
+        export PANEL_ENV=""
+        export PANEL_DEF_CERTS=""
+        export DATA_DIR=""
+    fi
+}
+
+# --- Initialize on load ---
+detect_active_panel > /dev/null
+
+# ✅ مسیر صحیح گیت‌هاب
+export THEME_HTML_URL="https://raw.githubusercontent.com/Mohammad1724/mrm-ssl-pasarguard/main/templates/subscription/index.html"
 
 # --- Common Functions ---
 
@@ -62,31 +122,14 @@ pause() {
 
 # --- Service Control Functions ---
 
-detect_active_panel() {
-    if [ -d "/opt/rebecca" ]; then
-        echo "rebecca"
-        export PANEL_DIR="/opt/rebecca"
-        export PANEL_ENV="/opt/rebecca/.env"
-        export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
-        export DATA_DIR="/var/lib/rebecca"  # ✅ اضافه شد
-    elif [ -d "/opt/pasarguard" ]; then
-        echo "pasarguard"
-        export PANEL_DIR="/opt/pasarguard"
-        export PANEL_ENV="/opt/pasarguard/.env"
-        export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
-        export DATA_DIR="/var/lib/pasarguard"  # ✅ اضافه شد
-    else
-        echo "marzban"
-        export PANEL_DIR="/opt/marzban"
-        export PANEL_ENV="/opt/marzban/.env"
-        export PANEL_DEF_CERTS="/var/lib/marzban/certs"
-        export DATA_DIR="/var/lib/marzban"  # ✅ اضافه شد
-    fi
-}
-
 get_panel_cli() {
     local panel=$(detect_active_panel)
-    if [ "$panel" == "rebecca" ]; then echo "rebecca-cli"; else echo "pasarguard-cli"; fi
+    case "$panel" in
+        rebecca) echo "rebecca-cli" ;;
+        pasarguard) echo "pasarguard-cli" ;;
+        marzban) echo "marzban-cli" ;;
+        *) echo "marzban-cli" ;;
+    esac
 }
 
 restart_service() {
@@ -96,13 +139,13 @@ restart_service() {
     if [ "$SERVICE" == "panel" ]; then
         echo -e "${BLUE}Restarting Panel ($PANEL_DIR)...${NC}"
         if [ -d "$PANEL_DIR" ]; then
-            cd "$PANEL_DIR" && docker compose down && docker compose up -d  # ✅ اصلاح شد
+            cd "$PANEL_DIR" && docker compose down && docker compose up -d
             echo -e "${GREEN}Done.${NC}"
         else
             echo -e "${RED}Panel not found.${NC}"
         fi
     elif [ "$SERVICE" == "node" ]; then
-        echo -e "${BLUE}Restarting Node...${NC}"
+        echo -e "${BLUE}Restarting Node ($NODE_DIR)...${NC}"
         if [ -d "$NODE_DIR" ]; then
             cd "$NODE_DIR" && docker compose restart
             echo -e "${GREEN}Done.${NC}"
@@ -116,11 +159,9 @@ restart_service() {
 
 admin_create() {
     local panel=$(detect_active_panel)
-    local cli="marzban-cli"
-    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
-    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
+    local cli=$(get_panel_cli)
 
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
 
     if [ -z "$cid" ]; then
         echo -e "${RED}Panel is not running!${NC}"
@@ -141,11 +182,9 @@ admin_create() {
 
 admin_reset() {
     local panel=$(detect_active_panel)
-    local cli="marzban-cli"
-    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
-    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
+    local cli=$(get_panel_cli)
 
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
 
     if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
 
@@ -157,11 +196,9 @@ admin_reset() {
 
 admin_delete() {
     local panel=$(detect_active_panel)
-    local cli="marzban-cli"
-    [ "$panel" == "rebecca" ] && cli="rebecca-cli"
-    [ "$panel" == "pasarguard" ] && cli="pasarguard-cli"
+    local cli=$(get_panel_cli)
 
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q | head -1)
+    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
 
     if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
 
