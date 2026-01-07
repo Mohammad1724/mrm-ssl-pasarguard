@@ -121,26 +121,56 @@ remove_mirza() {
 export_db() {
     mirza_logo
     if [ -f "$MIRZA_CONFIG_FILE" ]; then
+        echo -e "${YELLOW}Exporting Database...${NC}"
+        # استخراج اطلاعات از فایل کانفیگ
+        DB_NAME=$(grep "\$dbname" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
+        DB_USER=$(grep "\$usernamedb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
         DB_PASS=$(grep "\$passworddb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        mysqldump -u mirza_user -p"$DB_PASS" mirzapro > /root/mirzapro_backup.sql
-        echo -e "${GREEN}✔ Database exported to /root/mirzapro_backup.sql${NC}"
+        
+        # خروجی گرفتن
+        mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "$MIRZA_PATH/mirzapro_backup.sql"
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✔ Database exported successfully!${NC}"
+            echo -e "${CYAN}Location: $MIRZA_PATH/mirzapro_backup.sql${NC}"
+        else
+            echo -e "${RED}❌ Export failed! Please check database credentials.${NC}"
+        fi
+    else
+        echo -e "${RED}Error: Config file not found!${NC}"
     fi
     read -p "Press Enter to continue..."
 }
 
 import_db() {
     mirza_logo
-    read -p "Enter full path to .sql file: " SQL_PATH
+    echo -e "${CYAN}--- Import Database ---${NC}"
+    read -p "Enter full path to your .sql file (e.g. /root/backup.sql): " SQL_PATH
+    
     if [ -f "$SQL_PATH" ]; then
+        # استخراج اطلاعات دیتابیس
+        DB_NAME=$(grep "\$dbname" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
+        DB_USER=$(grep "\$usernamedb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
         DB_PASS=$(grep "\$passworddb" "$MIRZA_CONFIG_FILE" | cut -d"'" -f2)
-        mysql -u mirza_user -p"$DB_PASS" mirzapro < "$SQL_PATH"
-        echo -e "${GREEN}✔ Database imported successfully.${NC}"
+
+        echo -e "${YELLOW}Preparing database...${NC}"
+        # اطمینان از وجود دیتابیس (اگر نبود می‌سازد)
+        mysql -u root -e "CREATE DATABASE IF NOT EXISTS $DB_NAME; GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost'; FLUSH PRIVILEGES;"
+
+        echo -e "${YELLOW}Importing data...${NC}"
+        # ایمپورت دیتابیس
+        mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$SQL_PATH"
+
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✔ Database imported successfully!${NC}"
+        else
+            echo -e "${RED}❌ Import failed! Check if the SQL file is valid.${NC}"
+        fi
     else
-        echo -e "${RED}File not found!${NC}"
+        echo -e "${RED}Error: SQL file not found at $SQL_PATH${NC}"
     fi
     read -p "Press Enter to continue..."
 }
-
 configure_backup() {
     mirza_logo
     echo -e "${CYAN}Setting up Telegram Auto-Backup...${NC}"
