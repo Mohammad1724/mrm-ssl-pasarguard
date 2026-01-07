@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# SSL MANAGEMENT MODULE v2.2 (Simplified)
+# SSL MANAGEMENT MODULE v2.3 (Unified Format)
 # Compatible with MRM Manager
 # ==========================================
 
@@ -66,7 +66,7 @@ validate_domain_dns() {
         echo -e "${RED}║  Fix your DNS records first.                             ║${NC}"
         echo -e "${RED}╚══════════════════════════════════════════════════════════╝${NC}"
         log_warning "DNS mismatch - Domain: $DOMAIN points to $DOMAIN_IP but server is $SERVER_IP"
-        
+
         echo ""
         read -p "Continue anyway? (y/N): " CONTINUE_ANYWAY
         if [[ ! "$CONTINUE_ANYWAY" =~ ^[Yy]$ ]]; then
@@ -105,14 +105,14 @@ _get_cert_action() {
 
     init_logging
     detect_active_panel > /dev/null
-    
+
     log_info "========== SSL Generation Started =========="
     log_info "Email: $EMAIL"
     log_info "Domains: ${DOMAINS[*]}"
     log_info "Active Panel: $(detect_active_panel)"
 
     echo -e "${YELLOW}[Step 1/6] Network & DNS Validation...${NC}"
-    
+
     # Check internet connectivity to Let's Encrypt API
     if ! curl -s --connect-timeout 15 https://acme-v02.api.letsencrypt.org/directory > /dev/null; then
         ui_error "Let's Encrypt API is unreachable. Check your internet/firewall!"
@@ -139,27 +139,27 @@ _get_cert_action() {
     fi
 
     echo -e "${YELLOW}[Step 4/6] Stopping conflicting services...${NC}"
-    
+
     # Store service states for restoration
     local NGINX_WAS_RUNNING=false
     local APACHE_WAS_RUNNING=false
-    
+
     if systemctl is-active --quiet nginx; then
         NGINX_WAS_RUNNING=true
         systemctl stop nginx 2>/dev/null
         log_info "Stopped nginx"
     fi
-    
+
     if systemctl is-active --quiet apache2; then
         APACHE_WAS_RUNNING=true
         systemctl stop apache2 2>/dev/null
         log_info "Stopped apache2"
     fi
-    
+
     if command -v fuser &> /dev/null; then
         fuser -k 80/tcp 2>/dev/null
     fi
-    
+
     # Verify port 80 is free
     sleep 2
     if ! check_port_availability 80; then
@@ -188,16 +188,16 @@ _get_cert_action() {
         --preferred-challenges http \
         --http-01-port 80 \
         $DOM_FLAGS > "$CERTBOT_DEBUG_LOG" 2>&1
-    
+
     local CERTBOT_RESULT=$?
 
     echo -e "${YELLOW}[Step 6/6] Restoring Services...${NC}"
-    
+
     if [ "$NGINX_WAS_RUNNING" = true ]; then
         systemctl start nginx 2>/dev/null
         log_info "Restored nginx"
     fi
-    
+
     if [ "$APACHE_WAS_RUNNING" = true ]; then
         systemctl start apache2 2>/dev/null
         log_info "Restored apache2"
@@ -212,7 +212,7 @@ _get_cert_action() {
         echo -e "${CYAN}----------------------------------------${NC}"
         tail -n 15 "$CERTBOT_DEBUG_LOG"
         echo -e "${CYAN}----------------------------------------${NC}"
-        
+
         log_error "Certbot failed with exit code $CERTBOT_RESULT"
         log_error "Certbot output: $(cat $CERTBOT_DEBUG_LOG)"
     fi
@@ -226,7 +226,7 @@ _get_cert_action() {
 _process_panel() {
     local PRIMARY_DOM=$1
     detect_active_panel > /dev/null
-    
+
     echo -e "\n${CYAN}--- Configuring Panel SSL ($(basename $PANEL_DIR)) ---${NC}"
 
     echo "Certificate storage options:"
@@ -268,10 +268,10 @@ _process_panel() {
         restart_service "panel"
 
         ui_success "Panel SSL Updated Successfully!"
-        echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
-        echo -e "Certificate: ${CYAN}$C_FILE${NC}"
-        echo -e "Private Key: ${CYAN}$K_FILE${NC}"
-        
+        echo -e "  ${YELLOW}Domain:${NC} $PRIMARY_DOM"
+        echo -e "    Cert: ${CYAN}$C_FILE${NC}"
+        echo -e "    Key:  ${CYAN}$K_FILE${NC}"
+
         log_success "Panel SSL configured - Cert: $C_FILE, Key: $K_FILE"
     else
         ui_error "Error copying certificate files!"
@@ -280,7 +280,7 @@ _process_panel() {
 }
 
 # ==========================================
-# PROCESS NODE SSL
+# PROCESS NODE SSL (FIXED - Unified Format)
 # ==========================================
 _process_node() {
     local PRIMARY_DOM=$1
@@ -301,11 +301,12 @@ _process_node() {
 
     log_info "Copying node certificates to $TARGET_DIR"
 
-    if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/server.crt" && \
-       cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/server.key"; then
+    # FIXED: Use fullchain.pem and privkey.pem instead of server.crt/server.key
+    if cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/fullchain.pem" "$TARGET_DIR/fullchain.pem" && \
+       cp -L "/etc/letsencrypt/live/$PRIMARY_DOM/privkey.pem" "$TARGET_DIR/privkey.pem"; then
 
-        local C_FILE="$TARGET_DIR/server.crt"
-        local K_FILE="$TARGET_DIR/server.key"
+        local C_FILE="$TARGET_DIR/fullchain.pem"
+        local K_FILE="$TARGET_DIR/privkey.pem"
 
         chmod 644 "$C_FILE" "$K_FILE"
 
@@ -327,10 +328,10 @@ _process_node() {
             echo -e "${YELLOW}Please manually configure SSL paths.${NC}"
             log_warning "Node .env not found at $NODE_ENV"
         fi
-        
-        echo -e "Files saved in: ${YELLOW}$TARGET_DIR${NC}"
-        echo -e "Certificate: ${CYAN}$C_FILE${NC}"
-        echo -e "Private Key: ${CYAN}$K_FILE${NC}"
+
+        echo -e "  ${YELLOW}Domain:${NC} $PRIMARY_DOM"
+        echo -e "    Cert: ${CYAN}$C_FILE${NC}"
+        echo -e "    Key:  ${CYAN}$K_FILE${NC}"
     else
         ui_error "Error copying certificate files!"
         log_error "Failed to copy node certificate files to $TARGET_DIR"
@@ -360,10 +361,11 @@ _process_config() {
         echo -e "${YELLOW}╔══════════════════════════════════════════════════════════╗${NC}"
         echo -e "${YELLOW}║         Copy these paths to your Inbound Settings:       ║${NC}"
         echo -e "${YELLOW}╠══════════════════════════════════════════════════════════╣${NC}"
-        echo -e "${YELLOW}║${NC} Cert: ${CYAN}$TARGET_DIR/fullchain.pem${NC}"
-        echo -e "${YELLOW}║${NC} Key:  ${CYAN}$TARGET_DIR/privkey.pem${NC}"
+        echo -e "${YELLOW}║${NC}  Domain: ${CYAN}$PRIMARY_DOM${NC}"
+        echo -e "${YELLOW}║${NC}    Cert: ${CYAN}$TARGET_DIR/fullchain.pem${NC}"
+        echo -e "${YELLOW}║${NC}    Key:  ${CYAN}$TARGET_DIR/privkey.pem${NC}"
         echo -e "${YELLOW}╚══════════════════════════════════════════════════════════╝${NC}"
-        
+
         log_success "Inbound SSL configured - Path: $TARGET_DIR"
     else
         ui_error "Error copying certificate files!"
@@ -378,7 +380,7 @@ ssl_wizard() {
     ui_header "SSL GENERATION WIZARD"
     init_logging
     detect_active_panel > /dev/null
-    
+
     echo -e "${CYAN}Active Panel: $(basename $PANEL_DIR)${NC}"
     echo -e "${CYAN}Certs Path: $PANEL_DEF_CERTS${NC}"
     echo ""
@@ -431,7 +433,7 @@ ssl_wizard() {
 
     ui_success "Success! Primary Domain: $PRIMARY_DOM"
     echo ""
-    
+
     # Configure usage
     echo "Where to use this certificate?"
     echo "1) Main Panel (Dashboard)"
@@ -465,7 +467,7 @@ ssl_wizard() {
 multi_server_menu() {
     while true; do
         ui_header "MULTI-SERVER SSL SYNC"
-        
+
         echo "1) 📋 List Configured Servers"
         echo "2) ➕ Add New Server"
         echo "3) ➖ Remove Server"
@@ -507,7 +509,7 @@ list_servers() {
 
     echo -e "${GREEN}ID  │ Name              │ Host              │ Port  │ Path${NC}"
     echo "────┼───────────────────┼───────────────────┼───────┼──────────────────"
-    
+
     local idx=1
     while IFS='|' read -r name host port user path panel; do
         [ -z "$name" ] && continue
@@ -552,7 +554,7 @@ add_server() {
 
     local REMOTE_PATH=""
     local PANEL_NAME=""
-    
+
     case $PANEL_TYPE in
         1) 
             PANEL_NAME="pasarguard"
@@ -641,7 +643,7 @@ test_server_connection() {
     local USER=$3
 
     echo -e "${YELLOW}Testing connection to $USER@$HOST:$PORT...${NC}"
-    
+
     if ssh -o ConnectTimeout=10 -o BatchMode=yes -p "$PORT" "$USER@$HOST" "echo 'OK'" 2>/dev/null; then
         ui_success "Connection successful!"
         return 0
@@ -669,9 +671,9 @@ test_all_connections() {
 
     while IFS='|' read -r name host port user path panel; do
         [ -z "$name" ] && continue
-        
+
         echo -ne "${YELLOW}[$name]${NC} $host:$port ... "
-        
+
         if ssh -o ConnectTimeout=5 -o BatchMode=yes -p "$port" "$user@$host" "exit" 2>/dev/null; then
             echo -e "${GREEN}✔ OK${NC}"
             ((success++))
@@ -698,7 +700,7 @@ setup_ssh_keys() {
     fi
 
     echo ""
-    
+
     if [ ! -f "$SERVERS_FILE" ] || [ ! -s "$SERVERS_FILE" ]; then
         ui_warning "No servers configured. Add a server first."
         pause
@@ -753,7 +755,7 @@ setup_ssh_keys() {
 }
 
 # ==========================================
-# SYNC FUNCTIONS
+# SYNC FUNCTIONS (FIXED - Unified Format)
 # ==========================================
 sync_to_server() {
     local HOST=$1
@@ -774,7 +776,7 @@ sync_to_server() {
         return 1
     fi
 
-    # Copy certificate files
+    # Copy certificate files (unified format: fullchain.pem and privkey.pem)
     if ! scp -o ConnectTimeout=10 -o BatchMode=yes -P "$PORT" \
         "$LOCAL_CERT_PATH/fullchain.pem" \
         "$USER@$HOST:$REMOTE_PATH/fullchain.pem" 2>/dev/null; then
@@ -789,11 +791,9 @@ sync_to_server() {
         return 1
     fi
 
-    # Also copy as server.crt/server.key for node compatibility
+    # Set permissions
     ssh -o BatchMode=yes -p "$PORT" "$USER@$HOST" "
-        cp $REMOTE_PATH/fullchain.pem $REMOTE_PATH/server.crt 2>/dev/null
-        cp $REMOTE_PATH/privkey.pem $REMOTE_PATH/server.key 2>/dev/null
-        chmod 644 $REMOTE_PATH/*.pem $REMOTE_PATH/*.crt $REMOTE_PATH/*.key 2>/dev/null
+        chmod 644 $REMOTE_PATH/*.pem 2>/dev/null
     " 2>/dev/null
 
     # Restart remote service
@@ -823,7 +823,7 @@ sync_all_servers() {
 
     local idx=1
     declare -a domains
-    
+
     for dir in /etc/letsencrypt/live/*/; do
         local domain=$(basename "$dir")
         [ "$domain" == "README" ] && continue
@@ -861,9 +861,9 @@ sync_all_servers() {
 
     while IFS='|' read -r name host port user path panel; do
         [ -z "$name" ] && continue
-        
+
         echo -ne "${YELLOW}[$name]${NC} Syncing to $host ... "
-        
+
         if sync_to_server "$host" "$port" "$user" "$path" "$SELECTED_DOMAIN" "$CERT_PATH" "$panel"; then
             echo -e "${GREEN}✔ Done${NC}"
             ((success++))
@@ -923,7 +923,7 @@ sync_specific_server() {
 
     idx=1
     declare -a domains
-    
+
     for dir in /etc/letsencrypt/live/*/; do
         local domain=$(basename "$dir")
         [ "$domain" == "README" ] && continue
@@ -969,16 +969,16 @@ offer_multi_server_sync() {
     fi
 
     local server_count=$(wc -l < "$SERVERS_FILE")
-    
+
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${YELLOW}You have $server_count server(s) configured.${NC}"
     read -p "Sync this certificate to other servers? (y/N): " SYNC_NOW
-    
+
     if [[ "$SYNC_NOW" =~ ^[Yy]$ ]]; then
         local DOMAIN=$1
         local CERT_PATH="/etc/letsencrypt/live/$DOMAIN"
-        
+
         echo ""
         while IFS='|' read -r name host port user path panel; do
             [ -z "$name" ] && continue
@@ -993,7 +993,7 @@ offer_multi_server_sync() {
 }
 
 # ==========================================
-# SHOW EXISTING SSL PATHS
+# SHOW EXISTING SSL PATHS (FIXED - Unified Format)
 # ==========================================
 show_detailed_paths() {
     ui_header "EXISTING SSL PATHS"
@@ -1020,8 +1020,9 @@ show_detailed_paths() {
             if [ -d "$dir" ]; then
                 local dom=$(basename "$dir")
                 echo -e "  ${YELLOW}Domain:${NC} $dom"
-                [ -f "$dir/server.crt" ] && echo -e "    Cert: ${CYAN}$dir/server.crt${NC}"
-                [ -f "$dir/server.key" ] && echo -e "    Key:  ${CYAN}$dir/server.key${NC}"
+                # FIXED: Show unified format
+                [ -f "$dir/fullchain.pem" ] && echo -e "    Cert: ${CYAN}$dir/fullchain.pem${NC}"
+                [ -f "$dir/privkey.pem" ] && echo -e "    Key:  ${CYAN}$dir/privkey.pem${NC}"
             fi
         done
     else
@@ -1033,7 +1034,7 @@ show_detailed_paths() {
 }
 
 # ==========================================
-# VIEW CERTIFICATE CONTENT
+# VIEW CERTIFICATE CONTENT (FIXED)
 # ==========================================
 view_cert_content() {
     ui_header "VIEW CERTIFICATE FILES"
@@ -1048,6 +1049,17 @@ view_cert_content() {
                 local dom=$(basename "$dir")
                 all_certs[$idx]="$dir"
                 echo -e "${GREEN}$idx)${NC} [panel] $dom"
+                ((idx++))
+            fi
+        done
+    fi
+
+    if [ -d "$NODE_DEF_CERTS" ]; then
+        for dir in "$NODE_DEF_CERTS"/*; do
+            if [ -d "$dir" ]; then
+                local dom=$(basename "$dir")
+                all_certs[$idx]="$dir"
+                echo -e "${PURPLE}$idx)${NC} [node] $dom"
                 ((idx++))
             fi
         done
@@ -1077,13 +1089,11 @@ view_cert_content() {
     read -p "Select: " F_OPT
 
     local FILE=""
-    
+
     if [ "$F_OPT" == "1" ]; then 
         [ -f "$SELECTED_DIR/fullchain.pem" ] && FILE="fullchain.pem"
-        [ -f "$SELECTED_DIR/server.crt" ] && FILE="server.crt"
     elif [ "$F_OPT" == "2" ]; then 
         [ -f "$SELECTED_DIR/privkey.pem" ] && FILE="privkey.pem"
-        [ -f "$SELECTED_DIR/server.key" ] && FILE="server.key"
     fi
 
     if [ -n "$FILE" ] && [ -f "$SELECTED_DIR/$FILE" ]; then
@@ -1104,7 +1114,7 @@ view_cert_content() {
 # ==========================================
 view_ssl_logs() {
     ui_header "SSL MANAGER LOGS"
-    
+
     echo "1) View SSL Manager Log (Last 50 lines)"
     echo "2) View Certbot Debug Log (Last 50 lines)"
     echo "3) Clear All Logs"
@@ -1148,7 +1158,7 @@ view_ssl_logs() {
 renew_certificates() {
     ui_header "RENEW SSL CERTIFICATES"
     init_logging
-    
+
     log_info "Starting certificate renewal"
 
     ui_spinner_start "Stopping web services..."
@@ -1171,7 +1181,7 @@ renew_certificates() {
         tail -n 20 "$CERTBOT_DEBUG_LOG"
         log_error "Certificate renewal failed"
     fi
-    
+
     pause
 }
 
@@ -1180,12 +1190,12 @@ renew_certificates() {
 # ==========================================
 ssl_menu() {
     init_logging
-    
+
     while true; do
         clear
         ui_header "SSL MANAGEMENT"
         detect_active_panel > /dev/null
-        
+
         echo -e "${CYAN}Active Panel: $(basename $PANEL_DIR)${NC}"
         echo ""
         echo "1) 🔐 Request New SSL Certificate"
@@ -1198,7 +1208,7 @@ ssl_menu() {
         echo "0) ↩️  Back"
         echo ""
         read -p "Select: " S_OPT
-        
+
         case $S_OPT in
             1) ssl_wizard ;;
             2) show_detailed_paths ;;
