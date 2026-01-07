@@ -6,8 +6,8 @@
 # ==========================================
 
 # Load utils if not already loaded
-    source /opt/mrm-manager/utils.sh
-    source /opt/mrm-manager/ui.sh
+ source /opt/mrm-manager/utils.sh
+ source /opt/mrm-manager/ui.sh
 fi
 
 # ==========================================
