@@ -6,7 +6,7 @@
 # ==========================================
 
 # Load utils if not already loaded
-if [ -z "$PANEL_DIR" ]; then 
+
     source /opt/mrm-manager/utils.sh
     source /opt/mrm-manager/ui.sh
 fi
