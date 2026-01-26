@@ -41,7 +41,7 @@ log_warning() { log_message "WARNING" "$1"; }
 validate_domain_dns() {
     local DOMAIN=$1
     local SERVER_IP=$(curl -4 -s --connect-timeout 5 ifconfig.me 2>/dev/null)
-    local DOMAIN_IP=$(dig +short "$DOMAIN" 2>/dev/null | head -1)
+    local DOMAIN_IP=$(getent hosts "$DOMAIN" | awk '{ print $1 }' | head -1)
 
     echo -e "${YELLOW}[DNS Check] Validating domain: $DOMAIN${NC}"
     log_info "DNS Check - Domain: $DOMAIN, Server IP: $SERVER_IP, Domain IP: $DOMAIN_IP"
