@@ -1,7 +1,12 @@
 #!/bin/bash
 
 # ==========================================
-# MRM BACKUP & RESTORE PRO v7.1
+# MRM BACKUP & RESTORE PRO v7.3
+# Fixed: Restore Permissions, DB Timing, Cron Path
+# ==========================================
+
+# ==========================================
+# FIX FOR CRON / NON-INTERACTIVE ENV
 # ==========================================
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 export HOME="${HOME:-/root}"
@@ -14,6 +19,7 @@ source /opt/mrm-manager/ui.sh
 BACKUP_DIR="/root/mrm-backups"
 TG_CONFIG="/root/.mrm_telegram"
 TEMP_BASE="/tmp/mrm_workspace"
+# Fix: Use BASH_SOURCE to get real path even when sourced
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 BACKUP_LOG="/var/log/mrm-backup.log"
 
@@ -595,6 +601,15 @@ do_restore() {
     mkdir -p "$PANEL_DIR" "$DATA_DIR"
     cp -a "$ROOT/panel/." "$PANEL_DIR/" 2>/dev/null
     cp -a "$ROOT/data/." "$DATA_DIR/" 2>/dev/null
+    
+    # FIX: Correct permissions for Database files (Crucial for SQLite/Postgres volume mapping)
+    # Most docker containers use UID 1000 or root. We make it accessible.
+    if [ -d "$DATA_DIR" ]; then
+        chmod -R 755 "$DATA_DIR"
+        # Try to set ownership to user 1000 (common for container users) if root
+        chown -R 1000:1000 "$DATA_DIR" 2>/dev/null || true
+    fi
+    
     ui_spinner_stop
     ui_success "Panel files restored"
 
@@ -652,8 +667,9 @@ do_restore() {
 
     # Restore database
     if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
-        echo -e "${YELLOW}Waiting for database to initialize...${NC}"
-        sleep 15
+        echo -e "${YELLOW}Waiting for database to initialize (30s)...${NC}"
+        # FIX: Increased sleep time to ensure DB is ready
+        sleep 30
 
         ui_spinner_start "Importing database..."
         local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
