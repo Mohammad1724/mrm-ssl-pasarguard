@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# MRM BACKUP & RESTORE PRO v7.5
-# Fixed: DB Export, Cron Path, Permissions
+# MRM BACKUP & RESTORE PRO v7.8
+# Fixed: Database Export using Pipe Method
 # ==========================================
 
 # ==========================================
@@ -19,7 +19,6 @@ source /opt/mrm-manager/ui.sh
 BACKUP_DIR="/root/mrm-backups"
 TG_CONFIG="/root/.mrm_telegram"
 TEMP_BASE="/tmp/mrm_workspace"
-# FIX: Use BASH_SOURCE to ensure correct path in cron/source execution
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 BACKUP_LOG="/var/log/mrm-backup.log"
 
@@ -365,6 +364,136 @@ apply_smart_fix() {
 }
 
 # ==========================================
+# PARSE DATABASE CREDENTIALS FROM URI
+# ==========================================
+parse_db_credentials() {
+    local ENV_FILE="$1"
+    
+    # Reset globals
+    DB_USER=""
+    DB_PASS=""
+    DB_NAME=""
+    DB_HOST=""
+    
+    if [ ! -f "$ENV_FILE" ]; then
+        return 1
+    fi
+    
+    # Try SQLALCHEMY_DATABASE_URL first
+    local DB_URI=$(grep "^SQLALCHEMY_DATABASE_URL" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    
+    if [ -n "$DB_URI" ]; then
+        # Parse: postgresql+asyncpg://user:pass@host:port/dbname
+        # or: postgresql://user:pass@host:port/dbname
+        
+        # Extract user
+        DB_USER=$(echo "$DB_URI" | sed -n 's|.*://\([^:]*\):.*|\1|p')
+        
+        # Extract password (between first : after // and @)
+        DB_PASS=$(echo "$DB_URI" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+        
+        # Extract database name (after last /)
+        DB_NAME=$(echo "$DB_URI" | sed -n 's|.*/\([^?]*\).*|\1|p')
+        
+        # Extract host
+        DB_HOST=$(echo "$DB_URI" | sed -n 's|.*@\([^:/]*\).*|\1|p')
+        
+        log_backup "INFO" "Parsed from URI - User: $DB_USER, DB: $DB_NAME, Host: $DB_HOST"
+        return 0
+    fi
+    
+    # Fallback to individual vars
+    DB_USER=$(grep "^POSTGRES_USER" "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    DB_PASS=$(grep "^POSTGRES_PASSWORD" "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    DB_NAME=$(grep "^POSTGRES_DB" "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
+    
+    if [ -n "$DB_USER" ]; then
+        log_backup "INFO" "Parsed from vars - User: $DB_USER, DB: $DB_NAME"
+        return 0
+    fi
+    
+    return 1
+}
+
+# ==========================================
+# DATABASE EXPORT FUNCTION (PIPE METHOD)
+# ==========================================
+export_postgresql_database() {
+    local DEST_DIR="$1"
+    local DB_EXPORTED=false
+    
+    log_backup "INFO" "=== Starting PostgreSQL Export (Pipe Method) ==="
+    
+    # Find database container
+    local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "postgres|timescale|db" | head -1)
+    
+    if [ -z "$DB_CONT" ]; then
+        log_backup "ERROR" "No PostgreSQL container found!"
+        echo "ERROR: No database container found"
+        return 1
+    fi
+    
+    log_backup "INFO" "Found DB container: $DB_CONT"
+    
+    # Parse credentials from .env
+    parse_db_credentials "$PANEL_ENV"
+    
+    log_backup "INFO" "Credentials - User: $DB_USER, Pass: [${#DB_PASS} chars], DB: $DB_NAME"
+    
+    # Build list of credentials to try
+    declare -a CREDS_TO_TRY
+    
+    # Add parsed credentials first
+    if [ -n "$DB_USER" ] && [ -n "$DB_PASS" ]; then
+        CREDS_TO_TRY+=("$DB_USER|$DB_PASS|$DB_NAME")
+    fi
+    
+    # Add common fallbacks
+    CREDS_TO_TRY+=("pasarguard|17240304|pasarguard")
+    CREDS_TO_TRY+=("marzban|marzban|marzban")
+    CREDS_TO_TRY+=("postgres||postgres")
+    
+    # Try each set of credentials using PIPE method
+    for CRED in "${CREDS_TO_TRY[@]}"; do
+        IFS='|' read -r TRY_USER TRY_PASS TRY_DB <<< "$CRED"
+        
+        [ -z "$TRY_DB" ] && TRY_DB="$TRY_USER"
+        
+        log_backup "INFO" "Trying pg_dump (pipe) - User: $TRY_USER, DB: $TRY_DB"
+        
+        # Use PIPE method - dump directly to host filesystem
+        if [ -n "$TRY_PASS" ]; then
+            docker exec -e PGPASSWORD="$TRY_PASS" "$DB_CONT" pg_dump -U "$TRY_USER" -d "$TRY_DB" 2>/dev/null > "$DEST_DIR/db.sql"
+        else
+            docker exec "$DB_CONT" pg_dump -U "$TRY_USER" -d "$TRY_DB" 2>/dev/null > "$DEST_DIR/db.sql"
+        fi
+        
+        # Check if file exists and has content (more than 100 bytes)
+        if [ -f "$DEST_DIR/db.sql" ]; then
+            local FILE_SIZE=$(stat -c%s "$DEST_DIR/db.sql" 2>/dev/null || echo "0")
+            
+            if [ "$FILE_SIZE" -gt 100 ]; then
+                log_backup "SUCCESS" "pg_dump successful with user '$TRY_USER' - Size: $FILE_SIZE bytes"
+                DB_EXPORTED=true
+                break
+            else
+                log_backup "WARN" "pg_dump with '$TRY_USER' created empty/small file ($FILE_SIZE bytes)"
+                rm -f "$DEST_DIR/db.sql"
+            fi
+        else
+            log_backup "WARN" "pg_dump with '$TRY_USER' failed - no file created"
+        fi
+    done
+    
+    if [ "$DB_EXPORTED" = true ]; then
+        return 0
+    else
+        log_backup "ERROR" "All pg_dump attempts failed!"
+        return 1
+    fi
+}
+
+# ==========================================
 # BACKUP FUNCTIONS
 # ==========================================
 do_backup() {
@@ -375,7 +504,10 @@ do_backup() {
     [ "$MODE" != "auto" ] && clear
     [ "$MODE" != "auto" ] && ui_header "FULL SYSTEM BACKUP"
 
-    log_backup "INFO" "Starting backup (mode: $MODE)"
+    log_backup "INFO" "========== Starting backup (mode: $MODE) =========="
+    log_backup "INFO" "PANEL_DIR: $PANEL_DIR"
+    log_backup "INFO" "DATA_DIR: $DATA_DIR"
+    log_backup "INFO" "PANEL_ENV: $PANEL_ENV"
 
     local TS=$(date +%Y%m%d_%H%M%S)
     local B_NAME="MRM_Full_${TS}"
@@ -387,32 +519,50 @@ do_backup() {
     # 1. Export Database
     [ "$MODE" != "auto" ] && ui_spinner_start "Exporting database..."
 
-    if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null; then
-        local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
-        if [ -n "$DB_CONT" ]; then
-            # FIX: Detect Correct DB User for Dump
-            local DB_USER=$(grep "^POSTGRES_USER" "$PANEL_ENV" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-            [ -z "$DB_USER" ] && DB_USER="marzban"
-            
-            # Try with detected user
-            docker exec "$DB_CONT" pg_dump -U "$DB_USER" -d "$DB_USER" -f /tmp/db.sql >/dev/null 2>&1
-            
-            # If failed/empty, try with legacy pasarguard
-            if ! docker exec "$DB_CONT" [ -s /tmp/db.sql ]; then
-                 log_backup "WARN" "First dump failed, trying fallback user 'pasarguard'"
-                 docker exec "$DB_CONT" pg_dump -U pasarguard -d pasarguard -f /tmp/db.sql >/dev/null 2>&1
-            fi
-            
-            docker cp "$DB_CONT:/tmp/db.sql" "$B_PATH/database/db.sql" 2>/dev/null
-            docker exec "$DB_CONT" rm /tmp/db.sql 2>/dev/null
-            log_backup "INFO" "PostgreSQL exported"
+    local DB_SUCCESS=false
+
+    if grep -qiE "postgresql|postgres" "$PANEL_ENV" 2>/dev/null; then
+        log_backup "INFO" "PostgreSQL detected in .env"
+        
+        if export_postgresql_database "$B_PATH/database"; then
+            DB_SUCCESS=true
+            [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Database exported"
+        else
+            [ "$MODE" != "auto" ] && ui_spinner_stop && ui_error "Database export FAILED!"
+            log_backup "ERROR" "PostgreSQL export failed"
         fi
     else
-        [ -f "$DATA_DIR/db.sqlite3" ] && cp "$DATA_DIR/db.sqlite3" "$B_PATH/database/"
-        log_backup "INFO" "SQLite exported"
+        log_backup "INFO" "SQLite mode - looking for db.sqlite3"
+        
+        if [ -f "$DATA_DIR/db.sqlite3" ]; then
+            cp "$DATA_DIR/db.sqlite3" "$B_PATH/database/"
+            DB_SUCCESS=true
+            log_backup "INFO" "SQLite exported from DATA_DIR"
+        elif [ -f "$PANEL_DIR/db.sqlite3" ]; then
+            cp "$PANEL_DIR/db.sqlite3" "$B_PATH/database/"
+            DB_SUCCESS=true
+            log_backup "INFO" "SQLite exported from PANEL_DIR"
+        else
+            log_backup "ERROR" "No SQLite database found!"
+        fi
+        
+        [ "$MODE" != "auto" ] && ui_spinner_stop
+        [ "$DB_SUCCESS" = true ] && [ "$MODE" != "auto" ] && ui_success "Database exported"
+        [ "$DB_SUCCESS" = false ] && [ "$MODE" != "auto" ] && ui_error "No database found!"
     fi
 
-    [ "$MODE" != "auto" ] && ui_spinner_stop && ui_success "Database exported"
+    # Show warning if DB export failed
+    if [ "$DB_SUCCESS" = false ] && [ "$MODE" != "auto" ]; then
+        echo ""
+        echo -e "${RED}⚠️  WARNING: Database export failed!${NC}"
+        echo -e "${YELLOW}The backup will be created but WITHOUT database.${NC}"
+        echo ""
+        read -p "Continue anyway? (y/N): " CONT
+        if [[ ! "$CONT" =~ ^[Yy]$ ]]; then
+            rm -rf "$TEMP_BASE"
+            return
+        fi
+    fi
 
     # 2. Collect Panel Files
     [ "$MODE" != "auto" ] && ui_spinner_start "Backing up panel files..."
@@ -455,6 +605,7 @@ Panel: $(basename "$PANEL_DIR")
 Panel Dir: $PANEL_DIR
 Data Dir: $DATA_DIR
 Node Dir: $NODE_DIR
+Database Exported: $DB_SUCCESS
 MRM Version: 3.0
 EOF
 
@@ -481,6 +632,7 @@ EOF
     ls -t "$BACKUP_DIR"/*.tar.gz 2>/dev/null | tail -n +6 | xargs rm -f 2>/dev/null
 
     log_backup "SUCCESS" "Backup completed: $B_NAME.tar.gz ($BACKUP_SIZE)"
+    log_backup "INFO" "========== Backup finished =========="
 
     if [ "$MODE" != "auto" ]; then
         echo ""
@@ -489,6 +641,11 @@ EOF
         echo -e "${GREEN}╠══════════════════════════════════════════════════════════╣${NC}"
         echo -e "${GREEN}║${NC} File: ${CYAN}$BACKUP_DIR/$B_NAME.tar.gz${NC}"
         echo -e "${GREEN}║${NC} Size: ${CYAN}$BACKUP_SIZE${NC}"
+        if [ "$DB_SUCCESS" = false ]; then
+            echo -e "${GREEN}║${NC} Database: ${RED}NOT EXPORTED${NC}"
+        else
+            echo -e "${GREEN}║${NC} Database: ${GREEN}Exported${NC}"
+        fi
         echo -e "${GREEN}╚══════════════════════════════════════════════════════════╝${NC}"
         pause
     fi
@@ -615,8 +772,7 @@ do_restore() {
     cp -a "$ROOT/panel/." "$PANEL_DIR/" 2>/dev/null
     cp -a "$ROOT/data/." "$DATA_DIR/" 2>/dev/null
     
-    # FIX: Permissions for Database and Data Directory
-    # Ensure Docker container user (often 1000) can read/write files
+    # FIX: Permissions for Database
     chmod -R 755 "$DATA_DIR" 2>/dev/null
     chown -R 1000:1000 "$DATA_DIR" 2>/dev/null || true
     
@@ -676,23 +832,27 @@ do_restore() {
     ui_success "Services started"
 
     # Restore database
-    if grep -q "postgresql" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
+    if grep -qiE "postgresql|postgres" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
         echo -e "${YELLOW}Waiting for database to initialize (30s)...${NC}"
-        # FIX: Increased sleep to allow DB full startup
         sleep 30
 
         ui_spinner_start "Importing database..."
-        local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres" | head -1)
+        local DB_CONT=$(docker ps --format '{{.Names}}' | grep -iE "timescale|postgres|db" | head -1)
         if [ -n "$DB_CONT" ]; then
-            # FIX: Detect Correct DB User for Restore
-            local DB_USER=$(grep "^POSTGRES_USER" "$PANEL_ENV" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
-            [ -z "$DB_USER" ] && DB_USER="marzban"
+            # Parse credentials
+            parse_db_credentials "$PANEL_ENV"
             
-            # Drop and Create Schema to ensure clean state
-            docker exec "$DB_CONT" psql -U "$DB_USER" -d "$DB_USER" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+            [ -z "$DB_USER" ] && DB_USER="pasarguard"
+            [ -z "$DB_NAME" ] && DB_NAME="$DB_USER"
             
-            # Restore Data
-            docker exec -i "$DB_CONT" psql -U "$DB_USER" -d "$DB_USER" < "$ROOT/database/db.sql" >/dev/null 2>&1
+            # Drop and restore WITH PASSWORD using pipe
+            if [ -n "$DB_PASS" ]; then
+                docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+                cat "$ROOT/database/db.sql" | docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1
+            else
+                docker exec "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
+                cat "$ROOT/database/db.sql" | docker exec -i "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1
+            fi
         fi
         ui_spinner_stop
         ui_success "Database imported"
@@ -875,7 +1035,7 @@ backup_menu() {
 
     while true; do
         clear
-        ui_header "BACKUP & RESTORE v7.1"
+        ui_header "BACKUP & RESTORE v7.8"
         setup_env
 
         # Show status
