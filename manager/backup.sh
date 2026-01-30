@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================
-# MRM BACKUP & RESTORE PRO v7.8
-# Fixed: Database Export using Pipe Method
+# MRM BACKUP & RESTORE PRO v7.9
+# Fixed: IPv4 Only, Database Pipe Method
 # ==========================================
 
 # ==========================================
@@ -53,28 +53,39 @@ get_env_val() {
 }
 
 # ==========================================
-# GET CURRENT SERVER IP
+# GET CURRENT SERVER IP (IPv4 ONLY)
 # ==========================================
 get_server_ip() {
     local IP=""
 
-    # Try multiple sources
-    IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null)
+    # Force IPv4 with -4 flag
+    IP=$(curl -4 -s --connect-timeout 5 icanhazip.com 2>/dev/null)
 
     if [ -z "$IP" ]; then
-        IP=$(curl -s --connect-timeout 5 icanhazip.com 2>/dev/null)
+        IP=$(curl -4 -s --connect-timeout 5 ipv4.icanhazip.com 2>/dev/null)
     fi
 
     if [ -z "$IP" ]; then
-        IP=$(curl -s --connect-timeout 5 ipinfo.io/ip 2>/dev/null)
+        IP=$(curl -4 -s --connect-timeout 5 api.ipify.org 2>/dev/null)
     fi
 
     if [ -z "$IP" ]; then
-        # Get from network interface
-        IP=$(ip route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+')
+        IP=$(curl -4 -s --connect-timeout 5 checkip.amazonaws.com 2>/dev/null)
     fi
 
-    echo "$IP"
+    if [ -z "$IP" ]; then
+        # Get from network interface (IPv4 only)
+        IP=$(ip -4 route get 8.8.8.8 2>/dev/null | grep -oP 'src \K[^ ]+')
+    fi
+
+    # Validate IPv4 format
+    if [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$IP"
+    else
+        # Fallback: try to extract IPv4 from hostname
+        IP=$(hostname -I 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        echo "$IP"
+    fi
 }
 
 # ==========================================
@@ -200,7 +211,7 @@ send_to_telegram() {
 📅 $(date '+%Y-%m-%d %H:%M')
 📦 $(basename "$FILE")"
 
-        local RESULT=$(curl -s -m 600 -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        local RESULT=$(curl -4 -s -m 600 -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
 
         log_backup "DEBUG" "Telegram API response: $RESULT"
 
@@ -212,7 +223,7 @@ send_to_telegram() {
             return 1
         fi
     elif [ -n "$MESSAGE" ]; then
-        curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+        curl -4 -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
             -d chat_id="$CH" \
             -d text="$MESSAGE" > /dev/null
         return $?
@@ -232,7 +243,7 @@ test_telegram() {
     local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
     local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
 
-    local RESULT=$(curl -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+    local RESULT=$(curl -4 -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
         -d chat_id="$CH" \
         -d text="🧪 MRM Backup Test - $(date '+%Y-%m-%d %H:%M')" 2>&1)
 
@@ -1035,7 +1046,7 @@ backup_menu() {
 
     while true; do
         clear
-        ui_header "BACKUP & RESTORE v7.8"
+        ui_header "BACKUP & RESTORE v7.9"
         setup_env
 
         # Show status
