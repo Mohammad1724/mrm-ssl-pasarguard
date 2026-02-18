@@ -5,748 +5,1531 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>__BRAND__</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&family=Roboto+Mono:wght@500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
         :root {
-            --bg-deep: #1a1f26;
-            --bg-void: #0a0a0f;
-            --neon-cyan: #00f2ff;
-            --neon-purple: #7000ff;
-            --neon-success: #0aff00;
-            --glass-hud: rgba(20, 20, 30, 0.5);
-            --glass-panel: rgba(30, 41, 59, 0.7);
-            --glass-border: rgba(255, 255, 255, 0.12);
-            --lamp-cyan: 0 25px 60px -15px rgba(0, 242, 255, 0.4); 
-            --lamp-purple: 0 25px 60px -15px rgba(112, 0, 255, 0.4);
-            --lamp-success: 0 25px 60px -15px rgba(10, 255, 0, 0.4);
-            --font-tech: 'Roboto Mono', monospace;
-            --font-main: 'Vazirmatn', sans-serif;
-            --text-neon: #ffffff;
-            --text-dim: #6b7280;
-            --radius-hud: 12px; 
-            --radius-panel: 24px;
+            /* Soft Light Theme */
+            --bg-primary: #f0f2f5;
+            --bg-secondary: #e4e7ec;
+            --bg-card: #f0f2f5;
+            --bg-inset: #e0e3e8;
+            --bg-raised: #ffffff;
+            --shadow-light: 6px 6px 14px rgba(0, 0, 0, 0.08), -6px -6px 14px rgba(255, 255, 255, 0.9);
+            --shadow-inset: inset 4px 4px 8px rgba(0, 0, 0, 0.06), inset -4px -4px 8px rgba(255, 255, 255, 0.8);
+            --shadow-soft: 3px 3px 8px rgba(0, 0, 0, 0.06), -3px -3px 8px rgba(255, 255, 255, 0.8);
+            --shadow-btn: 4px 4px 10px rgba(0, 0, 0, 0.08), -4px -4px 10px rgba(255, 255, 255, 0.9);
+            --shadow-btn-active: inset 3px 3px 6px rgba(0, 0, 0, 0.08), inset -3px -3px 6px rgba(255, 255, 255, 0.7);
+            --accent: #6366f1;
+            --accent-soft: rgba(99, 102, 241, 0.12);
+            --accent-glow: rgba(99, 102, 241, 0.25);
+            --green: #22c55e;
+            --green-soft: rgba(34, 197, 94, 0.12);
+            --red: #ef4444;
+            --red-soft: rgba(239, 68, 68, 0.12);
+            --yellow: #f59e0b;
+            --yellow-soft: rgba(245, 158, 11, 0.12);
+            --gray: #9ca3af;
+            --gray-soft: rgba(156, 163, 175, 0.12);
+            --violet: #8b5cf6;
+            --violet-soft: rgba(139, 92, 246, 0.12);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-dim: #94a3b8;
+            --border: rgba(0, 0, 0, 0.04);
+            --font-main: 'Vazirmatn', 'Inter', sans-serif;
+            --font-mono: 'Inter', monospace;
+            --radius: 20px;
+            --radius-sm: 14px;
+            --radius-xs: 10px;
+            --transition: all 0.25s ease;
         }
 
-        :root.light {
-            --bg-deep: #f0f2f5;
-            --bg-void: #ffffff;
-            --neon-cyan: #0066cc;
-            --neon-purple: #5500cc;
-            --neon-success: #009900;
-            --glass-hud: rgba(255, 255, 255, 0.8);
-            --glass-panel: rgba(240, 240, 240, 0.6);
-            --glass-border: rgba(0, 0, 0, 0.1);
-            --text-neon: #000000;
-            --text-dim: #666666;
-            --lamp-cyan: 0 15px 30px -5px rgba(0, 102, 204, 0.3);
-            --lamp-purple: 0 15px 30px -5px rgba(85, 0, 204, 0.3);
-            --lamp-success: 0 15px 30px -5px rgba(0, 153, 0, 0.3);
+        .dark {
+            --bg-primary: #1a1b23;
+            --bg-secondary: #15161d;
+            --bg-card: #1e1f2a;
+            --bg-inset: #151620;
+            --bg-raised: #252736;
+            --shadow-light: 6px 6px 16px rgba(0, 0, 0, 0.35), -6px -6px 16px rgba(50, 52, 72, 0.15);
+            --shadow-inset: inset 4px 4px 8px rgba(0, 0, 0, 0.3), inset -4px -4px 8px rgba(50, 52, 72, 0.1);
+            --shadow-soft: 3px 3px 8px rgba(0, 0, 0, 0.25), -3px -3px 8px rgba(50, 52, 72, 0.1);
+            --shadow-btn: 4px 4px 10px rgba(0, 0, 0, 0.3), -4px -4px 10px rgba(50, 52, 72, 0.12);
+            --shadow-btn-active: inset 3px 3px 6px rgba(0, 0, 0, 0.3), inset -3px -3px 6px rgba(50, 52, 72, 0.08);
+            --accent: #818cf8;
+            --accent-soft: rgba(129, 140, 248, 0.12);
+            --accent-glow: rgba(129, 140, 248, 0.2);
+            --green: #34d399;
+            --green-soft: rgba(52, 211, 153, 0.12);
+            --red: #f87171;
+            --red-soft: rgba(248, 113, 113, 0.12);
+            --yellow: #fbbf24;
+            --yellow-soft: rgba(251, 191, 36, 0.12);
+            --gray: #6b7280;
+            --gray-soft: rgba(107, 114, 128, 0.15);
+            --violet: #a78bfa;
+            --violet-soft: rgba(167, 139, 250, 0.12);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-dim: #475569;
+            --border: rgba(255, 255, 255, 0.04);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; outline: none; user-select: none; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             font-family: var(--font-main);
-            background-color: var(--bg-deep);
-            color: var(--text-neon);
+            background: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
-            background-image: linear-gradient(rgba(0, 242, 255, 0.03) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(0, 242, 255, 0.03) 1px, transparent 1px);
-            background-size: 40px 40px;
+            overflow-x: hidden;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
         }
 
+        /* ===== LAYOUT ===== */
         .container {
-            max-width: 900px;
+            max-width: 720px;
             margin: 0 auto;
-            padding: 100px 24px 24px;
+            padding: 32px 20px 48px;
         }
 
+        /* ===== HEADER ===== */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 40px;
-            border-bottom: 1px solid var(--glass-border);
-            padding-bottom: 20px;
+            margin-bottom: 32px;
         }
 
         .brand {
-            font-family: var(--font-tech);
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--neon-cyan);
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px var(--neon-cyan);
-            animation: breathe 3s ease-in-out infinite;
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: -0.5px;
         }
 
-        @keyframes breathe {
-            0%, 100% { 
-                opacity: 0.6; 
-                text-shadow: 0 0 10px var(--neon-cyan);
-                transform: scale(1);
-            }
-            50% { 
-                opacity: 1; 
-                text-shadow: 0 0 30px var(--neon-cyan), 0 0 60px var(--neon-cyan), 0 0 90px var(--neon-cyan);
-                transform: scale(1.03);
-            }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .theme-btn {
-            width: 48px; height: 48px;
-            border-radius: var(--radius-hud);
-            background: var(--glass-hud);
-            border: 1px solid var(--neon-cyan);
+        .icon-btn {
+            width: 42px; height: 42px;
+            border-radius: var(--radius-xs);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-btn);
+            border: none;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer;
-            color: var(--neon-cyan);
-            font-size: 18px;
-            box-shadow: 0 0 15px var(--lamp-cyan);
-            transition: 0.3s;
+            font-size: 16px;
+            transition: var(--transition);
+            color: var(--text-secondary);
         }
 
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 24px;
+        .icon-btn:hover { color: var(--accent); }
+        .icon-btn:active { box-shadow: var(--shadow-btn-active); }
+        .icon-btn.spinning { animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== ANNOUNCEMENT ===== */
+        .announcement {
+            background: var(--bg-card);
+            box-shadow: var(--shadow-soft);
+            border-radius: var(--radius-sm);
+            padding: 16px 18px;
+            margin-bottom: 20px;
+            display: none;
+            border-right: 4px solid var(--accent);
         }
 
-        .panel {
-            background: var(--glass-panel);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-panel);
-            padding: 30px;
-            position: relative;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        .announcement.show { display: flex; align-items: flex-start; gap: 12px; }
+        .announcement-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+        .announcement-content { flex: 1; min-width: 0; }
+        .announcement-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; letter-spacing: 0.3px; }
+        .announcement-text { font-size: 13px; color: var(--text-secondary); line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
+
+        /* ===== CARDS ===== */
+        .card {
+            background: var(--bg-card);
+            box-shadow: var(--shadow-light);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 16px;
+            transition: var(--transition);
         }
 
-        .panel.span-2 { grid-column: span 2; }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-        .hud-profile {
+        .card { animation: fadeUp 0.5s ease both; }
+        .card:nth-child(2) { animation-delay: 0.05s; }
+        .card:nth-child(3) { animation-delay: 0.1s; }
+        .card:nth-child(4) { animation-delay: 0.15s; }
+        .card:nth-child(5) { animation-delay: 0.2s; }
+
+        /* ===== PROFILE ===== */
+        .profile-section {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 20px;
+            gap: 14px;
         }
+
         .profile-left {
             display: flex;
             align-items: center;
-            gap: 20px;
-        }
-        .avatar {
-            width: 70px; height: 70px;
-            border-radius: var(--radius-hud);
-            background: linear-gradient(135deg, var(--neon-cyan), var(--neon-purple));
-            display: flex; align-items: center; justify-content: center;
-            font-size: 28px; color: white;
-            position: relative;
-            box-shadow: var(--lamp-cyan);
-            border: 1px solid rgba(255,255,255,0.3);
-            flex-shrink: 0;
+            gap: 14px;
+            flex: 1;
+            min-width: 0;
         }
 
-        .hud-info h2 { 
-            font-family: var(--font-tech); 
-            font-size: 18px; font-weight: 700; 
-            color: var(--neon-cyan) !important;
-            letter-spacing: 1px;
-            margin-bottom: 6px;
-            word-break: break-all;
+        .avatar {
+            width: 52px; height: 52px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, var(--accent), var(--violet));
+            box-shadow: var(--shadow-soft);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            color: white;
         }
-        .hud-status {
-            font-family: var(--font-tech);
-            font-size: 10px; font-weight: 700;
-            padding: 4px 10px; border-radius: var(--radius-hud);
-            background: rgba(0, 242, 255, 0.1);
-            color: var(--neon-cyan);
-            border: 1px solid var(--neon-cyan);
-            display: inline-block;
-            box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+
+        .profile-info { min-width: 0; flex: 1; }
+
+        .profile-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
         }
+
+        .username {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 160px;
+        }
+
+        /* ===== ONLINE BADGE ===== */
+        .online-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .online-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .online-dot.green { background: var(--green); }
+        .online-dot.green::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: var(--green);
+            opacity: 0.3;
+            animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
+
+        .online-dot.gray { background: var(--gray); opacity: 0.6; }
+        .online-dot.empty { background: transparent; border: 2px solid var(--text-dim); }
+        .online-text.green { color: var(--green); }
+        .online-text.gray { color: var(--text-dim); }
+
+        /* ===== STATUS BADGE ===== */
+        .status-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            letter-spacing: 0.3px;
+        }
+
+        .status-badge .dot {
+            width: 5px; height: 5px;
+            border-radius: 50%;
+        }
+
+        .status-active { background: var(--green-soft); color: var(--green); }
+        .status-active .dot { background: var(--green); }
+        .status-disabled { background: var(--gray-soft); color: var(--gray); }
+        .status-disabled .dot { background: var(--gray); }
+        .status-limited { background: var(--red-soft); color: var(--red); }
+        .status-limited .dot { background: var(--red); }
+        .status-expired { background: var(--yellow-soft); color: var(--yellow); }
+        .status-expired .dot { background: var(--yellow); }
+        .status-on_hold { background: var(--violet-soft); color: var(--violet); }
+        .status-on_hold .dot { background: var(--violet); }
 
         .support-btn {
             text-decoration: none;
-            color: var(--neon-purple);
-            padding: 12px 20px;
-            border: 1px solid var(--neon-purple);
-            border-radius: var(--radius-hud);
-            font-family: var(--font-main);
+            color: var(--accent);
+            padding: 10px 18px;
+            border-radius: var(--radius-xs);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-btn);
             font-weight: 700;
-            font-size: 13px;
-            box-shadow: var(--lamp-purple);
-            transition: 0.3s;
+            font-size: 12px;
+            transition: var(--transition);
             white-space: nowrap;
             flex-shrink: 0;
         }
-        .support-btn:hover {
-            background: rgba(112, 0, 255, 0.1);
+
+        .support-btn:active { box-shadow: var(--shadow-btn-active); }
+
+        /* ===== MAIN STATUS CARD ===== */
+        .status-main {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            padding: 28px;
         }
 
-        .btn-tech {
+        /* ===== CIRCULAR PROGRESS ===== */
+        .circular-progress {
+            width: 150px;
+            height: 150px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .circular-progress svg {
             width: 100%;
-            height: 56px;
-            border-radius: var(--radius-hud); 
-            border: 1px solid var(--glass-border);
-            background: var(--glass-hud);
-            color: var(--text-neon);
-            font-family: var(--font-main);
-            font-size: 14px; font-weight: 700;
-            cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            text-decoration: none;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s;
-            letter-spacing: 1px;
-        }
-        .btn-purple { border-color: rgba(112, 0, 255, 0.3); box-shadow: var(--lamp-purple); }
-        .btn-purple:hover { background: rgba(112, 0, 255, 0.1); color: #fff; border-color: var(--neon-purple); }
-        .btn-purple:active { transform: translateY(2px); box-shadow: none; }
-
-        .btn-soft-cyan { 
-            border-color: rgba(0, 200, 255, 0.4); 
-            box-shadow: 0 15px 40px -10px rgba(0, 180, 255, 0.4); 
-            background: rgba(0, 200, 255, 0.25);
-            color: var(--neon-cyan) !important;
-            font-weight: 900;
-        }
-        .btn-soft-cyan:hover { 
-            background: rgba(0, 200, 255, 0.35); 
-            border-color: rgba(0, 200, 255, 0.6); 
-            box-shadow: 0 20px 50px -10px rgba(0, 180, 255, 0.5);
+            height: 100%;
+            transform: rotate(-90deg);
+            filter: drop-shadow(0 2px 8px var(--accent-glow));
         }
 
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+        .circular-progress .track-bg {
+            fill: none;
+            stroke: var(--bg-inset);
+            stroke-width: 12;
+        }
 
-        .stats-row {
+        .circular-progress .track-shadow {
+            fill: none;
+            stroke: var(--bg-secondary);
+            stroke-width: 12;
+            filter: blur(1px);
+        }
+
+        .circular-progress .fill-circle {
+            fill: none;
+            stroke-width: 12;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .circular-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .circular-pct {
+            font-family: var(--font-mono);
+            font-size: 30px;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: -1px;
+        }
+
+        .circular-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-weight: 500;
+            margin-top: 2px;
+        }
+
+        /* ===== STATS ===== */
+        .stats-detail { flex: 1; min-width: 0; }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+        }
+
+        .stat-row + .stat-row {
+            border-top: 1px solid var(--border);
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-value.green { color: var(--green); }
+
+        /* ===== INFO CHIPS ===== */
+        .info-chips {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 30px;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
         }
-        .chip {
-            background: var(--glass-hud);
-            padding: 20px 15px; 
-            border-radius: var(--radius-hud);
-            border: 1px solid var(--glass-border);
-            text-align: center;
+
+        .info-chip {
+            background: var(--bg-card);
+            box-shadow: var(--shadow-soft);
+            border-radius: var(--radius-sm);
+            padding: 18px;
+            transition: var(--transition);
+        }
+
+        .chip-icon {
+            font-size: 18px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .chip-title {
+            font-size: 11px;
+            color: var(--text-dim);
+            font-weight: 600;
+            margin-bottom: 6px;
+            letter-spacing: 0.3px;
+        }
+
+        .chip-value {
+            font-family: var(--font-mono);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* ===== TIME PROGRESS ===== */
+        .time-card { padding: 20px 24px; }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .progress-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .progress-pct {
+            font-family: var(--font-mono);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--violet);
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-inset);
+            border-radius: 10px;
+            box-shadow: var(--shadow-inset);
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+            background: linear-gradient(90deg, var(--violet), var(--accent));
+        }
+
+        /* ===== BUTTONS ===== */
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .btn {
+            height: 48px;
+            border-radius: var(--radius-xs);
+            border: none;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-btn);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            transition: var(--transition);
+        }
+
+        .btn:hover { color: var(--accent); }
+        .btn:active { box-shadow: var(--shadow-btn-active); transform: scale(0.98); }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 14px var(--accent-glow);
+        }
+
+        .btn-primary:hover { color: white; filter: brightness(1.1); }
+        .btn-primary:active { box-shadow: 0 2px 8px var(--accent-glow); }
+
+        .btn-full { grid-column: span 2; }
+
+        /* ===== DOWNLOADS ===== */
+        .dl-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .dl-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18px 8px;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-soft);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .dl-item:hover { color: var(--accent); }
+        .dl-item:active { box-shadow: var(--shadow-btn-active); }
+
+        .dl-icon { font-size: 26px; margin-bottom: 8px; }
+        .dl-text { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+
+        /* ===== CHART ===== */
+        .chart-card { padding: 20px; }
+
+        .chart-header {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .chart-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-tabs {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .chart-tab {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            background: var(--bg-inset);
+            box-shadow: var(--shadow-inset);
+            color: var(--text-dim);
+            transition: var(--transition);
+            font-family: var(--font-main);
+        }
+
+        .chart-tab.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 2px 8px var(--accent-glow);
+        }
+
+        .chart-tab:hover:not(.active) { color: var(--text-primary); }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
             position: relative;
         }
-        .chip-label { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--text-dim); margin-bottom: 8px; letter-spacing: 1px; }
-        .chip-val { font-family: var(--font-tech); font-size: 16px; font-weight: 900; color: var(--text-neon); text-shadow: 0 0 5px rgba(255,255,255,0.2); }
-        .chip.expiry .chip-val { font-size: 13px; }
 
-        .energy-block { margin-bottom: 30px; }
-        .energy-block:last-child { margin-bottom: 0; }
-        .e-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-        .e-lbl { font-family: var(--font-main); font-size: 12px; font-weight: 700; color: var(--neon-cyan); letter-spacing: 1px; }
-        .e-pct { font-family: var(--font-tech); font-size: 28px; font-weight: 900; color: var(--text-neon); letter-spacing: -1px; }
-        .track { width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: var(--radius-hud); overflow: hidden; position: relative; }
-        .track::after { content:''; position:absolute; inset:0; background-image: linear-gradient(90deg, transparent 50%, rgba(0,0,0,0.3) 50%); background-size: 4px 100%; }
-        .fill { height: 100%; border-radius: var(--radius-hud); transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px currentColor; }
-        .fill.cyan { background: var(--neon-cyan); color: var(--neon-cyan); }
-        .fill.purple { background: var(--neon-purple); color: var(--neon-purple); }
+        .chart-canvas { width: 100%; height: 100%; }
 
-        .downloads-section {
+        .chart-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-dim);
+            font-size: 13px;
+            gap: 8px;
+        }
+
+        .chart-empty-circle {
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            background: var(--bg-inset);
+            box-shadow: var(--shadow-inset);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: var(--text-dim);
+        }
+
+        /* ===== SEPARATOR ===== */
+        .separator {
             display: flex;
             align-items: center;
             gap: 16px;
+            margin: 24px 0;
         }
-        .downloads-label {
-            font-family: var(--font-main);
+
+        .separator-line {
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .separator-label {
             font-size: 12px;
             font-weight: 700;
             color: var(--text-dim);
+            padding: 6px 16px;
+            border-radius: 20px;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-soft);
             white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
-        .dl-grid { 
-            display: flex; 
-            gap: 12px; 
-            flex: 1;
-        }
-        .dl-hud {
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
+
+        /* ===== MODALS ===== */
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
             justify-content: center;
-            padding: 16px 20px; 
-            background: var(--glass-hud);
-            border-radius: var(--radius-hud);
-            cursor: pointer;
-            transition: 0.2s;
-            border: 1px solid var(--glass-border);
-            position: relative;
-            flex: 1;
-        }
-        .dl-hud:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); }
-        .dl-hud.active { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--neon-cyan); box-shadow: var(--lamp-cyan) inset; }
-        .dl-icon { font-size: 22px; margin-bottom: 6px; filter: drop-shadow(0 0 5px var(--neon-cyan)); }
-        .dl-txt { font-family: var(--font-main); font-size: 10px; font-weight: 700; color: var(--neon-cyan); }
-        .mod {
-            position: fixed; inset: 0; z-index: 1000;
-            background: rgba(0,0,0,0.8); backdrop-filter: blur(10px);
-            display: none; align-items: center; justify-content: center;
             padding: 20px;
         }
-        .mbox {
-            background: var(--bg-void);
-            border: 1px solid var(--neon-cyan);
-            border-radius: var(--radius-panel);
-            padding: 32px; width: 100%; max-width: 360px;
+
+        .dark .modal { background: rgba(0, 0, 0, 0.6); }
+
+        .modal.show { display: flex; }
+
+        .modal-box {
+            background: var(--bg-card);
+            box-shadow: var(--shadow-light);
+            border-radius: var(--radius);
+            padding: 28px;
+            width: 100%;
+            max-width: 400px;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: modalIn 0.35s ease;
+        }
+
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.94) translateY(8px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 20px;
             text-align: center;
-            box-shadow: 0 0 50px var(--lamp-cyan);
-            position: relative;
         }
-        .mtitle { 
-            font-family: var(--font-main); 
-            font-size: 20px; font-weight: 900; 
-            margin-bottom: 24px; 
-            color: var(--neon-cyan); 
-            letter-spacing: 2px; 
+
+        .modal-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
-        .app-list { display: flex; flex-direction: column; gap: 12px; }
-        .app-opt {
-            padding: 16px; border-radius: var(--radius-hud);
-            background: var(--glass-hud);
-            border: 1px solid var(--glass-border);
-            display: flex; justify-content: space-between; align-items: center;
-            font-weight: 700; font-size: 15px; color: var(--text-neon);
-            cursor: pointer; transition: 0.2s;
-            font-family: var(--font-main);
+
+        .modal-item {
+            padding: 14px 16px;
+            border-radius: var(--radius-xs);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-soft);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition);
             text-decoration: none;
         }
-        .app-opt:hover { background: rgba(0, 242, 255, 0.05); border-color: var(--neon-cyan); color: var(--neon-cyan); }
-        .app-opt:active { background: var(--neon-cyan); color: #000; }
 
-        .tst {
-            position: fixed; bottom: 60px; left: 50%;
-            transform: translateX(-50%) translateY(20px);
-            background: var(--bg-void);
-            color: var(--neon-cyan);
-            border: 1px solid var(--neon-cyan);
-            padding: 14px 32px; border-radius: var(--radius-hud);
-            font-weight: 900; font-size: 14px; font-family: var(--font-main);
-            box-shadow: 0 0 30px var(--lamp-cyan);
-            letter-spacing: 1px;
-            opacity: 0; transition: 0.3s; z-index: 2000;
+        .modal-item:hover { color: var(--accent); }
+        .modal-item:active { box-shadow: var(--shadow-btn-active); }
+
+        .os-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
         }
-        .tst.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-        #cph { position: absolute; opacity: 0; }
-
-        /* OS MODAL STYLE */
-        .os-choice { display: flex; justify-content: space-around; gap: 15px; }
-        .os-btn { 
-            cursor: pointer; padding: 20px; border-radius: 15px; 
-            background: var(--glass-hud); width: 100%; transition: 0.3s; 
-            border: 1px solid var(--glass-border);
+        .os-btn {
+            padding: 28px 16px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            box-shadow: var(--shadow-btn);
+            cursor: pointer;
+            transition: var(--transition);
+            text-align: center;
+            border: none;
         }
-        .os-btn:hover { border-color: var(--neon-cyan); background: rgba(0, 242, 255, 0.1); }
-        .os-btn span { display: block; margin-top: 10px; font-weight: 900; font-size: 14px; }
 
-        @media (max-width: 768px) {
-            body { padding-bottom: 10px; }
-            .container { padding: 12px 10px 10px; min-height: 100vh; display: flex; flex-direction: column; }
-            .header { margin-bottom: 10px; padding-bottom: 8px; }
-            .brand { font-size: 14px; letter-spacing: 1px; }
-            .theme-btn { width: 32px; height: 32px; font-size: 12px; }
-            .grid { grid-template-columns: 1fr; gap: 8px; flex: 1; }
-            .panel { padding: 10px; border-radius: 14px; }
-            .panel.span-2 { grid-column: span 1; }
-            .panel:first-of-type { padding: 6px 10px; }
-            .hud-profile { flex-direction: row; align-items: center; gap: 8px; }
-            .profile-left { gap: 8px; flex: 1; }
-            .avatar { width: 34px; height: 34px; font-size: 15px; border-radius: 8px; }
-            .hud-info h2 { font-size: 12px !important; color: var(--neon-cyan) !important; -webkit-text-fill-color: var(--neon-cyan) !important; }
-            .hud-status { font-size: 8px; padding: 2px 6px; border-radius: 5px; }
-            .support-btn { padding: 6px 10px; font-size: 9px; border-radius: 6px; }
-            .stats-row { display: flex; gap: 6px; margin-bottom: 8px; }
-            .chip { flex: 1; padding: 8px 4px; border-radius: 8px; }
-            .chip-label { font-size: 6px; margin-bottom: 3px; }
-            .chip-val { font-size: 10px; }
-            .chip.expiry .chip-val { font-size: 8px; }
-            .energy-block { margin-bottom: 8px; }
-            .e-top { margin-bottom: 4px; }
-            .e-lbl { font-size: 8px; }
-            .e-pct { font-size: 14px; }
-            .track { height: 3px; }
-            .btn-tech { height: 36px; font-size: 10px; border-radius: 8px; }
-            .btn-grid { grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
-            .dl-grid { width: 100%; gap: 6px; }
-            .dl-hud { padding: 8px 6px; border-radius: 8px; }
-            .dl-icon { font-size: 16px; margin-bottom: 2px; }
-            .dl-txt { font-size: 7px; }
-            .mbox { padding: 16px; border-radius: 14px; }
-            .mtitle { font-size: 14px; margin-bottom: 12px; }
-            .app-opt { padding: 10px; font-size: 12px; border-radius: 8px; }
-            .app-list { gap: 6px; }
-            .tst { padding: 8px 16px; font-size: 10px; bottom: 15px; border-radius: 8px; }
+        .os-btn:hover { color: var(--accent); }
+        .os-btn:active { box-shadow: var(--shadow-btn-active); }
+        .os-btn-icon { font-size: 32px; margin-bottom: 10px; }
+        .os-btn-text { font-weight: 800; font-size: 14px; color: var(--text-primary); }
+
+        /* QR */
+        .qr-wrapper {
+            background: white;
+            padding: 16px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            box-shadow: var(--shadow-inset);
+        }
+
+        /* ===== TOAST ===== */
+        .toast {
+            position: fixed;
+            bottom: 36px;
+            left: 50%;
+            transform: translateX(-50%) translateY(16px);
+            background: var(--bg-raised);
+            color: var(--green);
+            box-shadow: var(--shadow-light);
+            padding: 12px 28px;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 13px;
+            opacity: 0;
+            transition: all 0.35s ease;
+            z-index: 2000;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast.error { color: var(--red); }
+
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 4px; }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 640px) {
+            .container { padding: 16px 14px 36px; }
+            .header { margin-bottom: 20px; }
+            .brand { font-size: 16px; }
+            .icon-btn { width: 36px; height: 36px; font-size: 14px; }
+
+            .card { padding: 16px; margin-bottom: 12px; border-radius: 16px; }
+
+            .avatar { width: 42px; height: 42px; font-size: 18px; border-radius: 12px; }
+            .profile-name { font-size: 13px; }
+            .username { max-width: 120px; }
+            .status-badge { font-size: 9px; padding: 3px 8px; }
+            .support-btn { padding: 8px 14px; font-size: 11px; }
+            .online-badge { font-size: 10px; }
+
+            .status-main {
+                flex-direction: column;
+                gap: 20px;
+                padding: 20px;
+            }
+
+            .circular-progress { width: 130px; height: 130px; }
+            .circular-pct { font-size: 26px; }
+
+            .stat-row { padding: 8px 0; }
+            .stat-label { font-size: 12px; }
+            .stat-value { font-size: 13px; }
+
+            .info-chips { gap: 8px; }
+            .info-chip { padding: 14px; border-radius: 12px; }
+            .chip-icon { font-size: 16px; margin-bottom: 6px; }
+            .chip-title { font-size: 10px; }
+            .chip-value { font-size: 13px; }
+
+            .btn { height: 44px; font-size: 12px; border-radius: 10px; }
+            .btn-grid { gap: 8px; margin-bottom: 8px; }
+
+            .dl-grid { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+            .dl-item { padding: 14px 4px; border-radius: 12px; }
+            .dl-icon { font-size: 22px; margin-bottom: 4px; }
+            .dl-text { font-size: 9px; }
+
+            .chart-container { height: 170px; }
+            .chart-title { font-size: 13px; }
+            .chart-tab { padding: 5px 10px; font-size: 10px; }
+
+            .modal-box { padding: 20px; border-radius: 16px; }
+            .modal-title { font-size: 15px; margin-bottom: 16px; }
+            .modal-item { padding: 12px 14px; font-size: 13px; }
+        }
+
+        @media (max-width: 380px) {
+            .circular-progress { width: 110px; height: 110px; }
+            .circular-pct { font-size: 22px; }
+            .dl-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="header">
-            <div class="brand">__BRAND__</div>
-            <div class="theme-btn" id="themeBtn">☀️</div>
+<div class="container">
+    <!-- HEADER -->
+    <div class="header">
+        <div class="brand">__BRAND__</div>
+        <div class="header-actions">
+            <div class="icon-btn" id="refreshBtn" title="بروزرسانی">🔄</div>
+            <div class="icon-btn" id="themeBtn" title="تغییر تم">☀️</div>
         </div>
+    </div>
 
-        <div class="grid">
-            <div class="panel span-2">
-                <div class="hud-profile">
-                    <div class="profile-left">
-                        <div class="avatar">👤</div>
-                        <div class="hud-info">
-                            <h2>👑 {{ user.username }} 👑</h2>
-                            {% if user.status.name == 'active' %}<span class="hud-status">آنلاین</span>{% else %}<span class="hud-status" style="color:var(--neon-purple); border-color:var(--neon-purple);">آفلاین</span>{% endif %}
-                        </div>
+    <!-- ANNOUNCEMENT -->
+    <div class="announcement" id="announcement">
+        <div class="announcement-icon">🔔</div>
+        <div class="announcement-content">
+            <div class="announcement-title">اطلاعیه</div>
+            <div class="announcement-text" id="announceText"></div>
+        </div>
+    </div>
+
+    <!-- PROFILE -->
+    <div class="card">
+        <div class="profile-section">
+            <div class="profile-left">
+                <div class="avatar">👤</div>
+                <div class="profile-info">
+                    <div class="profile-name">
+                        <span class="username" id="usernameDisplay">{{ user.username }}</span>
+                        <span class="online-badge" id="onlineBadge"></span>
                     </div>
-                    <a href="https://t.me/__SUP__" class="support-btn">پشتیبانی</a>
+                    <div id="statusBadge"></div>
                 </div>
             </div>
+            <a href="https://t.me/__SUP__" class="support-btn">پشتیبانی</a>
+        </div>
+    </div>
 
-            <div class="panel span-2">
-                <div class="stats-row">
-                    <div class="chip"><div class="chip-label">حجم کل</div><div class="chip-val" id="totDisp">...</div></div>
-                    <div class="chip"><div class="chip-label">مصرف شده</div><div class="chip-val" id="useDisp">...</div></div>
-                    <div class="chip expiry"><div class="chip-label">انقضا</div><div class="chip-val" id="ed">...</div></div>
-                </div>
-                <div class="energy-block">
-                    <div class="e-top"><div class="e-lbl">مصرف داده</div><div class="e-pct" id="usagePercent">0%</div></div>
-                    <div class="track"><div class="fill cyan" id="usageFill"></div></div>
-                </div>
-                <div class="energy-block">
-                    <div class="e-top"><div class="e-lbl" style="color:var(--neon-purple);">زمان باقی‌مانده</div><div class="e-pct" id="timePercent" style="color:var(--neon-purple);">0%</div></div>
-                    <div class="track"><div class="fill purple" id="timeFill"></div></div>
-                </div>
+    <!-- MAIN STATUS -->
+    <div class="card status-main">
+        <div class="circular-progress">
+            <svg viewBox="0 0 160 160">
+                <circle class="track-bg" cx="80" cy="80" r="68" />
+                <circle class="fill-circle" id="progressCircle" cx="80" cy="80" r="68"
+                    stroke-dasharray="427.26"
+                    stroke-dashoffset="427.26" />
+            </svg>
+            <div class="circular-center">
+                <div class="circular-pct" id="circularPct">0%</div>
+                <div class="circular-label">مصرف شده</div>
             </div>
-
-            <div class="panel span-2">
-                <div class="btn-grid">
-                    <button class="btn-tech btn-purple" onclick="hc(null, this)">کپی لینک</button>
-                    <button class="btn-tech btn-purple" onclick="om('qrm')">کد QR</button>
-                </div>
-                <button class="btn-tech btn-soft-cyan" style="margin-bottom:6px;" onclick="om('osModal')">اتصال مستقیم</button>
-                <div class="btn-grid">
-                    <button class="btn-tech btn-purple" onclick="sc()">کانفیگ‌ها</button>
-                    <a href="https://t.me/__BOT__" class="btn-tech btn-purple">تمدید</a>
-                </div>
+        </div>
+        <div class="stats-detail">
+            <div class="stat-row">
+                <span class="stat-label">مصرف شده</span>
+                <span class="stat-value" id="usedTraffic" dir="ltr">0 B</span>
             </div>
-
-            <div class="panel span-2">
-                <div class="downloads-section">
-                    <div class="dl-grid">
-                        <div class="dl-hud" id="da" onclick="om('dl-and')"><span class="dl-icon">🤖</span><span class="dl-txt">اندروید</span></div>
-                        <div class="dl-hud" id="di" onclick="om('dl-ios')"><span class="dl-icon">🍏</span><span class="dl-txt">آیفون</span></div>
-                        <div class="dl-hud" id="dw" onclick="om('dl-win')"><span class="dl-icon">💻</span><span class="dl-txt">ویندوز</span></div>
-                    </div>
-                </div>
+            <div class="stat-row">
+                <span class="stat-label">حجم کل</span>
+                <span class="stat-value" id="totalTraffic" dir="ltr">∞</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">باقی‌مانده</span>
+                <span class="stat-value green" id="remainTraffic" dir="ltr">∞</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">وضعیت</span>
+                <span class="stat-value" id="expiryStatus">—</span>
             </div>
         </div>
     </div>
 
-    <!-- MODALS -->
-    <!-- Modal: انتخاب سیستم عامل برای اتصال مستقیم -->
-    <div class="mod" id="osModal" onclick="if(event.target===this)cm('osModal')">
-        <div class="mbox">
-            <div id="osSelection">
-                <div class="mtitle">انتخاب سیستم عامل</div>
-                <div class="os-choice">
-                    <div class="os-btn" onclick="showApps('android')"><span>🤖 Android</span></div>
-                    <div class="os-btn" onclick="showApps('ios')"><span>🍎 iOS</span></div>
+    <!-- INFO CHIPS -->
+    <div class="info-chips">
+        <div class="info-chip">
+            <span class="chip-icon">📊</span>
+            <div class="chip-title">ترافیک مادام‌العمر</div>
+            <div class="chip-value" id="lifetimeTraffic" dir="ltr">0 B</div>
+        </div>
+        <div class="info-chip">
+            <span class="chip-icon">📅</span>
+            <div class="chip-title">تاریخ انقضا</div>
+            <div class="chip-value" id="expiryDate" dir="ltr">∞</div>
+        </div>
+        <div class="info-chip">
+            <span class="chip-icon">🌐</span>
+            <div class="chip-title">آخرین اتصال</div>
+            <div class="chip-value" id="lastOnline" dir="ltr">—</div>
+        </div>
+        <div class="info-chip">
+            <span class="chip-icon">🕐</span>
+            <div class="chip-title">تاریخ ایجاد</div>
+            <div class="chip-value" id="createdAt" dir="ltr">—</div>
+        </div>
+    </div>
+
+    <!-- TIME PROGRESS -->
+    <div class="card time-card">
+        <div class="progress-header">
+            <span class="progress-label">⏳ زمان باقی‌مانده</span>
+            <span class="progress-pct" id="timePct">0%</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" id="timeFill" style="width:0%"></div>
+        </div>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="card">
+        <div class="btn-grid">
+            <button class="btn" onclick="copySubLink()">📋 کپی لینک</button>
+            <button class="btn" onclick="openModal('qrModal')">📷 کد QR</button>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="openModal('osModal')">⚡ اتصال مستقیم</button>
+        <div class="btn-grid" style="margin-top:12px;">
+            <button class="btn" onclick="showConfigs()">⚙️ کانفیگ‌ها</button>
+            <a href="https://t.me/__BOT__" class="btn">🔄 تمدید</a>
+        </div>
+    </div>
+
+    <!-- CHART -->
+    <div class="card chart-card">
+        <div class="chart-header">
+            <div class="chart-title">📈 نمودار مصرف</div>
+            <div class="chart-tabs">
+                <button class="chart-tab" data-range="12h">12 ساعت</button>
+                <button class="chart-tab active" data-range="7d">7 روز</button>
+                <button class="chart-tab" data-range="30d">30 روز</button>
+                <button class="chart-tab" data-range="90d">90 روز</button>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="trafficChart" class="chart-canvas"></canvas>
+            <div class="chart-empty" id="chartEmpty" style="display:none;">
+                <div class="chart-empty-circle">📊</div>
+                <span>داده‌ای موجود نیست</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEPARATOR -->
+    <div class="separator">
+        <div class="separator-line"></div>
+        <div class="separator-label">📱 دانلود اپلیکیشن</div>
+        <div class="separator-line"></div>
+    </div>
+
+    <!-- DOWNLOADS -->
+    <div class="dl-grid">
+        <div class="dl-item" onclick="openModal('dlAndroid')">
+            <span class="dl-icon">🤖</span>
+            <span class="dl-text">اندروید</span>
+        </div>
+        <div class="dl-item" onclick="openModal('dlIos')">
+            <span class="dl-icon">🍏</span>
+            <span class="dl-text">آیفون</span>
+        </div>
+        <div class="dl-item" onclick="openModal('dlWindows')">
+            <span class="dl-icon">💻</span>
+            <span class="dl-text">ویندوز</span>
+        </div>
+        <div class="dl-item" onclick="openModal('dlLinux')">
+            <span class="dl-icon">🐧</span>
+            <span class="dl-text">لینوکس</span>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- OS Modal -->
+<div class="modal" id="osModal">
+    <div class="modal-box">
+        <div id="osSelectView">
+            <div class="modal-title">انتخاب سیستم عامل</div>
+            <div class="os-grid">
+                <div class="os-btn" onclick="showOsApps('android')">
+                    <div class="os-btn-icon">🤖</div>
+                    <div class="os-btn-text">Android</div>
+                </div>
+                <div class="os-btn" onclick="showOsApps('ios')">
+                    <div class="os-btn-icon">🍎</div>
+                    <div class="os-btn-text">iOS</div>
                 </div>
             </div>
-            <div id="androidApps" style="display: none;">
-                <div class="mtitle">برنامه‌های اندروید</div>
-                <div class="app-list">
-                    <div class="app-opt" onclick="openApp('v2rayng')">v2rayNG</div>
-                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                    <div class="app-opt" onclick="openApp('v2raytun')">v2rayTun</div>
-                    <div class="app-opt" onclick="openApp('happ')">Happ</div>
-                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-                </div>
-            </div>
-            <div id="iosApps" style="display: none;">
-                <div class="mtitle">برنامه‌های آیفون</div>
-                <div class="app-list">
-                    <div class="app-opt" onclick="openApp('hiddify')">Hiddify</div>
-                    <div class="app-opt" onclick="openApp('streisand')">Streisand</div>
-                    <div class="app-opt" onclick="openApp('v2box')">V2Box</div>
-                    <div class="app-opt" onclick="openApp('shadowrocket')">Shadowrocket</div>
-                    <div class="app-opt" onclick="openApp('stash')">Stash</div>
-                    <div class="app-opt" onclick="openApp('foxray')">FoXray</div>
-                </div>
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:16px;" onclick="cm('osModal')">بستن</button>
         </div>
-    </div>
-
-    <!-- Modal: دانلود اندروید -->
-    <div class="mod" id="dl-and" onclick="if(event.target===this)cm('dl-and')">
-        <div class="mbox">
-            <div class="mtitle">دانلود اندروید</div>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="app-opt">v2rayNG</a>
-                <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="app-opt">Hiddify</a>
-                <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="app-opt">v2rayTun</a>
-                <a href="https://github.com/nicefeel/nicefeel.github.io/releases" target="_blank" class="app-opt">Happ</a>
+        <div id="androidAppsView" style="display:none">
+            <div class="modal-title">اندروید</div>
+            <div class="modal-list">
+                <div class="modal-item" onclick="openDeepLink('v2rayng')">v2rayNG</div>
+                <div class="modal-item" onclick="openDeepLink('hiddify')">Hiddify</div>
+                <div class="modal-item" onclick="openDeepLink('v2raytun')">v2rayTun</div>
+                <div class="modal-item" onclick="openDeepLink('happ')">Happ</div>
+                <div class="modal-item" onclick="openDeepLink('v2box')">V2Box</div>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-and')">بستن</button>
         </div>
-    </div>
-
-    <!-- Modal: دانلود آیفون -->
-    <div class="mod" id="dl-ios" onclick="if(event.target===this)cm('dl-ios')">
-        <div class="mbox">
-            <div class="mtitle">دانلود آیفون</div>
-            <div class="app-list">
-                <a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532" target="_blank" class="app-opt">Hiddify</a>
-                <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="app-opt">Streisand</a>
-                <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="app-opt">V2Box</a>
-                <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="app-opt">Shadowrocket</a>
-                <a href="https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349" target="_blank" class="app-opt">Stash</a>
-                <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="app-opt">FoXray</a>
+        <div id="iosAppsView" style="display:none">
+            <div class="modal-title">آیفون</div>
+            <div class="modal-list">
+                <div class="modal-item" onclick="openDeepLink('hiddify')">Hiddify</div>
+                <div class="modal-item" onclick="openDeepLink('streisand')">Streisand</div>
+                <div class="modal-item" onclick="openDeepLink('v2box')">V2Box</div>
+                <div class="modal-item" onclick="openDeepLink('shadowrocket')">Shadowrocket</div>
+                <div class="modal-item" onclick="openDeepLink('stash')">Stash</div>
+                <div class="modal-item" onclick="openDeepLink('foxray')">FoXray</div>
             </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-ios')">بستن</button>
         </div>
+        <button class="btn btn-full" style="margin-top:16px" onclick="closeModal('osModal')">بستن</button>
     </div>
+</div>
 
-    <!-- Modal: دانلود ویندوز -->
-    <div class="mod" id="dl-win" onclick="if(event.target===this)cm('dl-win')">
-        <div class="mbox">
-            <div class="mtitle">دانلود ویندوز</div>
-            <div class="app-list">
-                <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="app-opt">v2rayN</a>
-                <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="app-opt">Hiddify</a>
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('dl-win')">بستن</button>
+<!-- Download Modals -->
+<div class="modal" id="dlAndroid">
+    <div class="modal-box">
+        <div class="modal-title">دانلود اندروید</div>
+        <div class="modal-list">
+            <a href="https://github.com/2dust/v2rayNG/releases" target="_blank" class="modal-item">v2rayNG<span>↗</span></a>
+            <a href="https://play.google.com/store/apps/details?id=app.hiddify.com" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
+            <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="modal-item">v2rayTun<span>↗</span></a>
+            <a href="https://github.com/nicefeel/nicefeel.github.io/releases" target="_blank" class="modal-item">Happ<span>↗</span></a>
         </div>
+        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlAndroid')">بستن</button>
     </div>
+</div>
 
-    <!-- Modal: QR Code -->
-    <div class="mod" id="qrm" onclick="if(event.target===this)cm('qrm')">
-        <div class="mbox">
-            <div style="background:black; padding:8px; border:1px solid var(--neon-cyan); border-radius: 8px;">
-                <img id="qi" src="" width="160">
-            </div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('qrm')">بستن</button>
+<div class="modal" id="dlIos">
+    <div class="modal-box">
+        <div class="modal-title">دانلود آیفون</div>
+        <div class="modal-list">
+            <a href="https://apps.apple.com/us/app/hiddify-proxy-vpn/id6596777532" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
+            <a href="https://apps.apple.com/us/app/streisand/id6450534064" target="_blank" class="modal-item">Streisand<span>↗</span></a>
+            <a href="https://apps.apple.com/us/app/v2box-v2ray-client/id6446814690" target="_blank" class="modal-item">V2Box<span>↗</span></a>
+            <a href="https://apps.apple.com/us/app/shadowrocket/id932747118" target="_blank" class="modal-item">Shadowrocket<span>↗</span></a>
+            <a href="https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349" target="_blank" class="modal-item">Stash<span>↗</span></a>
+            <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="modal-item">FoXray<span>↗</span></a>
         </div>
+        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlIos')">بستن</button>
     </div>
+</div>
 
-    <!-- Modal: کانفیگ‌ها -->
-    <div class="mod" id="cfm" onclick="if(event.target===this)cm('cfm')">
-        <div class="mbox">
-            <div class="mtitle">کانفیگ‌ها</div>
-            <div id="cl"></div>
-            <button class="btn-tech btn-purple" style="margin-top:12px;" onclick="cm('cfm')">بستن</button>
+<div class="modal" id="dlWindows">
+    <div class="modal-box">
+        <div class="modal-title">دانلود ویندوز</div>
+        <div class="modal-list">
+            <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="modal-item">v2rayN<span>↗</span></a>
+            <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
         </div>
+        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlWindows')">بستن</button>
     </div>
+</div>
 
-    <div class="tst" id="toast">کپی شد ✓</div>
-    <input type="text" id="cph" readonly>
+<div class="modal" id="dlLinux">
+    <div class="modal-box">
+        <div class="modal-title">دانلود لینوکس</div>
+        <div class="modal-list">
+            <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
+        </div>
+        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlLinux')">بستن</button>
+    </div>
+</div>
 
-    <script>
-        var subUrl = '{{ subscription_url }}';
-        var totStr = '{{ user.data_limit }}';
-        var useStr = '{{ user.used_traffic }}';
-        var expStr = '{{ user.expire }}';
-        var createdStr = '{{ user.created_at }}';
+<!-- QR Modal -->
+<div class="modal" id="qrModal">
+    <div class="modal-box" style="text-align:center;">
+        <div class="modal-title">کد QR اشتراک</div>
+        <div class="qr-wrapper">
+            <img id="qrImage" src="" width="200" alt="QR">
+        </div>
+        <button class="btn btn-primary btn-full" onclick="copySubLink()">📋 کپی لینک</button>
+        <button class="btn btn-full" style="margin-top:8px" onclick="closeModal('qrModal')">بستن</button>
+    </div>
+</div>
 
-        {% raw %}
-        var rawSub = '{{ subscription_url }}';
-        var username = '{{ user.username }}';
-        if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
-        var finalSubUrl = subUrl;
-        if (username && username.indexOf('{{') === -1 && finalSubUrl.indexOf('#') === -1) { 
-            finalSubUrl += '#' + username; 
-        }
-        document.getElementById('qi').src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(finalSubUrl);
+<!-- Configs Modal -->
+<div class="modal" id="configsModal">
+    <div class="modal-box">
+        <div class="modal-title">⚙️ کانفیگ‌ها</div>
+        <div class="modal-list" id="configsList"></div>
+        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('configsModal')">بستن</button>
+    </div>
+</div>
 
-        var root = document.documentElement;
-        var tb = document.getElementById('themeBtn');
-        if (localStorage.getItem('theme') === 'light') { 
-            root.classList.add('light'); 
-            tb.textContent = '🌙'; 
-        } 
-        tb.onclick = function () {
-            if (root.classList.contains('light')) { 
-                root.classList.remove('light'); 
-                tb.textContent = '☀️'; 
-                localStorage.setItem('theme', 'dark'); 
-            } else { 
-                root.classList.add('light'); 
-                tb.textContent = '🌙'; 
-                localStorage.setItem('theme', 'light'); 
-            }
-        };
+<!-- Toast -->
+<div class="toast" id="toast">کپی شد ✓</div>
 
-        var tot = parseInt(totStr) || 0;
-        var use = parseInt(useStr) || 0;
-        var per = tot > 0 ? Math.min((use / tot) * 100, 100) : 0;
+<script>
+(function() {
+    'use strict';
 
-        var tPer = 0; 
-        var expDate = null; 
-        var createdDate = null;
-        var daysLeftText = 'نامحدود'; 
-        var totalDays = 30;
-        
-        if (expStr && expStr !== 'None' && expStr !== 'null' && expStr !== '0') {
-            try {
-                expDate = new Date(expStr);
-                if (createdStr && createdStr !== 'None' && createdStr.indexOf('{{') === -1) {
-                    createdDate = new Date(createdStr);
+    // ===== DATA =====
+    var rawStatus = '{{ user.status.name }}' || 'active';
+    var rawUsername = '{{ user.username }}' || '';
+    var totalBytes = parseInt('{{ user.data_limit }}') || 0;
+    var usedBytes = parseInt('{{ user.used_traffic }}') || 0;
+    var lifetimeBytes = parseInt('{{ user.lifetime_used_traffic }}') || 0;
+    var expireStr = '{{ user.expire }}';
+    var createdStr = '{{ user.created_at }}';
+    var onlineStr = '{{ user.online_at }}';
+    var subUrl = '{{ subscription_url }}';
+
+    {% raw %}
+    if (!subUrl || subUrl.indexOf('{{') !== -1) subUrl = window.location.href;
+    if (rawUsername && rawUsername.indexOf('{{') === -1 && subUrl.indexOf('#') === -1) subUrl += '#' + rawUsername;
+    if (rawStatus.indexOf('{{') !== -1) rawStatus = 'active';
+    if (rawUsername.indexOf('{{') !== -1) rawUsername = 'User';
+    if (onlineStr.indexOf('{{') !== -1) onlineStr = '';
+    if (createdStr.indexOf('{{') !== -1) createdStr = '';
+    if (expireStr.indexOf('{{') !== -1) expireStr = '';
+    {% endraw %}
+
+    // ===== HELPERS =====
+    function formatBytes(b) {
+        if (!b || b <= 0) return '0 B';
+        var u = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var i = Math.floor(Math.log(b) / Math.log(1024));
+        if (i < 0 || i >= u.length) return '0 B';
+        return (b / Math.pow(1024, i)).toFixed(2) + ' ' + u[i];
+    }
+
+    function formatPersianDate(str) {
+        if (!str || str === 'None' || str === 'null' || str === '0') return null;
+        try {
+            var d = new Date(str);
+            if (isNaN(d.getTime())) return null;
+            return d.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        } catch(e) { return null; }
+    }
+
+    function timeAgo(str) {
+        if (!str || str === 'None' || str === 'null') return { text: 'هنوز متصل نشده', isOnline: false, isEmpty: true };
+        try {
+            var d = new Date(str);
+            if (isNaN(d.getTime())) return { text: 'هنوز متصل نشده', isOnline: false, isEmpty: true };
+            var diff = (Date.now() - d.getTime()) / 1000;
+            if (diff < 120) return { text: 'آنلاین', isOnline: true, isEmpty: false };
+            if (diff < 3600) return { text: Math.floor(diff / 60) + ' دقیقه پیش', isOnline: false, isEmpty: false };
+            if (diff < 86400) return { text: Math.floor(diff / 3600) + ' ساعت پیش', isOnline: false, isEmpty: false };
+            return { text: Math.floor(diff / 86400) + ' روز پیش', isOnline: false, isEmpty: false };
+        } catch(e) { return { text: 'نامشخص', isOnline: false, isEmpty: true }; }
+    }
+
+    // ===== STATUS =====
+    var statusMap = {
+        'active': { label: 'فعال', cls: 'status-active', stroke: '#22c55e' },
+        'disabled': { label: 'غیرفعال', cls: 'status-disabled', stroke: '#9ca3af' },
+        'limited': { label: 'محدود شده', cls: 'status-limited', stroke: '#ef4444' },
+        'expired': { label: 'منقضی', cls: 'status-expired', stroke: '#f59e0b' },
+        'on_hold': { label: 'در انتظار', cls: 'status-on_hold', stroke: '#8b5cf6' }
+    };
+    var statusInfo = statusMap[rawStatus] || statusMap['active'];
+
+    // Render
+    document.getElementById('usernameDisplay').textContent = rawUsername;
+    document.getElementById('statusBadge').innerHTML = '<span class="status-badge ' + statusInfo.cls + '"><span class="dot"></span>' + statusInfo.label + '</span>';
+
+    // Online
+    var onlineInfo = timeAgo(onlineStr);
+    var ob = document.getElementById('onlineBadge');
+    if (onlineInfo.isEmpty) {
+        ob.innerHTML = '<span class="online-dot empty"></span>';
+    } else if (onlineInfo.isOnline) {
+        ob.innerHTML = '<span class="online-dot green"></span><span class="online-text green">' + onlineInfo.text + '</span>';
+    } else {
+        ob.innerHTML = '<span class="online-dot gray"></span><span class="online-text gray">' + onlineInfo.text + '</span>';
+    }
+
+    // ===== USAGE =====
+    var usagePct = totalBytes > 0 ? Math.min((usedBytes / totalBytes) * 100, 100) : 0;
+    var circumference = 2 * Math.PI * 68;
+    var offset = circumference - (usagePct / 100) * circumference;
+    var circle = document.getElementById('progressCircle');
+
+    // Set stroke color based on status
+    var isDark = localStorage.getItem('theme') === 'dark';
+    circle.style.stroke = statusInfo.stroke;
+    setTimeout(function() { circle.setAttribute('stroke-dashoffset', offset); }, 200);
+    document.getElementById('circularPct').textContent = Math.round(usagePct) + '%';
+
+    // Stats
+    document.getElementById('usedTraffic').textContent = formatBytes(usedBytes);
+    document.getElementById('totalTraffic').textContent = totalBytes > 0 ? formatBytes(totalBytes) : '∞';
+    document.getElementById('remainTraffic').textContent = totalBytes > 0 ? formatBytes(Math.max(0, totalBytes - usedBytes)) : '∞';
+    document.getElementById('lifetimeTraffic').textContent = formatBytes(lifetimeBytes);
+
+    // Expiry
+    var daysLeft = '∞', timePct = 100, expiryStatusText = 'نامحدود';
+    if (expireStr && expireStr !== 'None' && expireStr !== 'null' && expireStr !== '0') {
+        try {
+            var expDate = new Date(expireStr);
+            if (!isNaN(expDate.getTime())) {
+                var diffDays = (expDate - new Date()) / 86400000;
+                var totalDays = 30;
+                if (createdStr && createdStr !== 'None') {
+                    var cd = new Date(createdStr);
+                    if (!isNaN(cd.getTime())) totalDays = Math.max(1, (expDate - cd) / 86400000);
                 }
-                if (!isNaN(expDate.getTime())) {
-                    var now = new Date(); 
-                    var diffMs = expDate - now;
-                    var days = diffMs / (1000 * 60 * 60 * 24);
-                    if (createdDate && !isNaN(createdDate.getTime())) {
-                        totalDays = (expDate - createdDate) / (1000 * 60 * 60 * 24);
-                    }
-                    if (days <= 0) { 
-                        tPer = 0; 
-                        daysLeftText = 'منقضی'; 
-                    } else { 
-                        tPer = Math.max(0, Math.min((days / totalDays) * 100, 100)); 
-                        daysLeftText = Math.ceil(days) + ' روز'; 
+                if (diffDays <= 0) { daysLeft = 'منقضی'; timePct = 0; expiryStatusText = 'منقضی شده'; }
+                else { daysLeft = Math.ceil(diffDays) + ' روز'; timePct = Math.max(0, Math.min((diffDays / totalDays) * 100, 100)); expiryStatusText = daysLeft + ' مانده'; }
+            }
+        } catch(e) {}
+    }
+
+    document.getElementById('expiryStatus').textContent = expiryStatusText;
+    document.getElementById('expiryDate').textContent = formatPersianDate(expireStr) || '∞';
+    document.getElementById('lastOnline').textContent = onlineInfo.text;
+    document.getElementById('createdAt').textContent = formatPersianDate(createdStr) || '—';
+
+    if (daysLeft === '∞') {
+        document.getElementById('timePct').textContent = '∞';
+        document.getElementById('timeFill').style.width = '100%';
+    } else {
+        document.getElementById('timePct').textContent = Math.round(timePct) + '%';
+        document.getElementById('timeFill').style.width = timePct + '%';
+    }
+
+    // QR
+    document.getElementById('qrImage').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(subUrl);
+
+    // ===== THEME =====
+    var html = document.documentElement;
+    var themeBtn = document.getElementById('themeBtn');
+    if (localStorage.getItem('theme') === 'dark') { html.classList.add('dark'); themeBtn.textContent = '🌙'; }
+    themeBtn.onclick = function() {
+        html.classList.toggle('dark');
+        var isDark = html.classList.contains('dark');
+        themeBtn.textContent = isDark ? '🌙' : '☀️';
+        localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        fetchChart(currentRange); // Redraw chart with new colors
+    };
+
+    // ===== REFRESH =====
+    var refreshBtn = document.getElementById('refreshBtn');
+    function refreshData() {
+        if (rawStatus === 'disabled') return;
+        refreshBtn.classList.add('spinning');
+        fetch(window.location.pathname + '/info')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data) {
+                    var nu = data.used_traffic || 0;
+                    var nt = data.data_limit || 0;
+                    var np = nt > 0 ? Math.min((nu / nt) * 100, 100) : 0;
+                    document.getElementById('usedTraffic').textContent = formatBytes(nu);
+                    document.getElementById('totalTraffic').textContent = nt > 0 ? formatBytes(nt) : '∞';
+                    document.getElementById('remainTraffic').textContent = nt > 0 ? formatBytes(Math.max(0, nt - nu)) : '∞';
+                    document.getElementById('circularPct').textContent = Math.round(np) + '%';
+                    if (data.lifetime_used_traffic) document.getElementById('lifetimeTraffic').textContent = formatBytes(data.lifetime_used_traffic);
+                    var no = circumference - (np / 100) * circumference;
+                    circle.setAttribute('stroke-dashoffset', no);
+                    if (data.online_at) {
+                        var ni = timeAgo(data.online_at);
+                        if (ni.isOnline) ob.innerHTML = '<span class="online-dot green"></span><span class="online-text green">' + ni.text + '</span>';
+                        else if (!ni.isEmpty) ob.innerHTML = '<span class="online-dot gray"></span><span class="online-text gray">' + ni.text + '</span>';
+                        document.getElementById('lastOnline').textContent = ni.text;
                     }
                 }
-            } catch (e) {}
-        } else { 
-            tPer = 100; 
-            daysLeftText = 'نامحدود'; 
-        }
+                refreshBtn.classList.remove('spinning');
+            }).catch(function() { refreshBtn.classList.remove('spinning'); });
+    }
+    refreshBtn.onclick = refreshData;
+    setInterval(refreshData, 30000);
 
-        document.getElementById('usagePercent').innerText = Math.round(per) + '%';
-        document.getElementById('usageFill').style.width = per + '%';
-        var tp = document.getElementById('timePercent'); 
-        var tf = document.getElementById('timeFill');
-        if (daysLeftText === 'نامحدود') { 
-            tp.innerText = '∞'; 
-            tf.style.width = '100%'; 
-        } else { 
-            tp.innerText = Math.round(tPer) + '%'; 
-            tf.style.width = Math.max(0, Math.min(tPer, 100)) + '%'; 
-        }
+    // ===== TOAST =====
+    window.showToast = function(msg, err) {
+        var t = document.getElementById('toast');
+        t.textContent = msg || 'کپی شد ✓';
+        t.className = 'toast show' + (err ? ' error' : '');
+        setTimeout(function() { t.className = 'toast'; }, 2000);
+    };
 
-        function fb(b) {
-            if (tot === 0) return 'نامحدود'; 
-            if (b <= 0) return '0 B';
-            var u = ['B', 'KB', 'MB', 'GB', 'TB'];
-            var i = Math.floor(Math.log(b) / Math.log(1024));
-            return parseFloat((b / Math.pow(1024, i)).toFixed(2)) + ' ' + u[i];
-        }
-        document.getElementById('totDisp').textContent = fb(tot);
-        document.getElementById('useDisp').textContent = fb(use);
-        document.getElementById('ed').innerText = daysLeftText;
+    // ===== COPY =====
+    function doCopy(text, msg) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(function() { showToast(msg || 'کپی شد ✓'); }).catch(function() { fbCopy(text, msg); });
+        } else { fbCopy(text, msg); }
+    }
+    function fbCopy(text, msg) {
+        var ta = document.createElement('textarea');
+        ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showToast(msg || 'کپی شد ✓'); } catch(e) { showToast('خطا در کپی', true); }
+        document.body.removeChild(ta);
+    }
+    window.copySubLink = function() { doCopy(subUrl, 'لینک اشتراک کپی شد ✓'); };
+    window.copyText = function(t) { doCopy(t); };
 
-        function hc(t, btn) {
-            if (!t || t.indexOf('{{') !== -1) t = finalSubUrl;
-            navigator.clipboard.writeText(t).then(() => st(btn));
+    // ===== MODALS =====
+    window.openModal = function(id) {
+        if (id === 'osModal') {
+            document.getElementById('osSelectView').style.display = 'block';
+            document.getElementById('androidAppsView').style.display = 'none';
+            document.getElementById('iosAppsView').style.display = 'none';
         }
-        
-        function st(btn) {
-            var t = document.getElementById('toast');
-            t.classList.add('show'); 
-            setTimeout(() => t.classList.remove('show'), 1500);
+        document.getElementById(id).classList.add('show');
+    };
+    window.closeModal = function(id) { document.getElementById(id).classList.remove('show'); };
+    document.querySelectorAll('.modal').forEach(function(m) {
+        m.addEventListener('click', function(e) { if (e.target === m) m.classList.remove('show'); });
+    });
+    window.showOsApps = function(os) {
+        document.getElementById('osSelectView').style.display = 'none';
+        document.getElementById(os === 'android' ? 'androidAppsView' : 'iosAppsView').style.display = 'block';
+    };
+
+    // ===== DEEP LINKS =====
+    window.openDeepLink = function(app) {
+        var url = subUrl, enc = encodeURIComponent(url), name = encodeURIComponent(document.title), b64 = btoa(url), link = '';
+        switch(app) {
+            case 'v2rayng': link = 'v2rayng://install-sub?url=' + enc + '&name=' + name; break;
+            case 'hiddify': link = 'hiddify://import/' + url; break;
+            case 'v2raytun': link = 'v2raytun://import/' + b64; break;
+            case 'happ': link = 'happ://add/' + b64; break;
+            case 'v2box': link = 'v2box://install-sub?url=' + enc + '&name=' + name; break;
+            case 'streisand': link = 'streisand://import/' + url; break;
+            case 'shadowrocket': link = 'sub://' + b64 + '#' + name; break;
+            case 'stash': link = 'stash://install-config?url=' + enc + '&name=' + name; break;
+            case 'foxray': link = 'foxray://import/' + url; break;
+            default: link = url;
         }
-        
-        function om(i) { 
-            if (i === 'osModal') {
-                document.getElementById('osSelection').style.display = 'block';
-                document.getElementById('androidApps').style.display = 'none';
-                document.getElementById('iosApps').style.display = 'none';
-            }
-            document.getElementById(i).style.display = 'flex'; 
-        }
-        
-        function cm(i) { 
-            document.getElementById(i).style.display = 'none'; 
-        }
-        
-        function showApps(os) {
-            document.getElementById('osSelection').style.display = 'none';
-            document.getElementById(os === 'android' ? 'androidApps' : 'iosApps').style.display = 'block';
-        }
-        
-        function openApp(app) {
-            var t = finalSubUrl;
-            var n = document.title;
-            var encodedUrl = encodeURIComponent(t);
-            var encodedName = encodeURIComponent(n);
-            var base64Url = btoa(t);
-            var link = '';
-            
-            // ========== Android Apps ==========
-            if (app === 'v2rayng') {
-                link = 'v2rayng://install-sub?url=' + encodedUrl + '&name=' + encodedName;
-            }
-            else if (app === 'hiddify') {
-                // Hiddify - works for both Android & iOS
-                link = 'hiddify://import/' + t;
-            }
-            else if (app === 'v2raytun') {
-                // v2rayTun - correct format with base64
-                link = 'v2raytun://import/' + base64Url;
-            }
-            else if (app === 'happ') {
-                link = 'happ://add/' + base64Url;
-            }
-            else if (app === 'v2box') {
-                link = 'v2box://install-sub?url=' + encodedUrl + '&name=' + encodedName;
-            }
-            // ========== iOS Apps ==========
-            else if (app === 'streisand') {
-                // Streisand - correct format
-                link = 'streisand://import/' + t;
-            }
-            else if (app === 'shadowrocket') {
-                // Shadowrocket - sub:// with base64
-                link = 'sub://' + base64Url + '#' + encodedName;
-            }
-            else if (app === 'stash') {
-                link = 'stash://install-config?url=' + encodedUrl + '&name=' + encodedName;
-            }
-            else if (app === 'foxray') {
-                link = 'foxray://import/' + t;
-            }
-            else {
-                link = t;
-            }
-            
-            window.location.href = link;
-        }
-        
-        function sc() {
-            om('cfm'); 
-            var l = document.getElementById('cl'); 
-            l.innerHTML = '...';
-            fetch(window.location.pathname + '/links').then(r => r.text()).then(t => {
-                if (t) {
-                    l.innerHTML = '';
-                    t.split('\n').forEach(x => {
-                        var z = x.trim();
-                        if (z && (z.indexOf('vmess')===0 || z.indexOf('vless')===0 || z.indexOf('trojan')===0 || z.indexOf('ss://')===0)) {
-                            var n = 'کانفیگ'; 
-                            if (z.indexOf('#') > -1) {
-                                n = decodeURIComponent(z.split('#')[1]);
-                            }
-                            var div = document.createElement('div'); 
-                            div.className = 'app-opt';
-                            div.innerHTML = '<span>' + n + '</span><span>کپی</span>';
-                            div.onclick = function() { hc(z, this); }; 
-                            l.appendChild(div);
-                        }
-                    });
+        window.location.href = link;
+    };
+
+    // ===== CONFIGS =====
+    window.showConfigs = function() {
+        openModal('configsModal');
+        var list = document.getElementById('configsList');
+        list.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;">در حال بارگذاری...</div>';
+        fetch(window.location.pathname + '/links').then(function(r) { return r.text(); }).then(function(text) {
+            if (!text) { list.innerHTML = '<div style="text-align:center;color:var(--text-dim);">کانفیگی یافت نشد</div>'; return; }
+            list.innerHTML = '';
+            var lines = text.split('\n'), count = 0;
+            lines.forEach(function(line) {
+                var l = line.trim();
+                if (l && (l.startsWith('vmess') || l.startsWith('vless') || l.startsWith('trojan') || l.startsWith('ss://'))) {
+                    count++;
+                    var name = 'کانفیگ ' + count;
+                    if (l.indexOf('#') > -1) { try { name = decodeURIComponent(l.split('#').pop()); } catch(e) {} }
+                    var item = document.createElement('div');
+                    item.className = 'modal-item';
+                    item.innerHTML = '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + name + '</span><span style="font-size:11px;color:var(--accent);flex-shrink:0;">📋</span>';
+                    item.onclick = function() { copyText(l); };
+                    list.appendChild(item);
                 }
             });
+            if (count === 0) list.innerHTML = '<div style="text-align:center;color:var(--text-dim);">کانفیگی یافت نشد</div>';
+        }).catch(function() { list.innerHTML = '<div style="text-align:center;color:var(--red);">خطا</div>'; });
+    };
+
+    // ===== CHART =====
+    var canvas = document.getElementById('trafficChart');
+    var ctx = canvas.getContext('2d');
+    var chartEmpty = document.getElementById('chartEmpty');
+    var currentRange = '7d';
+
+    function getStart(r) {
+        var n = Date.now();
+        switch(r) {
+            case '12h': return new Date(n - 12*3600000);
+            case '24h': return new Date(n - 24*3600000);
+            case '7d': return new Date(n - 7*86400000);
+            case '30d': return new Date(n - 30*86400000);
+            case '90d': return new Date(n - 90*86400000);
+            default: return new Date(n - 7*86400000);
         }
-        {% endraw %}
-    </script>
+    }
+
+    function drawChart(data) {
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.scale(dpr, dpr);
+        var w = rect.width, h = rect.height;
+        var pad = { top: 20, right: 16, bottom: 36, left: 52 };
+        var cw = w - pad.left - pad.right, ch = h - pad.top - pad.bottom;
+        ctx.clearRect(0, 0, w, h);
+
+        if (!data || data.length === 0) { canvas.style.display = 'none'; chartEmpty.style.display = 'flex'; return; }
+        canvas.style.display = 'block'; chartEmpty.style.display = 'none';
+
+        var pts = data.map(function(d) { return { date: d.period_start, val: d.total_traffic / 1073741824 }; });
+        var maxV = Math.max.apply(null, pts.map(function(p) { return p.val; }));
+        if (maxV === 0) maxV = 1;
+        maxV *= 1.15;
+
+        var dark = html.classList.contains('dark');
+        var grid = dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+        var txt = dark ? '#64748b' : '#94a3b8';
+        var lineC = dark ? '#818cf8' : '#6366f1';
+        var grad = ctx.createLinearGradient(0, pad.top, 0, h - pad.bottom);
+        grad.addColorStop(0, dark ? 'rgba(129,140,248,0.2)' : 'rgba(99,102,241,0.15)');
+        grad.addColorStop(1, dark ? 'rgba(129,140,248,0.01)' : 'rgba(99,102,241,0.01)');
+
+        // Grid
+        for (var g = 0; g <= 4; g++) {
+            var gy = pad.top + (ch / 4) * g;
+            ctx.beginPath(); ctx.setLineDash([3, 3]); ctx.strokeStyle = grid; ctx.lineWidth = 1;
+            ctx.moveTo(pad.left, gy); ctx.lineTo(w - pad.right, gy); ctx.stroke();
+            ctx.fillStyle = txt; ctx.font = '10px Inter'; ctx.textAlign = 'right';
+            ctx.fillText((maxV - (maxV / 4) * g).toFixed(1) + ' GB', pad.left - 6, gy + 4);
+        }
+        ctx.setLineDash([]);
+
+        // X labels
+        var li = Math.max(1, Math.floor(pts.length / 5));
+        ctx.fillStyle = txt; ctx.font = '9px Inter'; ctx.textAlign = 'center';
+        pts.forEach(function(p, i) {
+            if (i % li === 0 || i === pts.length - 1) {
+                var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
+                var d = new Date(p.date);
+                var lb = (currentRange === '12h' || currentRange === '24h')
+                    ? d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', hour12: false })
+                    : d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' });
+                ctx.fillText(lb, x, h - pad.bottom + 22);
+            }
+        });
+
+        // Area
+        ctx.beginPath();
+        pts.forEach(function(p, i) {
+            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
+            var y = pad.top + ch - (p.val / maxV) * ch;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.lineTo(pad.left + cw, pad.top + ch);
+        ctx.lineTo(pad.left, pad.top + ch);
+        ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+        // Line
+        ctx.beginPath();
+        pts.forEach(function(p, i) {
+            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
+            var y = pad.top + ch - (p.val / maxV) * ch;
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = lineC; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
+
+        // Dots
+        pts.forEach(function(p, i) {
+            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
+            var y = pad.top + ch - (p.val / maxV) * ch;
+            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fillStyle = lineC; ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = dark ? '#1e1f2a' : '#f0f2f5'; ctx.fill();
+        });
+    }
+
+    function fetchChart(range) {
+        currentRange = range;
+        var start = getStart(range);
+        var period = (range === '12h' || range === '24h') ? 'hour' : 'day';
+        fetch(window.location.pathname + '/usage?start=' + start.toISOString() + '&period=' + period)
+            .then(function(r) { return r.json(); })
+            .then(function(d) { var k = Object.keys(d.stats || {})[0]; drawChart(k ? d.stats[k] : []); })
+            .catch(function() { drawChart([]); });
+    }
+
+    document.querySelectorAll('.chart-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.chart-tab').forEach(function(t) { t.classList.remove('active'); });
+            tab.classList.add('active');
+            fetchChart(tab.dataset.range);
+        });
+    });
+
+    fetchChart('7d');
+    window.addEventListener('resize', function() { fetchChart(currentRange); });
+
+    // ===== ANNOUNCEMENT =====
+    fetch(window.location.pathname + '/info').then(function(r) {
+        var ann = r.headers.get('announce') || r.headers.get('Announce');
+        var annUrl = r.headers.get('announce-url');
+        if (ann) {
+            var msg = '';
+            if (ann.startsWith('base64:')) {
+                try { msg = decodeURIComponent(escape(atob(ann.substring(7).trim()))); } catch(e) { msg = ann.substring(7); }
+            } else { try { msg = decodeURIComponent(ann); } catch(e) { msg = ann; } }
+            if (msg.trim()) {
+                document.getElementById('announceText').textContent = msg;
+                document.getElementById('announcement').classList.add('show');
+            }
+        }
+        if (annUrl) {
+            var a = document.createElement('a');
+            a.href = annUrl; a.target = '_blank'; a.rel = 'noopener';
+            a.style.cssText = 'display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-size:12px;font-weight:700;margin-top:8px;text-decoration:none;';
+            a.textContent = 'مشاهده ↗';
+            document.querySelector('.announcement-content').appendChild(a);
+            document.getElementById('announcement').classList.add('show');
+        }
+    }).catch(function() {});
+
+})();
+</script>
+
 </body>
 </html>
