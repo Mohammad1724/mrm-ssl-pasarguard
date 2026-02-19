@@ -150,7 +150,7 @@
         .announcement.show { display: flex; align-items: flex-start; gap: 12px; }
         .announcement-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
         .announcement-content { flex: 1; min-width: 0; }
-        .announcement-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; letter-spacing: 0.3px; }
+        .announcement-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
         .announcement-text { font-size: 13px; color: var(--text-secondary); line-height: 1.8; white-space: pre-wrap; word-break: break-word; }
 
         /* CARDS */
@@ -263,13 +263,9 @@
             display: inline-flex;
             align-items: center;
             gap: 5px;
-            letter-spacing: 0.3px;
         }
 
-        .status-badge .dot {
-            width: 5px; height: 5px;
-            border-radius: 50%;
-        }
+        .status-badge .dot { width: 5px; height: 5px; border-radius: 50%; }
 
         .status-active { background: var(--green-soft); color: var(--green); }
         .status-active .dot { background: var(--green); }
@@ -304,6 +300,20 @@
             align-items: center;
             gap: 32px;
             padding: 28px;
+            background: linear-gradient(135deg, var(--bg-card), rgba(20, 184, 166, 0.04));
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-main::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(20, 184, 166, 0.03), transparent 50%);
+            pointer-events: none;
         }
 
         /* CIRCULAR PROGRESS */
@@ -312,6 +322,7 @@
             height: 150px;
             flex-shrink: 0;
             position: relative;
+            z-index: 1;
         }
 
         .circular-progress svg {
@@ -341,6 +352,8 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            background: radial-gradient(circle, var(--bg-card) 55%, transparent 100%);
+            border-radius: 50%;
         }
 
         .circular-pct {
@@ -359,7 +372,7 @@
         }
 
         /* STATS */
-        .stats-detail { flex: 1; min-width: 0; }
+        .stats-detail { flex: 1; min-width: 0; z-index: 1; }
 
         .stat-row {
             display: flex;
@@ -368,23 +381,10 @@
             padding: 10px 0;
         }
 
-        .stat-row + .stat-row {
-            border-top: 1px solid var(--border);
-        }
+        .stat-row + .stat-row { border-top: 1px solid var(--border); }
 
-        .stat-label {
-            font-size: 13px;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .stat-value {
-            font-family: var(--font-mono);
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
+        .stat-label { font-size: 13px; color: var(--text-secondary); font-weight: 500; }
+        .stat-value { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text-primary); }
         .stat-value.green { color: var(--green); }
 
         /* BUTTONS */
@@ -414,6 +414,8 @@
             gap: 8px;
             text-decoration: none;
             transition: var(--transition);
+            position: relative;
+            overflow: hidden;
         }
 
         .btn:hover { color: var(--accent); }
@@ -423,12 +425,76 @@
             background: linear-gradient(135deg, var(--teal), var(--teal-dark));
             color: white;
             box-shadow: 0 4px 14px var(--teal-glow);
+            font-size: 14px;
+            height: 52px;
         }
 
         .btn-primary:hover { color: white; filter: brightness(1.1); box-shadow: 0 6px 20px var(--teal-glow); }
         .btn-primary:active { box-shadow: 0 2px 8px var(--teal-glow); }
 
         .btn-full { grid-column: 1 / -1; }
+
+        /* Copy feedback */
+        .btn.copied {
+            background: var(--green) !important;
+            color: white !important;
+            box-shadow: 0 4px 14px rgba(34, 197, 94, 0.3) !important;
+        }
+
+        .btn-secondary {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* Renew alert */
+        .btn-renew-alert {
+            background: linear-gradient(135deg, var(--yellow), #d97706) !important;
+            color: white !important;
+            box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3) !important;
+            animation: renewPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes renewPulse {
+            0%, 100% { box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3); }
+            50% { box-shadow: 0 6px 24px rgba(245, 158, 11, 0.5); }
+        }
+
+        .btn-renew-alert:hover { color: white !important; filter: brightness(1.1); }
+
+        /* TOOLTIP for buttons */
+        .btn-tooltip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            background: var(--bg-raised);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-soft);
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.2s ease;
+            z-index: 10;
+        }
+
+        .btn-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: var(--bg-raised);
+        }
+
+        .btn:hover .btn-tooltip {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
 
         /* TIME PROGRESS */
         .time-card { padding: 20px 24px; }
@@ -440,21 +506,8 @@
             margin-bottom: 12px;
         }
 
-        .progress-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .progress-pct {
-            font-family: var(--font-mono);
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--violet);
-        }
+        .progress-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+        .progress-pct { font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--violet); }
 
         .progress-track {
             width: 100%;
@@ -477,7 +530,8 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
-            margin-bottom: 16px;
+            margin-top: 24px;
+            margin-bottom: 24px;
         }
 
         .info-chip {
@@ -486,31 +540,26 @@
             border-radius: var(--radius-sm);
             padding: 18px;
             transition: var(--transition);
+            cursor: default;
         }
 
-        .chip-icon {
-            font-size: 18px;
-            margin-bottom: 8px;
-            display: block;
+        .info-chip:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-light);
         }
 
-        .chip-title {
-            font-size: 11px;
-            color: var(--text-dim);
-            font-weight: 600;
-            margin-bottom: 6px;
-            letter-spacing: 0.3px;
-        }
+        .chip-icon { font-size: 20px; margin-bottom: 8px; display: block; }
 
-        .chip-value {
-            font-family: var(--font-mono);
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
+        .info-chip:nth-child(1) .chip-icon { filter: none; }
+        .info-chip:nth-child(2) .chip-icon { filter: none; }
+        .info-chip:nth-child(3) .chip-icon { filter: none; }
+        .info-chip:nth-child(4) .chip-icon { filter: none; }
+
+        .chip-title { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; }
+        .chip-value { font-family: var(--font-mono); font-size: 15px; font-weight: 700; color: var(--text-primary); }
 
         /* CHART */
-        .chart-card { padding: 20px; }
+        .chart-card { padding: 20px; margin-top: 8px; }
 
         .chart-header {
             display: flex;
@@ -519,20 +568,9 @@
             margin-bottom: 20px;
         }
 
-        .chart-title {
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+        .chart-title { font-size: 15px; font-weight: 700; color: var(--text-primary); }
 
-        .chart-tabs {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
+        .chart-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 
         .chart-tab {
             padding: 6px 14px;
@@ -556,20 +594,34 @@
 
         .chart-tab:hover:not(.active) { color: var(--text-primary); }
 
-        .chart-container {
-            width: 100%;
-            height: 200px;
-            position: relative;
+        .chart-container { width: 100%; height: 220px; position: relative; }
+        .chart-canvas { width: 100%; height: 100%; }
+
+        /* Chart tooltip */
+        .chart-tooltip {
+            position: absolute;
+            background: var(--bg-raised);
+            box-shadow: var(--shadow-light);
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            z-index: 10;
+            min-width: 120px;
         }
 
-        .chart-canvas { width: 100%; height: 100%; }
+        .chart-tooltip.show { opacity: 1; }
+        .chart-tooltip-date { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; font-weight: 600; }
+        .chart-tooltip-value { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text-primary); }
 
         .chart-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 200px;
+            height: 220px;
             color: var(--text-dim);
             font-size: 13px;
             gap: 8px;
@@ -580,11 +632,8 @@
             border-radius: 50%;
             background: var(--bg-inset);
             box-shadow: var(--shadow-inset);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             font-size: 16px;
-            color: var(--text-dim);
         }
 
         /* SEPARATOR */
@@ -595,11 +644,7 @@
             margin: 24px 0;
         }
 
-        .separator-line {
-            flex: 1;
-            height: 1px;
-            background: var(--border);
-        }
+        .separator-line { flex: 1; height: 1px; background: var(--border); }
 
         .separator-label {
             font-size: 12px;
@@ -610,9 +655,6 @@
             background: var(--bg-card);
             box-shadow: var(--shadow-soft);
             white-space: nowrap;
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
 
         /* DOWNLOADS */
@@ -635,8 +677,8 @@
             transition: var(--transition);
         }
 
-        .dl-item:hover { color: var(--accent); }
-        .dl-item:active { box-shadow: var(--shadow-btn-active); }
+        .dl-item:hover { color: var(--accent); transform: translateY(-2px); }
+        .dl-item:active { box-shadow: var(--shadow-btn-active); transform: translateY(0); }
 
         .dl-icon { font-size: 26px; margin-bottom: 8px; }
         .dl-text { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
@@ -655,7 +697,6 @@
         }
 
         .dark .modal { background: rgba(0, 0, 0, 0.6); }
-
         .modal.show { display: flex; }
 
         .modal-box {
@@ -665,29 +706,22 @@
             padding: 28px;
             width: 100%;
             max-width: 400px;
-            max-height: 80vh;
+            max-height: 85vh;
             overflow-y: auto;
             animation: modalIn 0.35s ease;
+            scrollbar-width: thin;
         }
+
+        .modal-box::-webkit-scrollbar { width: 4px; }
+        .modal-box::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 4px; }
 
         @keyframes modalIn {
             from { opacity: 0; transform: scale(0.94) translateY(8px); }
             to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        .modal-title {
-            font-size: 17px;
-            font-weight: 800;
-            color: var(--text-primary);
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
-        .modal-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+        .modal-title { font-size: 17px; font-weight: 800; color: var(--text-primary); margin-bottom: 20px; text-align: center; }
+        .modal-list { display: flex; flex-direction: column; gap: 8px; }
 
         .modal-item {
             padding: 14px 16px;
@@ -708,11 +742,28 @@
         .modal-item:hover { color: var(--accent); }
         .modal-item:active { box-shadow: var(--shadow-btn-active); }
 
-        .os-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
+        .modal-item.copied-item {
+            background: var(--green-soft) !important;
+            color: var(--green) !important;
         }
+
+        /* Protocol badge */
+        .protocol-badge {
+            font-size: 9px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            margin-left: 8px;
+        }
+
+        .proto-vless { background: rgba(99, 102, 241, 0.12); color: #6366f1; }
+        .proto-vmess { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
+        .proto-trojan { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+        .proto-ss { background: rgba(20, 184, 166, 0.12); color: #14b8a6; }
+
+        .os-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
         .os-btn {
             padding: 28px 16px;
@@ -741,6 +792,16 @@
             box-shadow: var(--shadow-inset);
         }
 
+        /* Close button in modals */
+        .btn-close-modal {
+            background: var(--bg-inset) !important;
+            box-shadow: var(--shadow-inset) !important;
+            color: var(--text-dim) !important;
+            font-size: 12px !important;
+        }
+
+        .btn-close-modal:hover { color: var(--text-secondary) !important; }
+
         /* TOAST */
         .toast {
             position: fixed;
@@ -760,12 +821,36 @@
             pointer-events: none;
         }
 
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        .toast.error { color: var(--red); }
+        .toast.info { color: var(--accent); }
+
+        /* GUIDE BANNER */
+        .guide-banner {
+            background: var(--accent-soft);
+            border-radius: var(--radius-sm);
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            border: 1px solid rgba(99, 102, 241, 0.15);
         }
 
-        .toast.error { color: var(--red); }
+        .guide-banner.show { display: flex; }
+        .guide-banner:hover { background: rgba(99, 102, 241, 0.15); }
+
+        .guide-icon { font-size: 20px; flex-shrink: 0; }
+        .guide-text { font-size: 12px; color: var(--accent); font-weight: 600; flex: 1; line-height: 1.6; }
+        .guide-close {
+            font-size: 16px;
+            color: var(--text-dim);
+            cursor: pointer;
+            padding: 4px;
+            flex-shrink: 0;
+        }
 
         /* SCROLLBAR */
         ::-webkit-scrollbar { width: 4px; }
@@ -786,14 +871,8 @@
             .username { max-width: 120px; }
             .status-badge { font-size: 9px; padding: 3px 8px; }
             .support-btn { padding: 8px 14px; font-size: 11px; }
-            .online-badge { font-size: 10px; }
 
-            .status-main {
-                flex-direction: column;
-                gap: 20px;
-                padding: 20px;
-            }
-
+            .status-main { flex-direction: column; gap: 20px; padding: 20px; }
             .circular-progress { width: 130px; height: 130px; }
             .circular-pct { font-size: 26px; }
 
@@ -802,11 +881,12 @@
             .stat-value { font-size: 13px; }
 
             .btn { height: 44px; font-size: 12px; border-radius: 10px; }
+            .btn-primary { height: 48px; font-size: 13px; }
             .btn-grid { gap: 8px; margin-bottom: 8px; }
 
-            .info-chips { gap: 8px; }
+            .info-chips { gap: 8px; margin-top: 16px; margin-bottom: 16px; }
             .info-chip { padding: 14px; border-radius: 12px; }
-            .chip-icon { font-size: 16px; margin-bottom: 6px; }
+            .chip-icon { font-size: 18px; margin-bottom: 6px; }
             .chip-title { font-size: 10px; }
             .chip-value { font-size: 13px; }
 
@@ -815,13 +895,17 @@
             .dl-icon { font-size: 22px; margin-bottom: 4px; }
             .dl-text { font-size: 9px; }
 
-            .chart-container { height: 170px; }
+            .chart-container { height: 180px; }
             .chart-title { font-size: 13px; }
             .chart-tab { padding: 5px 10px; font-size: 10px; }
 
             .modal-box { padding: 20px; border-radius: 16px; }
             .modal-title { font-size: 15px; margin-bottom: 16px; }
             .modal-item { padding: 12px 14px; font-size: 13px; }
+
+            .btn-tooltip { display: none; }
+
+            .guide-text { font-size: 11px; }
         }
 
         @media (max-width: 380px) {
@@ -852,6 +936,13 @@
         </div>
     </div>
 
+    <!-- GUIDE BANNER -->
+    <div class="guide-banner" id="guideBanner">
+        <span class="guide-icon">💡</span>
+        <span class="guide-text">اول اپلیکیشن VPN رو از پایین صفحه دانلود کنید، بعد دکمه «اتصال مستقیم» رو بزنید تا خودکار تنظیم بشه.</span>
+        <span class="guide-close" id="guideClose">✕</span>
+    </div>
+
     <!-- PROFILE -->
     <div class="card">
         <div class="profile-section">
@@ -875,8 +966,7 @@
             <svg viewBox="0 0 160 160">
                 <circle class="track-bg" cx="80" cy="80" r="68" />
                 <circle class="fill-circle" id="progressCircle" cx="80" cy="80" r="68"
-                    stroke-dasharray="427.26"
-                    stroke-dashoffset="427.26" />
+                    stroke-dasharray="427.26" stroke-dashoffset="427.26" />
             </svg>
             <div class="circular-center">
                 <div class="circular-pct" id="circularPct">0%</div>
@@ -906,22 +996,31 @@
     <!-- ACTIONS -->
     <div class="card">
         <div class="btn-grid">
-            <button class="btn" onclick="copySubLink()">📋 کپی لینک</button>
-            <button class="btn" onclick="openModal('qrModal')">📷 کد QR</button>
+            <button class="btn btn-primary btn-full" id="connectBtn" onclick="openSmartConnect()">
+                اتصال مستقیم
+                <span class="btn-tooltip">لینک رو مستقیم به اپ VPN اضافه کنید</span>
+            </button>
         </div>
         <div class="btn-grid">
-            <button class="btn btn-primary btn-full" onclick="openModal('osModal')">⚡ اتصال مستقیم</button>
+            <button class="btn" id="copyBtn" onclick="copySubLink()">
+                کپی لینک
+                <span class="btn-tooltip">لینک اشتراک رو کپی کنید</span>
+            </button>
+            <button class="btn" onclick="openModal('qrModal')">
+                کد QR
+                <span class="btn-tooltip">اسکن با دوربین گوشی</span>
+            </button>
         </div>
         <div class="btn-grid">
-            <button class="btn" onclick="showConfigs()">⚙️ کانفیگ‌ها</button>
-            <a href="https://t.me/__BOT__" class="btn">🔄 تمدید</a>
+            <button class="btn btn-secondary" onclick="showConfigs()">کانفیگ‌ها</button>
+            <a href="https://t.me/__BOT__" class="btn" id="renewBtn">تمدید</a>
         </div>
     </div>
 
     <!-- TIME PROGRESS -->
     <div class="card time-card">
         <div class="progress-header">
-            <span class="progress-label">⏳ زمان باقی‌مانده</span>
+            <span class="progress-label">زمان باقی‌مانده</span>
             <span class="progress-pct" id="timePct">0%</span>
         </div>
         <div class="progress-track">
@@ -956,7 +1055,7 @@
     <!-- CHART -->
     <div class="card chart-card">
         <div class="chart-header">
-            <div class="chart-title">📈 نمودار مصرف</div>
+            <div class="chart-title">نمودار مصرف</div>
             <div class="chart-tabs">
                 <button class="chart-tab" data-range="12h">12 ساعت</button>
                 <button class="chart-tab active" data-range="7d">7 روز</button>
@@ -966,8 +1065,12 @@
         </div>
         <div class="chart-container">
             <canvas id="trafficChart" class="chart-canvas"></canvas>
+            <div class="chart-tooltip" id="chartTooltip">
+                <div class="chart-tooltip-date" id="tooltipDate"></div>
+                <div class="chart-tooltip-value" id="tooltipValue"></div>
+            </div>
             <div class="chart-empty" id="chartEmpty" style="display:none;">
-                <div class="chart-empty-circle">📊</div>
+                <div class="chart-empty-circle">—</div>
                 <span>داده‌ای موجود نیست</span>
             </div>
         </div>
@@ -976,7 +1079,7 @@
     <!-- SEPARATOR -->
     <div class="separator">
         <div class="separator-line"></div>
-        <div class="separator-label">📱 دانلود اپلیکیشن</div>
+        <div class="separator-label">دانلود اپلیکیشن</div>
         <div class="separator-line"></div>
     </div>
 
@@ -1003,7 +1106,7 @@
 
 <!-- MODALS -->
 
-<!-- OS Modal -->
+<!-- OS / Smart Connect -->
 <div class="modal" id="osModal">
     <div class="modal-box">
         <div id="osSelectView">
@@ -1022,7 +1125,7 @@
         <div id="androidAppsView" style="display:none">
             <div class="modal-title">اندروید</div>
             <div class="modal-list">
-                <div class="modal-item" onclick="openDeepLink('v2rayng')">v2rayNG</div>
+                <div class="modal-item" onclick="openDeepLink('v2rayng')">v2rayNG <span style="font-size:11px;color:var(--green);">پیشنهادی</span></div>
                 <div class="modal-item" onclick="openDeepLink('hiddify')">Hiddify</div>
                 <div class="modal-item" onclick="openDeepLink('v2raytun')">v2rayTun</div>
                 <div class="modal-item" onclick="openDeepLink('happ')">Happ</div>
@@ -1032,7 +1135,7 @@
         <div id="iosAppsView" style="display:none">
             <div class="modal-title">آیفون</div>
             <div class="modal-list">
-                <div class="modal-item" onclick="openDeepLink('hiddify')">Hiddify</div>
+                <div class="modal-item" onclick="openDeepLink('hiddify')">Hiddify <span style="font-size:11px;color:var(--green);">پیشنهادی</span></div>
                 <div class="modal-item" onclick="openDeepLink('streisand')">Streisand</div>
                 <div class="modal-item" onclick="openDeepLink('v2box')">V2Box</div>
                 <div class="modal-item" onclick="openDeepLink('shadowrocket')">Shadowrocket</div>
@@ -1040,7 +1143,7 @@
                 <div class="modal-item" onclick="openDeepLink('foxray')">FoXray</div>
             </div>
         </div>
-        <button class="btn btn-full" style="margin-top:16px" onclick="closeModal('osModal')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:16px" onclick="closeModal('osModal')">بستن</button>
     </div>
 </div>
 
@@ -1054,7 +1157,7 @@
             <a href="https://play.google.com/store/apps/details?id=com.v2raytun.android" target="_blank" class="modal-item">v2rayTun<span>↗</span></a>
             <a href="https://github.com/nicefeel/nicefeel.github.io/releases" target="_blank" class="modal-item">Happ<span>↗</span></a>
         </div>
-        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlAndroid')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:12px" onclick="closeModal('dlAndroid')">بستن</button>
     </div>
 </div>
 
@@ -1070,7 +1173,7 @@
             <a href="https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349" target="_blank" class="modal-item">Stash<span>↗</span></a>
             <a href="https://apps.apple.com/us/app/foxray/id6448898396" target="_blank" class="modal-item">FoXray<span>↗</span></a>
         </div>
-        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlIos')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:12px" onclick="closeModal('dlIos')">بستن</button>
     </div>
 </div>
 
@@ -1082,7 +1185,7 @@
             <a href="https://github.com/2dust/v2rayN/releases" target="_blank" class="modal-item">v2rayN<span>↗</span></a>
             <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
         </div>
-        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlWindows')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:12px" onclick="closeModal('dlWindows')">بستن</button>
     </div>
 </div>
 
@@ -1093,7 +1196,7 @@
         <div class="modal-list">
             <a href="https://github.com/hiddify/hiddify-next/releases" target="_blank" class="modal-item">Hiddify<span>↗</span></a>
         </div>
-        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('dlLinux')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:12px" onclick="closeModal('dlLinux')">بستن</button>
     </div>
 </div>
 
@@ -1102,19 +1205,19 @@
     <div class="modal-box" style="text-align:center;">
         <div class="modal-title">کد QR اشتراک</div>
         <div class="qr-wrapper">
-            <img id="qrImage" src="" width="200" alt="QR">
+            <canvas id="qrCanvas" width="200" height="200"></canvas>
         </div>
-        <button class="btn btn-primary btn-full" onclick="copySubLink()">📋 کپی لینک</button>
-        <button class="btn btn-full" style="margin-top:8px" onclick="closeModal('qrModal')">بستن</button>
+        <button class="btn btn-primary btn-full" onclick="copySubLink()">کپی لینک</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:8px" onclick="closeModal('qrModal')">بستن</button>
     </div>
 </div>
 
 <!-- Configs Modal -->
 <div class="modal" id="configsModal">
     <div class="modal-box">
-        <div class="modal-title">⚙️ کانفیگ‌ها</div>
+        <div class="modal-title">کانفیگ‌ها</div>
         <div class="modal-list" id="configsList"></div>
-        <button class="btn btn-full" style="margin-top:12px" onclick="closeModal('configsModal')">بستن</button>
+        <button class="btn btn-full btn-close-modal" style="margin-top:12px" onclick="closeModal('configsModal')">بستن</button>
     </div>
 </div>
 
@@ -1125,6 +1228,7 @@
 (function() {
     'use strict';
 
+    // ===== DATA =====
     var rawStatus = '{{ user.status.name }}' || 'active';
     var rawUsername = '{{ user.username }}' || '';
     var totalBytes = parseInt('{{ user.data_limit }}') || 0;
@@ -1145,6 +1249,7 @@
     if (expireStr.indexOf('{{') !== -1) expireStr = '';
     {% endraw %}
 
+    // ===== HELPERS =====
     function formatBytes(b) {
         if (!b || b <= 0) return '0 B';
         var u = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -1175,6 +1280,20 @@
         } catch(e) { return { text: 'نامشخص', isOnline: false, isEmpty: true }; }
     }
 
+    // ===== OS DETECTION =====
+    function detectOS() {
+        var ua = navigator.userAgent || '';
+        if (/android/i.test(ua)) return 'android';
+        if (/iPad|iPhone|iPod/.test(ua)) return 'ios';
+        if (/Win/.test(ua)) return 'windows';
+        if (/Linux/.test(ua)) return 'linux';
+        if (/Mac/.test(ua)) return 'mac';
+        return 'unknown';
+    }
+
+    var userOS = detectOS();
+
+    // ===== STATUS =====
     var statusMap = {
         'active': { label: 'فعال', cls: 'status-active', stroke: '#22c55e' },
         'disabled': { label: 'غیرفعال', cls: 'status-disabled', stroke: '#9ca3af' },
@@ -1187,16 +1306,17 @@
     document.getElementById('usernameDisplay').textContent = rawUsername;
     document.getElementById('statusBadge').innerHTML = '<span class="status-badge ' + statusInfo.cls + '"><span class="dot"></span>' + statusInfo.label + '</span>';
 
+    // Online badge
     var onlineInfo = timeAgo(onlineStr);
     var ob = document.getElementById('onlineBadge');
-    if (onlineInfo.isEmpty) {
-        ob.innerHTML = '<span class="online-dot empty"></span>';
-    } else if (onlineInfo.isOnline) {
-        ob.innerHTML = '<span class="online-dot green"></span><span class="online-text green">' + onlineInfo.text + '</span>';
-    } else {
-        ob.innerHTML = '<span class="online-dot gray"></span><span class="online-text gray">' + onlineInfo.text + '</span>';
+    function renderOnlineBadge(info) {
+        if (info.isEmpty) ob.innerHTML = '<span class="online-dot empty"></span>';
+        else if (info.isOnline) ob.innerHTML = '<span class="online-dot green"></span><span class="online-text green">' + info.text + '</span>';
+        else ob.innerHTML = '<span class="online-dot gray"></span><span class="online-text gray">' + info.text + '</span>';
     }
+    renderOnlineBadge(onlineInfo);
 
+    // ===== USAGE =====
     var usagePct = totalBytes > 0 ? Math.min((usedBytes / totalBytes) * 100, 100) : 0;
     var circumference = 2 * Math.PI * 68;
     var offset = circumference - (usagePct / 100) * circumference;
@@ -1210,12 +1330,15 @@
     document.getElementById('remainTraffic').textContent = totalBytes > 0 ? formatBytes(Math.max(0, totalBytes - usedBytes)) : '∞';
     document.getElementById('lifetimeTraffic').textContent = formatBytes(lifetimeBytes);
 
+    // Expiry
     var daysLeft = '∞', timePct = 100, expiryStatusText = 'نامحدود';
+    var daysRemaining = Infinity;
     if (expireStr && expireStr !== 'None' && expireStr !== 'null' && expireStr !== '0') {
         try {
             var expDate = new Date(expireStr);
             if (!isNaN(expDate.getTime())) {
                 var diffDays = (expDate - new Date()) / 86400000;
+                daysRemaining = diffDays;
                 var totalDays = 30;
                 if (createdStr && createdStr !== 'None') {
                     var cd = new Date(createdStr);
@@ -1240,9 +1363,51 @@
         document.getElementById('timeFill').style.width = timePct + '%';
     }
 
-    document.getElementById('qrImage').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(subUrl);
+    // ===== RENEW ALERT =====
+    var remainPct = totalBytes > 0 ? ((totalBytes - usedBytes) / totalBytes) * 100 : 100;
+    if (daysRemaining < 5 || remainPct < 20) {
+        var renewBtn = document.getElementById('renewBtn');
+        renewBtn.classList.add('btn-renew-alert');
+        renewBtn.textContent = '⚠️ تمدید فوری';
+    }
 
-    // THEME
+    // ===== GUIDE BANNER =====
+    if (!localStorage.getItem('guideShown')) {
+        document.getElementById('guideBanner').classList.add('show');
+    }
+    document.getElementById('guideClose').onclick = function() {
+        document.getElementById('guideBanner').classList.remove('show');
+        localStorage.setItem('guideShown', '1');
+    };
+
+    // ===== QR CODE (Canvas-based, no external API) =====
+    function generateQR(text, canvas, size) {
+        // Simple QR using external API as fallback but with canvas
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+            var ctx = canvas.getContext('2d');
+            canvas.width = size;
+            canvas.height = size;
+            ctx.drawImage(img, 0, 0, size, size);
+        };
+        img.onerror = function() {
+            // Fallback: show text
+            var ctx = canvas.getContext('2d');
+            canvas.width = size;
+            canvas.height = size;
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#999';
+            ctx.font = '12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('QR خطا', size/2, size/2);
+        };
+        img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size + '&data=' + encodeURIComponent(text);
+    }
+    generateQR(subUrl, document.getElementById('qrCanvas'), 200);
+
+    // ===== THEME =====
     var html = document.documentElement;
     var themeBtn = document.getElementById('themeBtn');
     if (localStorage.getItem('theme') === 'dark') { html.classList.add('dark'); themeBtn.textContent = '🌙'; }
@@ -1254,7 +1419,7 @@
         fetchChart(currentRange);
     };
 
-    // REFRESH
+    // ===== REFRESH =====
     var refreshBtn = document.getElementById('refreshBtn');
     function refreshData() {
         if (rawStatus === 'disabled') return;
@@ -1275,42 +1440,83 @@
                     circle.setAttribute('stroke-dashoffset', no);
                     if (data.online_at) {
                         var ni = timeAgo(data.online_at);
-                        if (ni.isOnline) ob.innerHTML = '<span class="online-dot green"></span><span class="online-text green">' + ni.text + '</span>';
-                        else if (!ni.isEmpty) ob.innerHTML = '<span class="online-dot gray"></span><span class="online-text gray">' + ni.text + '</span>';
+                        renderOnlineBadge(ni);
                         document.getElementById('lastOnline').textContent = ni.text;
                     }
+                    showToast('اطلاعات بروز شد ✓', false, 'info');
                 }
                 refreshBtn.classList.remove('spinning');
-            }).catch(function() { refreshBtn.classList.remove('spinning'); });
+            }).catch(function() {
+                refreshBtn.classList.remove('spinning');
+                showToast('خطا در بروزرسانی', true);
+            });
     }
     refreshBtn.onclick = refreshData;
     setInterval(refreshData, 30000);
 
-    // TOAST
-    window.showToast = function(msg, err) {
+    // ===== TOAST =====
+    window.showToast = function(msg, err, type) {
         var t = document.getElementById('toast');
         t.textContent = msg || 'کپی شد ✓';
-        t.className = 'toast show' + (err ? ' error' : '');
+        t.className = 'toast show';
+        if (err) t.classList.add('error');
+        if (type === 'info') t.classList.add('info');
         setTimeout(function() { t.className = 'toast'; }, 2000);
     };
 
-    // COPY
-    function doCopy(text, msg) {
+    // ===== COPY with button feedback =====
+    function doCopy(text, msg, btnId) {
+        var btn = btnId ? document.getElementById(btnId) : null;
+        var origText = btn ? btn.textContent : '';
+
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(function() { showToast(msg || 'کپی شد ✓'); }).catch(function() { fbCopy(text, msg); });
-        } else { fbCopy(text, msg); }
+            navigator.clipboard.writeText(text).then(function() {
+                showToast(msg || 'کپی شد ✓');
+                if (btn) {
+                    btn.classList.add('copied');
+                    btn.textContent = '✓ کپی شد';
+                    setTimeout(function() { btn.classList.remove('copied'); btn.textContent = origText; }, 2000);
+                }
+            }).catch(function() { fbCopy(text, msg, btn, origText); });
+        } else { fbCopy(text, msg, btn, origText); }
     }
-    function fbCopy(text, msg) {
+
+    function fbCopy(text, msg, btn, origText) {
         var ta = document.createElement('textarea');
         ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
         document.body.appendChild(ta); ta.select();
-        try { document.execCommand('copy'); showToast(msg || 'کپی شد ✓'); } catch(e) { showToast('خطا در کپی', true); }
+        try {
+            document.execCommand('copy');
+            showToast(msg || 'کپی شد ✓');
+            if (btn) {
+                btn.classList.add('copied');
+                btn.textContent = '✓ کپی شد';
+                setTimeout(function() { btn.classList.remove('copied'); btn.textContent = origText; }, 2000);
+            }
+        } catch(e) { showToast('خطا در کپی', true); }
         document.body.removeChild(ta);
     }
-    window.copySubLink = function() { doCopy(subUrl, 'لینک اشتراک کپی شد ✓'); };
-    window.copyText = function(t) { doCopy(t); };
 
-    // MODALS
+    window.copySubLink = function() { doCopy(subUrl, 'لینک اشتراک کپی شد ✓', 'copyBtn'); };
+    window.copyText = function(t, el) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(t).then(function() {
+                showToast('کپی شد ✓');
+                if (el) {
+                    el.classList.add('copied-item');
+                    setTimeout(function() { el.classList.remove('copied-item'); }, 1500);
+                }
+            });
+        } else {
+            var ta = document.createElement('textarea');
+            ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); showToast('کپی شد ✓'); } catch(e) {}
+            document.body.removeChild(ta);
+        }
+    };
+
+    // ===== MODALS =====
     window.openModal = function(id) {
         if (id === 'osModal') {
             document.getElementById('osSelectView').style.display = 'block';
@@ -1328,7 +1534,20 @@
         document.getElementById(os === 'android' ? 'androidAppsView' : 'iosAppsView').style.display = 'block';
     };
 
-    // DEEP LINKS
+    // ===== SMART CONNECT (auto-detect OS) =====
+    window.openSmartConnect = function() {
+        if (userOS === 'android') {
+            openModal('osModal');
+            showOsApps('android');
+        } else if (userOS === 'ios') {
+            openModal('osModal');
+            showOsApps('ios');
+        } else {
+            openModal('osModal'); // Show OS selection
+        }
+    };
+
+    // ===== DEEP LINKS =====
     window.openDeepLink = function(app) {
         var url = subUrl, enc = encodeURIComponent(url), name = encodeURIComponent(document.title), b64 = btoa(url), link = '';
         switch(app) {
@@ -1346,7 +1565,7 @@
         window.location.href = link;
     };
 
-    // CONFIGS
+    // ===== CONFIGS with protocol badges =====
     window.showConfigs = function() {
         openModal('configsModal');
         var list = document.getElementById('configsList');
@@ -1361,10 +1580,21 @@
                     count++;
                     var name = 'کانفیگ ' + count;
                     if (l.indexOf('#') > -1) { try { name = decodeURIComponent(l.split('#').pop()); } catch(e) {} }
+
+                    // Detect protocol
+                    var proto = 'unknown';
+                    var protoClass = '';
+                    if (l.startsWith('vless')) { proto = 'VLESS'; protoClass = 'proto-vless'; }
+                    else if (l.startsWith('vmess')) { proto = 'VMESS'; protoClass = 'proto-vmess'; }
+                    else if (l.startsWith('trojan')) { proto = 'TROJAN'; protoClass = 'proto-trojan'; }
+                    else if (l.startsWith('ss://')) { proto = 'SS'; protoClass = 'proto-ss'; }
+
                     var item = document.createElement('div');
                     item.className = 'modal-item';
-                    item.innerHTML = '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + name + '</span><span style="font-size:11px;color:var(--accent);flex-shrink:0;">📋</span>';
-                    item.onclick = function() { copyText(l); };
+                    item.innerHTML = '<span class="protocol-badge ' + protoClass + '">' + proto + '</span>' +
+                        '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 8px;">' + name + '</span>' +
+                        '<span style="font-size:11px;color:var(--accent);flex-shrink:0;">کپی</span>';
+                    item.onclick = function() { copyText(l, item); };
                     list.appendChild(item);
                 }
             });
@@ -1372,11 +1602,15 @@
         }).catch(function() { list.innerHTML = '<div style="text-align:center;color:var(--red);">خطا</div>'; });
     };
 
-    // CHART
+    // ===== CHART WITH TOOLTIP =====
     var canvas = document.getElementById('trafficChart');
     var ctx = canvas.getContext('2d');
     var chartEmpty = document.getElementById('chartEmpty');
+    var tooltip = document.getElementById('chartTooltip');
+    var tooltipDate = document.getElementById('tooltipDate');
+    var tooltipValue = document.getElementById('tooltipValue');
     var currentRange = '7d';
+    var chartPoints = []; // Store points for tooltip
 
     function getStart(r) {
         var n = Date.now();
@@ -1402,11 +1636,12 @@
         var pad = { top: 20, right: 16, bottom: 36, left: 52 };
         var cw = w - pad.left - pad.right, ch = h - pad.top - pad.bottom;
         ctx.clearRect(0, 0, w, h);
+        chartPoints = [];
 
         if (!data || data.length === 0) { canvas.style.display = 'none'; chartEmpty.style.display = 'flex'; return; }
         canvas.style.display = 'block'; chartEmpty.style.display = 'none';
 
-        var pts = data.map(function(d) { return { date: d.period_start, val: d.total_traffic / 1073741824 }; });
+        var pts = data.map(function(d) { return { date: d.period_start, val: d.total_traffic / 1073741824, bytes: d.total_traffic }; });
         var maxV = Math.max.apply(null, pts.map(function(p) { return p.val; }));
         if (maxV === 0) maxV = 1;
         maxV *= 1.15;
@@ -1430,9 +1665,14 @@
 
         var li = Math.max(1, Math.floor(pts.length / 5));
         ctx.fillStyle = txt; ctx.font = '9px Inter'; ctx.textAlign = 'center';
+
+        // Store pixel positions for tooltip
         pts.forEach(function(p, i) {
+            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
+            var y = pad.top + ch - (p.val / maxV) * ch;
+            chartPoints.push({ x: x, y: y, date: p.date, bytes: p.bytes, val: p.val });
+
             if (i % li === 0 || i === pts.length - 1) {
-                var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
                 var d = new Date(p.date);
                 var lb = (currentRange === '12h' || currentRange === '24h')
                     ? d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -1441,32 +1681,78 @@
             }
         });
 
+        // Area
         ctx.beginPath();
         pts.forEach(function(p, i) {
-            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
-            var y = pad.top + ch - (p.val / maxV) * ch;
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            var cp = chartPoints[i];
+            i === 0 ? ctx.moveTo(cp.x, cp.y) : ctx.lineTo(cp.x, cp.y);
         });
         ctx.lineTo(pad.left + cw, pad.top + ch);
         ctx.lineTo(pad.left, pad.top + ch);
         ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
 
+        // Line
         ctx.beginPath();
         pts.forEach(function(p, i) {
-            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
-            var y = pad.top + ch - (p.val / maxV) * ch;
-            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            var cp = chartPoints[i];
+            i === 0 ? ctx.moveTo(cp.x, cp.y) : ctx.lineTo(cp.x, cp.y);
         });
         ctx.strokeStyle = lineC; ctx.lineWidth = 2.5; ctx.lineJoin = 'round'; ctx.stroke();
 
+        // Dots
         pts.forEach(function(p, i) {
-            var x = pad.left + (cw / Math.max(pts.length - 1, 1)) * i;
-            var y = pad.top + ch - (p.val / maxV) * ch;
-            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2);
+            var cp = chartPoints[i];
+            ctx.beginPath(); ctx.arc(cp.x, cp.y, 3, 0, Math.PI * 2);
             ctx.fillStyle = lineC; ctx.fill();
-            ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+            ctx.beginPath(); ctx.arc(cp.x, cp.y, 1.5, 0, Math.PI * 2);
             ctx.fillStyle = dark ? '#1e1f2a' : '#f0f2f5'; ctx.fill();
         });
+    }
+
+    // Chart tooltip on hover/touch
+    canvas.addEventListener('mousemove', handleChartHover);
+    canvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        var touch = e.touches[0];
+        var rect = canvas.getBoundingClientRect();
+        handleChartHover({ clientX: touch.clientX, clientY: touch.clientY });
+    }, { passive: false });
+
+    canvas.addEventListener('mouseleave', function() { tooltip.classList.remove('show'); });
+    canvas.addEventListener('touchend', function() { tooltip.classList.remove('show'); });
+
+    function handleChartHover(e) {
+        if (chartPoints.length === 0) return;
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left;
+        var my = e.clientY - rect.top;
+
+        // Find nearest point
+        var nearest = null, minDist = Infinity;
+        chartPoints.forEach(function(p) {
+            var dist = Math.abs(p.x - mx);
+            if (dist < minDist) { minDist = dist; nearest = p; }
+        });
+
+        if (nearest && minDist < 40) {
+            var d = new Date(nearest.date);
+            var dateStr = d.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' }) +
+                ' ' + d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', hour12: false });
+            tooltipDate.textContent = dateStr;
+            tooltipValue.textContent = formatBytes(nearest.bytes);
+
+            var tx = nearest.x - 60;
+            var ty = nearest.y - 60;
+            if (tx < 0) tx = nearest.x + 10;
+            if (tx + 120 > rect.width) tx = rect.width - 130;
+            if (ty < 0) ty = nearest.y + 10;
+
+            tooltip.style.left = tx + 'px';
+            tooltip.style.top = ty + 'px';
+            tooltip.classList.add('show');
+        } else {
+            tooltip.classList.remove('show');
+        }
     }
 
     function fetchChart(range) {
@@ -1490,7 +1776,7 @@
     fetchChart('7d');
     window.addEventListener('resize', function() { fetchChart(currentRange); });
 
-    // ANNOUNCEMENT
+    // ===== ANNOUNCEMENT =====
     fetch(window.location.pathname + '/info').then(function(r) {
         var ann = r.headers.get('announce') || r.headers.get('Announce');
         var annUrl = r.headers.get('announce-url');
