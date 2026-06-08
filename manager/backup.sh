@@ -200,6 +200,19 @@ send_to_telegram() {
     local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
     local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
     local PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    local CURL_PROXY=""
+
+if [[ "$PROXY" == socks5://* ]]; then
+    PROXY_STR="${PROXY#socks5://}"
+
+    if [[ "$PROXY_STR" == *"@"* ]]; then
+        AUTH="${PROXY_STR%@*}"
+        HOSTPORT="${PROXY_STR##*@}"
+        CURL_PROXY="--socks5-hostname $HOSTPORT -U $AUTH"
+    else
+        CURL_PROXY="--socks5-hostname $PROXY_STR"
+    fi
+fi
 
     if [ -z "$TK" ] || [ -z "$CH" ]; then
         log_backup "ERROR" "Invalid Telegram config"
@@ -212,7 +225,7 @@ send_to_telegram() {
 📅 $(date '+%Y-%m-%d %H:%M')
 📦 $(basename "$FILE")"
 
-        local RESULT=$(curl -4 -s -m 600 ${PROXY:+--proxy "$PROXY"} -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        local RESULT=$(curl -4 -s -m 600 $CURL_PROXY -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
 
         log_backup "DEBUG" "Telegram API response: $RESULT"
 
