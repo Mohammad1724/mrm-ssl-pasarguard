@@ -199,6 +199,7 @@ send_to_telegram() {
 
     local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
     local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    local PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
 
     if [ -z "$TK" ] || [ -z "$CH" ]; then
         log_backup "ERROR" "Invalid Telegram config"
@@ -211,7 +212,7 @@ send_to_telegram() {
 📅 $(date '+%Y-%m-%d %H:%M')
 📦 $(basename "$FILE")"
 
-        local RESULT=$(curl -4 -s -m 600 -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        local RESULT=$(curl -4 -s -m 600 ${PROXY:+--proxy "$PROXY"} -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
 
         log_backup "DEBUG" "Telegram API response: $RESULT"
 
@@ -223,7 +224,7 @@ send_to_telegram() {
             return 1
         fi
     elif [ -n "$MESSAGE" ]; then
-        curl -4 -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+        curl -4 -s ${PROXY:+--proxy "$PROXY"} -X POST "https://api.telegram.org/bot$TK/sendMessage" \
             -d chat_id="$CH" \
             -d text="$MESSAGE" > /dev/null
         return $?
@@ -242,8 +243,9 @@ test_telegram() {
 
     local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
     local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    local PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
 
-    local RESULT=$(curl -4 -s -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+    local RESULT=$(curl -4 -s ${PROXY:+--proxy "$PROXY"} -X POST "https://api.telegram.org/bot$TK/sendMessage" \
         -d chat_id="$CH" \
         -d text="🧪 MRM Backup Test - $(date '+%Y-%m-%d %H:%M')" 2>&1)
 
@@ -286,10 +288,25 @@ setup_telegram() {
         pause
         return
     fi
+    
+    echo ""
+    read -p "Use SOCKS5 proxy for Telegram? (y/N): " USE_PROXY
+
+    if [[ "$USE_PROXY" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Enter proxy in this format:"
+    echo "  socks5://127.0.0.1:1080"
+    echo "  socks5://user:pass@127.0.0.1:1080"
+    echo ""
+    read -p "Proxy: " PROXY_URL
+    else
+    PROXY_URL=""
+    fi
 
     cat > "$TG_CONFIG" << EOF
 TG_TOKEN="$TK"
 TG_CHAT="$CI"
+TG_PROXY="$PROXY_URL"
 EOF
     chmod 600 "$TG_CONFIG"
 
