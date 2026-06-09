@@ -13,6 +13,119 @@ export NC='\033[0m'
 # --- Config File (ذخیره انتخاب کاربر) ---
 CONFIG_FILE="/opt/mrm-manager/panel.conf"
 
+ensure_mrm_config_dir() {
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+}
+
+save_panel_config() {
+    local PANEL_NAME="$1"
+
+    ensure_mrm_config_dir || return 1
+    printf '%s\n' "$PANEL_NAME" > "$CONFIG_FILE"
+}
+
+get_installed_panels() {
+    local PANELS=()
+
+    [ -d "/opt/pasarguard" ] && PANELS+=("pasarguard")
+    [ -d "/opt/marzban" ] && PANELS+=("marzban")
+    [ -d "/opt/rebecca" ] && PANELS+=("rebecca")
+
+    printf '%s\n' "${PANELS[@]}"
+}
+
+auto_detect_single_panel() {
+    local DETECTED=()
+    local PANEL_NAME
+
+    while IFS= read -r PANEL_NAME; do
+        [ -n "$PANEL_NAME" ] && DETECTED+=("$PANEL_NAME")
+    done < <(get_installed_panels)
+
+    if [ "${#DETECTED[@]}" -eq 1 ]; then
+        save_panel_config "${DETECTED[0]}" || return 1
+        return 0
+    fi
+
+    return 1
+}
+
+apply_panel_config() {
+    local PANEL_TYPE="$1"
+
+    case "$PANEL_TYPE" in
+        pasarguard)
+            export PANEL_DIR="/opt/pasarguard"
+            export PANEL_ENV="/opt/pasarguard/.env"
+            export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
+            export DATA_DIR="/var/lib/pasarguard"
+            export NODE_DIR="/opt/pg-node"
+            export NODE_ENV="/opt/pg-node/.env"
+            export NODE_DEF_CERTS="/var/lib/pg-node/certs"
+            return 0
+            ;;
+        marzban)
+            export PANEL_DIR="/opt/marzban"
+            export PANEL_ENV="/opt/marzban/.env"
+            export PANEL_DEF_CERTS="/var/lib/marzban/certs"
+            export DATA_DIR="/var/lib/marzban"
+            export NODE_DIR="/opt/marzban-node"
+            export NODE_ENV="/opt/marzban-node/.env"
+            export NODE_DEF_CERTS="/var/lib/marzban-node/certs"
+            return 0
+            ;;
+        rebecca)
+            export PANEL_DIR="/opt/rebecca"
+            export PANEL_ENV="/opt/rebecca/.env"
+            export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
+            export DATA_DIR="/var/lib/rebecca"
+            export NODE_DIR="/opt/rebecca-node"
+            export NODE_ENV="/opt/rebecca-node/.env"
+            export NODE_DEF_CERTS="/var/lib/rebecca-node/certs"
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
+find_compose_file() {
+    local BASE_DIR="$1"
+    local CANDIDATE
+
+    [ -z "$BASE_DIR" ] && return 1
+
+    for CANDIDATE in \
+        "$BASE_DIR/docker-compose.yml" \
+        "$BASE_DIR/docker-compose.yaml" \
+        "$BASE_DIR/compose.yml" \
+        "$BASE_DIR/compose.yaml"
+    do
+        if [ -f "$CANDIDATE" ]; then
+            printf '%s\n' "$CANDIDATE"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+get_panel_compose_file() {
+    find_compose_file "$PANEL_DIR"
+}
+
+get_node_compose_file() {
+    find_compose_file "$NODE_DIR"
+}
+
+get_panel_container_id() {
+    local COMPOSE_FILE
+
+    load_panel_config >/dev/null 2>&1 || return 1
+    COMPOSE_FILE="$(get_panel_compose_file 2>/dev/null)" || return 1
+    docker compose -f "$COMPOSE_FILE" ps -q 2>/dev/null | head -1
+}
+
 # --- Panel Selection ---
 select_panel() {
     echo ""
@@ -28,68 +141,49 @@ select_panel() {
 
     case $PANEL_CHOICE in
         1)
-            echo "pasarguard" > "$CONFIG_FILE"
+            save_panel_config "pasarguard"
             ;;
         2)
-            echo "marzban" > "$CONFIG_FILE"
+            save_panel_config "marzban"
             ;;
         3)
-            echo "rebecca" > "$CONFIG_FILE"
+            save_panel_config "rebecca"
             ;;
         *)
             echo -e "${RED}Invalid selection. Defaulting to Pasarguard.${NC}"
-            echo "pasarguard" > "$CONFIG_FILE"
+            save_panel_config "pasarguard"
             ;;
     esac
 
     load_panel_config
-    echo -e "${GREEN}✔ Panel set to: $(cat $CONFIG_FILE)${NC}"
+    echo -e "${GREEN}✔ Panel set to: $(cat "$CONFIG_FILE" 2>/dev/null)${NC}"
     echo ""
 }
 
 # --- Load Panel Config ---
 load_panel_config() {
-    # اگر فایل کانفیگ وجود نداشت، از کاربر بپرس
+    # اگر فایل کانفیگ وجود نداشت، ابتدا تشخیص خودکار را امتحان کن
     if [ ! -f "$CONFIG_FILE" ]; then
-        select_panel
-        return
-    fi
-
-    local PANEL_TYPE=$(cat "$CONFIG_FILE" 2>/dev/null)
-
-    case $PANEL_TYPE in
-        pasarguard)
-            export PANEL_DIR="/opt/pasarguard"
-            export PANEL_ENV="/opt/pasarguard/.env"
-            export PANEL_DEF_CERTS="/var/lib/pasarguard/certs"
-            export DATA_DIR="/var/lib/pasarguard"
-            export NODE_DIR="/opt/pg-node"
-            export NODE_ENV="/opt/pg-node/.env"
-            export NODE_DEF_CERTS="/var/lib/pg-node/certs"
-            ;;
-        marzban)
-            export PANEL_DIR="/opt/marzban"
-            export PANEL_ENV="/opt/marzban/.env"
-            export PANEL_DEF_CERTS="/var/lib/marzban/certs"
-            export DATA_DIR="/var/lib/marzban"
-            export NODE_DIR="/opt/marzban-node"
-            export NODE_ENV="/opt/marzban-node/.env"
-            export NODE_DEF_CERTS="/var/lib/marzban-node/certs"
-            ;;
-        rebecca)
-            export PANEL_DIR="/opt/rebecca"
-            export PANEL_ENV="/opt/rebecca/.env"
-            export PANEL_DEF_CERTS="/var/lib/rebecca/certs"
-            export DATA_DIR="/var/lib/rebecca"
-            export NODE_DIR="/opt/rebecca-node"
-            export NODE_ENV="/opt/rebecca-node/.env"
-            export NODE_DEF_CERTS="/var/lib/rebecca-node/certs"
-            ;;
-        *)
+        auto_detect_single_panel || {
             select_panel
             return
-            ;;
-    esac
+        }
+    fi
+
+    local PANEL_TYPE
+    PANEL_TYPE=$(cat "$CONFIG_FILE" 2>/dev/null)
+
+    if apply_panel_config "$PANEL_TYPE"; then
+        return 0
+    fi
+
+    auto_detect_single_panel || {
+        select_panel
+        return
+    }
+
+    PANEL_TYPE=$(cat "$CONFIG_FILE" 2>/dev/null)
+    apply_panel_config "$PANEL_TYPE"
 }
 
 # --- Detect Active Panel (برای سازگاری با کدهای قبلی) ---
@@ -100,7 +194,7 @@ detect_active_panel() {
 
 # --- Change Panel (برای منوی تنظیمات) ---
 change_panel() {
-    echo -e "${YELLOW}Current Panel: $(cat $CONFIG_FILE 2>/dev/null)${NC}"
+    echo -e "${YELLOW}Current Panel: $(cat "$CONFIG_FILE" 2>/dev/null)${NC}"
     select_panel
 }
 
@@ -121,21 +215,32 @@ check_root() {
 
 install_deps() {
     local NEED_INSTALL=false
+    local REQUIRED_COMMANDS=(
+        certbot
+        nginx
+        python3
+        sqlite3
+        docker
+        jq
+        lsof
+        curl
+        nano
+        socat
+        tar
+        unzip
+    )
+    local CMD
 
-    command -v certbot &> /dev/null || NEED_INSTALL=true
-    command -v nginx &> /dev/null || NEED_INSTALL=true
-    command -v python3 &> /dev/null || NEED_INSTALL=true
-    command -v sqlite3 &> /dev/null || NEED_INSTALL=true
-    command -v docker &> /dev/null || NEED_INSTALL=true
-    command -v jq &> /dev/null || NEED_INSTALL=true
-    command -v lsof &> /dev/null || NEED_INSTALL=true
+    for CMD in "${REQUIRED_COMMANDS[@]}"; do
+        command -v "$CMD" >/dev/null 2>&1 || NEED_INSTALL=true
+    done
 
     if [ "$NEED_INSTALL" = true ]; then
         echo -e "${BLUE}[INFO] Installing dependencies...${NC}"
         apt-get update -qq > /dev/null
         apt-get install -y certbot lsof curl nano socat tar python3 nginx unzip jq sqlite3 -qq > /dev/null
 
-        if ! command -v docker &> /dev/null; then
+        if ! command -v docker >/dev/null 2>&1; then
             echo -e "${BLUE}[INFO] Installing Docker...${NC}"
             curl -fsSL https://get.docker.com | sh > /dev/null 2>&1
         fi
@@ -150,7 +255,8 @@ pause() {
 # --- Service Control Functions ---
 
 get_panel_cli() {
-    local panel=$(cat "$CONFIG_FILE" 2>/dev/null)
+    local panel
+    panel=$(cat "$CONFIG_FILE" 2>/dev/null)
     case "$panel" in
         rebecca) echo "rebecca-cli" ;;
         pasarguard) echo "pasarguard-cli" ;;
@@ -160,40 +266,72 @@ get_panel_cli() {
 }
 
 restart_service() {
-    local SERVICE=$1
+    local SERVICE="$1"
+    local COMPOSE_FILE=""
+
     load_panel_config
 
     if [ "$SERVICE" == "panel" ]; then
         echo -e "${BLUE}Restarting Panel ($PANEL_DIR)...${NC}"
-        if [ -d "$PANEL_DIR" ]; then
-            cd "$PANEL_DIR" && docker compose down && docker compose up -d
-            echo -e "${GREEN}Done.${NC}"
-        else
+        if [ ! -d "$PANEL_DIR" ]; then
             echo -e "${RED}Panel not found at $PANEL_DIR${NC}"
+            return 1
+        fi
+
+        COMPOSE_FILE="$(get_panel_compose_file 2>/dev/null)"
+        if [ -z "$COMPOSE_FILE" ]; then
+            echo -e "${RED}No compose file found in $PANEL_DIR${NC}"
+            return 1
+        fi
+
+        if (cd "$PANEL_DIR" && docker compose down && docker compose up -d); then
+            echo -e "${GREEN}Done.${NC}"
+            return 0
+        else
+            echo -e "${RED}Failed to restart panel.${NC}"
+            return 1
         fi
     elif [ "$SERVICE" == "node" ]; then
         echo -e "${BLUE}Restarting Node ($NODE_DIR)...${NC}"
-        if [ -d "$NODE_DIR" ]; then
-            cd "$NODE_DIR" && docker compose restart
-            echo -e "${GREEN}Done.${NC}"
-        else
+        if [ ! -d "$NODE_DIR" ]; then
             echo -e "${RED}Node directory not found at $NODE_DIR${NC}"
+            return 1
+        fi
+
+        COMPOSE_FILE="$(get_node_compose_file 2>/dev/null)"
+        if [ -z "$COMPOSE_FILE" ]; then
+            echo -e "${RED}No compose file found in $NODE_DIR${NC}"
+            return 1
+        fi
+
+        if (cd "$NODE_DIR" && docker compose restart); then
+            echo -e "${GREEN}Done.${NC}"
+            return 0
+        else
+            echo -e "${RED}Failed to restart node.${NC}"
+            return 1
         fi
     fi
+
+    echo -e "${RED}Unknown service: $SERVICE${NC}"
+    return 1
 }
 
 # --- Admin Management ---
 
 admin_create() {
-    local cli=$(get_panel_cli)
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
+    local cli
+    local cid
+
+    cli=$(get_panel_cli)
+    cid=$(get_panel_container_id)
 
     if [ -z "$cid" ]; then
-        echo -e "${RED}Panel is not running!${NC}"
+        echo -e "${RED}Panel is not running or compose file was not found!${NC}"
         return
     fi
 
-    echo -e "${CYAN}Creating Admin for $(cat $CONFIG_FILE)${NC}"
+    echo -e "${CYAN}Creating Admin for $(cat "$CONFIG_FILE" 2>/dev/null)${NC}"
     echo "1) Super Admin (Sudo)"
     echo "2) Regular Admin"
     read -p "Select: " type
@@ -206,10 +344,16 @@ admin_create() {
 }
 
 admin_reset() {
-    local cli=$(get_panel_cli)
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
+    local cli
+    local cid
 
-    if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
+    cli=$(get_panel_cli)
+    cid=$(get_panel_container_id)
+
+    if [ -z "$cid" ]; then
+        echo -e "${RED}Panel not running or compose file was not found${NC}"
+        return
+    fi
 
     read -p "Username to reset password: " user
     if [ -n "$user" ]; then
@@ -218,10 +362,16 @@ admin_reset() {
 }
 
 admin_delete() {
-    local cli=$(get_panel_cli)
-    local cid=$(docker compose -f "$PANEL_DIR/docker-compose.yml" ps -q 2>/dev/null | head -1)
+    local cli
+    local cid
 
-    if [ -z "$cid" ]; then echo -e "${RED}Panel not running${NC}"; return; fi
+    cli=$(get_panel_cli)
+    cid=$(get_panel_container_id)
+
+    if [ -z "$cid" ]; then
+        echo -e "${RED}Panel not running or compose file was not found${NC}"
+        return
+    fi
 
     read -p "Username to delete: " user
     if [ -n "$user" ]; then
