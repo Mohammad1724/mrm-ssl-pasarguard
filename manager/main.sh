@@ -34,8 +34,6 @@ load_required_module "/opt/mrm-manager/theme.sh"
 load_required_module "/opt/mrm-manager/migrator.sh"
 load_required_module "/opt/mrm-manager/mirza.sh"
 
-# Load Inbound Module (NEW STRUCTURE)
-load_required_module "/opt/mrm-manager/inbound/main.sh"
 
 # Detect panel on startup
 detect_active_panel > /dev/null
