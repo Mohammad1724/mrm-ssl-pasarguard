@@ -48,14 +48,6 @@ FILES=(
     "main.sh"
 )
 
-# Inbound Module Files
-INBOUND_FILES=(
-    "inbound/main.sh"
-    "inbound/lib.sh"
-    "inbound/create.sh"
-    "inbound/manage.sh"
-    "inbound/tools.sh"
-)
 
 # Optional files
 OPT_FILES=(
