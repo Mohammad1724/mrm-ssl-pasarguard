@@ -48,6 +48,86 @@ setup_env() {
     log_backup "INFO" "Environment: PANEL_DIR=$PANEL_DIR, DATA_DIR=$DATA_DIR"
 }
 
+get_existing_compose_file() {
+    local TARGET="$1"
+    local COMPOSE_FILE=""
+    local BASE_DIR=""
+    local CANDIDATE
+
+    case "$TARGET" in
+        panel)
+            if declare -f get_panel_compose_file >/dev/null 2>&1; then
+                COMPOSE_FILE="$(get_panel_compose_file 2>/dev/null || true)"
+            fi
+            BASE_DIR="$PANEL_DIR"
+            ;;
+        node)
+            if declare -f get_node_compose_file >/dev/null 2>&1; then
+                COMPOSE_FILE="$(get_node_compose_file 2>/dev/null || true)"
+            fi
+            BASE_DIR="$NODE_DIR"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    if [ -n "$COMPOSE_FILE" ] && [ -f "$COMPOSE_FILE" ]; then
+        printf '%s\n' "$COMPOSE_FILE"
+        return 0
+    fi
+
+    [ -n "$BASE_DIR" ] && [ -d "$BASE_DIR" ] || return 1
+
+    for CANDIDATE in \
+        "$BASE_DIR/docker-compose.yml" \
+        "$BASE_DIR/docker-compose.yaml" \
+        "$BASE_DIR/compose.yml" \
+        "$BASE_DIR/compose.yaml"
+    do
+        if [ -f "$CANDIDATE" ]; then
+            printf '%s\n' "$CANDIDATE"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+run_compose_file() {
+    local COMPOSE_FILE="$1"
+    shift
+
+    [ -n "$COMPOSE_FILE" ] && [ -f "$COMPOSE_FILE" ] || return 1
+
+    if docker compose version >/dev/null 2>&1; then
+        docker compose -f "$COMPOSE_FILE" "$@"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        docker-compose -f "$COMPOSE_FILE" "$@"
+    else
+        return 1
+    fi
+}
+
+build_telegram_proxy_args() {
+    local PROXY="$1"
+    local PROXY_STR
+    local AUTH
+    local HOSTPORT
+
+    if [[ "$PROXY" == socks5://* ]]; then
+        PROXY_STR="${PROXY#socks5://}"
+
+        if [[ "$PROXY_STR" == *"@"* ]]; then
+            AUTH="${PROXY_STR%@*}"
+            HOSTPORT="${PROXY_STR##*@}"
+            printf '%s\n' "--socks5-hostname" "$HOSTPORT" "-U" "$AUTH"
+        else
+            printf '%s\n' "--socks5-hostname" "$PROXY_STR"
+        fi
+    fi
+}
+
 get_env_val() {
     [ -f "$PANEL_ENV" ] && grep "^$1=" "$PANEL_ENV" | cut -d'=' -f2- | sed 's/[[:space:]]*#.*$//' | sed 's/^"//;s/"$//' | xargs
 }
@@ -93,18 +173,19 @@ get_server_ip() {
 # ==========================================
 fix_env_file() {
     local ENV_FILE=$1
+    local TEMP_FILE
+    local prev_line=""
 
     if [ ! -f "$ENV_FILE" ]; then
-        return
+        return 1
     fi
 
     log_backup "INFO" "Fixing .env file: $ENV_FILE"
 
     # Create temp file
-    local TEMP_FILE=$(mktemp)
+    TEMP_FILE=$(mktemp) || return 1
 
     # Read and fix broken lines
-    local prev_line=""
     while IFS= read -r line || [ -n "$line" ]; do
         # Check if previous line ends with UVICORN_ or SSL_ without value
         if [[ "$prev_line" =~ ^UVICORN_$ ]] || [[ "$prev_line" =~ ^SSL_$ ]]; then
@@ -142,29 +223,37 @@ fix_env_file() {
     sed -i 's/UVICORN_ SSL_KEYFILE/UVICORN_SSL_KEYFILE/g' "$TEMP_FILE"
 
     # Remove duplicate empty lines
-    cat -s "$TEMP_FILE" > "$ENV_FILE"
-    rm -f "$TEMP_FILE"
+    if cat -s "$TEMP_FILE" > "$ENV_FILE"; then
+        rm -f "$TEMP_FILE"
+        log_backup "SUCCESS" "Fixed .env file: $ENV_FILE"
+        return 0
+    fi
 
-    log_backup "SUCCESS" "Fixed .env file: $ENV_FILE"
+    rm -f "$TEMP_FILE"
+    log_backup "ERROR" "Failed to fix .env file: $ENV_FILE"
+    return 1
 }
 
 # ==========================================
 # FIX DOCKER COMPOSE (Update IPs)
 # ==========================================
 fix_docker_compose() {
-    local COMPOSE_FILE="$PANEL_DIR/docker-compose.yml"
+    local COMPOSE_FILE
+    local NEW_IP
 
-    if [ ! -f "$COMPOSE_FILE" ]; then
-        log_backup "WARNING" "docker-compose.yml not found"
-        return
+    COMPOSE_FILE="$(get_existing_compose_file panel 2>/dev/null || true)"
+
+    if [ -z "$COMPOSE_FILE" ] || [ ! -f "$COMPOSE_FILE" ]; then
+        log_backup "WARNING" "Panel compose file not found"
+        return 1
     fi
 
     # Get current server IP
-    local NEW_IP=$(get_server_ip)
+    NEW_IP=$(get_server_ip)
 
     if [ -z "$NEW_IP" ]; then
         log_backup "WARNING" "Could not detect server IP"
-        return
+        return 1
     fi
 
     log_backup "INFO" "Updating docker-compose with new IP: $NEW_IP"
@@ -182,7 +271,8 @@ fix_docker_compose() {
     # Update gunicorn bind address if exists
     sed -i -E "s/--bind [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:/--bind ${NEW_IP}:/g" "$COMPOSE_FILE"
 
-    log_backup "SUCCESS" "Updated docker-compose.yml with IP: $NEW_IP"
+    log_backup "SUCCESS" "Updated compose file with IP: $NEW_IP"
+    return 0
 }
 
 # ==========================================
@@ -191,28 +281,21 @@ fix_docker_compose() {
 send_to_telegram() {
     local FILE="$1"
     local MESSAGE="${2:-}"
+    local TK
+    local CH
+    local PROXY
+    local RESULT
+    local -a CURL_PROXY_ARGS=()
 
     if [ ! -f "$TG_CONFIG" ]; then
         log_backup "WARNING" "Telegram not configured"
         return 1
     fi
 
-    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CURL_PROXY=""
-
-if [[ "$PROXY" == socks5://* ]]; then
-    PROXY_STR="${PROXY#socks5://}"
-
-    if [[ "$PROXY_STR" == *"@"* ]]; then
-        AUTH="${PROXY_STR%@*}"
-        HOSTPORT="${PROXY_STR##*@}"
-        CURL_PROXY="--socks5-hostname $HOSTPORT -U $AUTH"
-    else
-        CURL_PROXY="--socks5-hostname $PROXY_STR"
-    fi
-fi
+    TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    mapfile -t CURL_PROXY_ARGS < <(build_telegram_proxy_args "$PROXY")
 
     if [ -z "$TK" ] || [ -z "$CH" ]; then
         log_backup "ERROR" "Invalid Telegram config"
@@ -225,7 +308,7 @@ fi
 📅 $(date '+%Y-%m-%d %H:%M')
 📦 $(basename "$FILE")"
 
-        local RESULT=$(curl -4 -s -m 600 $CURL_PROXY -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
+        RESULT=$(curl -4 -s -m 600 "${CURL_PROXY_ARGS[@]}" -F chat_id="$CH" -F caption="$CAPTION" -F document=@"$FILE" "https://api.telegram.org/bot$TK/sendDocument")
 
         log_backup "DEBUG" "Telegram API response: $RESULT"
 
@@ -237,7 +320,7 @@ fi
             return 1
         fi
     elif [ -n "$MESSAGE" ]; then
-        curl -4 -s $CURL_PROXY -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+        curl -4 -s "${CURL_PROXY_ARGS[@]}" -X POST "https://api.telegram.org/bot$TK/sendMessage" \
             -d chat_id="$CH" \
             -d text="$MESSAGE" > /dev/null
         return $?
@@ -247,6 +330,12 @@ fi
 }
 
 test_telegram() {
+    local TK
+    local CH
+    local PROXY
+    local RESULT
+    local -a CURL_PROXY_ARGS=()
+
     if [ ! -f "$TG_CONFIG" ]; then
         ui_error "Telegram not configured!"
         return 1
@@ -254,24 +343,12 @@ test_telegram() {
 
     ui_spinner_start "Testing Telegram connection..."
 
-    local TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
-    local CURL_PROXY=""
+    TK=$(grep "TG_TOKEN" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    CH=$(grep "TG_CHAT" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    PROXY=$(grep "TG_PROXY" "$TG_CONFIG" | cut -d'=' -f2 | tr -d '"')
+    mapfile -t CURL_PROXY_ARGS < <(build_telegram_proxy_args "$PROXY")
 
-if [[ "$PROXY" == socks5://* ]]; then
-    PROXY_STR="${PROXY#socks5://}"
-
-    if [[ "$PROXY_STR" == *"@"* ]]; then
-        AUTH="${PROXY_STR%@*}"
-        HOSTPORT="${PROXY_STR##*@}"
-        CURL_PROXY="--socks5-hostname $HOSTPORT -U $AUTH"
-    else
-        CURL_PROXY="--socks5-hostname $PROXY_STR"
-    fi
-fi
-
-    local RESULT=$(curl -4 -s $CURL_PROXY -X POST "https://api.telegram.org/bot$TK/sendMessage" \
+    RESULT=$(curl -4 -s "${CURL_PROXY_ARGS[@]}" -X POST "https://api.telegram.org/bot$TK/sendMessage" \
         -d chat_id="$CH" \
         -d text="🧪 MRM Backup Test - $(date '+%Y-%m-%d %H:%M')" 2>&1)
 
@@ -319,14 +396,14 @@ setup_telegram() {
     read -p "Use SOCKS5 proxy for Telegram? (y/N): " USE_PROXY
 
     if [[ "$USE_PROXY" =~ ^[Yy]$ ]]; then
-    echo ""
-    echo "Enter proxy in this format:"
-    echo "  socks5://127.0.0.1:1080"
-    echo "  socks5://user:pass@127.0.0.1:1080"
-    echo ""
-    read -p "Proxy: " PROXY_URL
+        echo ""
+        echo "Enter proxy in this format:"
+        echo "  socks5://127.0.0.1:1080"
+        echo "  socks5://user:pass@127.0.0.1:1080"
+        echo ""
+        read -p "Proxy: " PROXY_URL
     else
-    PROXY_URL=""
+        PROXY_URL=""
     fi
 
     cat > "$TG_CONFIG" << EOF
@@ -348,10 +425,41 @@ EOF
     pause
 }
 
+remove_telegram_settings() {
+    clear
+    ui_header "REMOVE TELEGRAM SETTINGS"
+
+    if [ ! -f "$TG_CONFIG" ]; then
+        ui_warning "Telegram settings are not configured."
+        pause
+        return
+    fi
+
+    echo -e "${YELLOW}This will delete the saved Telegram bot settings.${NC}"
+    echo -e "${CYAN}Scheduled backups will continue, but they will no longer be sent to Telegram.${NC}"
+    echo ""
+    read -p "Delete Telegram settings? (y/N): " CONFIRM
+
+    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+        rm -f "$TG_CONFIG"
+        ui_success "Telegram settings removed."
+        log_backup "INFO" "Telegram settings removed"
+    else
+        echo "Cancelled"
+    fi
+
+    pause
+}
+
 # ==========================================
 # SMART FIX ENGINE
 # ==========================================
 apply_smart_fix() {
+    local FIREWALL_OK=false
+    local ENV_FILES_FOUND=false
+    local ENV_FIX_OK=true
+    local COMPOSE_FIX_OK=false
+
     clear
     echo -e "${CYAN}Applying Intelligent System Repairs...${NC}"
     log_backup "INFO" "Starting smart fix"
@@ -365,32 +473,65 @@ apply_smart_fix() {
     local SSH_PORT=$(ss -tlnp | grep sshd | grep -Po '(?<=:)\d+' | head -1)
     [ -z "$SSH_PORT" ] && SSH_PORT=22
 
-    ufw allow "$SSH_PORT"/tcp >/dev/null 2>&1
-    ufw allow 80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1
-    ufw --force enable >/dev/null 2>&1
+    if command -v ufw >/dev/null 2>&1; then
+        if ufw allow "$SSH_PORT"/tcp >/dev/null 2>&1 && \
+           ufw allow 80,443,2096,7431,6432,8443,2083,2097,8080/tcp >/dev/null 2>&1 && \
+           ufw --force enable >/dev/null 2>&1; then
+            FIREWALL_OK=true
+        fi
+    fi
     ui_spinner_stop
-    ui_success "Firewall configured (SSH: $SSH_PORT)"
 
-    # C. Fix Panel .env
+    if [ "$FIREWALL_OK" = true ]; then
+        ui_success "Firewall configured (SSH: $SSH_PORT)"
+    elif ! command -v ufw >/dev/null 2>&1; then
+        ui_warning "ufw is not installed. Firewall step skipped."
+    else
+        ui_error "Firewall configuration failed"
+    fi
+
+    # C. Fix Panel/Node .env
     ui_spinner_start "Fixing .env files..."
-    fix_env_file "$PANEL_ENV"
-    fix_env_file "$NODE_ENV"
+    for ENV_FILE in "$PANEL_ENV" "$NODE_ENV"; do
+        if [ -f "$ENV_FILE" ]; then
+            ENV_FILES_FOUND=true
+            fix_env_file "$ENV_FILE" || ENV_FIX_OK=false
+        fi
+    done
     ui_spinner_stop
-    ui_success ".env files repaired"
 
-    # D. Fix docker-compose.yml IPs
+    if [ "$ENV_FILES_FOUND" = true ] && [ "$ENV_FIX_OK" = true ]; then
+        ui_success ".env files repaired"
+    elif [ "$ENV_FILES_FOUND" = true ]; then
+        ui_error "One or more .env files could not be repaired"
+    else
+        ui_warning "No .env files found to repair"
+    fi
+
+    # D. Fix docker-compose IPs
     ui_spinner_start "Updating docker-compose IPs..."
-    fix_docker_compose
+    if fix_docker_compose; then
+        COMPOSE_FIX_OK=true
+    fi
     ui_spinner_stop
-    ui_success "Docker compose updated with IP: $SERVER_IP"
 
-    # E. Fix Node .env
+    if [ "$COMPOSE_FIX_OK" = true ]; then
+        ui_success "Docker compose updated with IP: $SERVER_IP"
+    else
+        ui_warning "Compose file not found or IP update failed"
+    fi
+
+    # E. Fix Node .env formatting
     if [ -f "$NODE_ENV" ]; then
         ui_spinner_start "Fixing Node configuration..."
-        sed -i 's/=[[:space:]]*/=/g' "$NODE_ENV"
-        sed -i 's/[[:space:]]*=/=/g' "$NODE_ENV"
-        ui_spinner_stop
-        ui_success "Node .env fixed"
+        if sed -i 's/=[[:space:]]*/=/g' "$NODE_ENV" && \
+           sed -i 's/[[:space:]]*=/=/g' "$NODE_ENV"; then
+            ui_spinner_stop
+            ui_success "Node .env fixed"
+        else
+            ui_spinner_stop
+            ui_error "Failed to normalize Node .env"
+        fi
     fi
 
     # F. Generate Node SSL key if missing
@@ -802,18 +943,52 @@ do_restore() {
     fi
 
     # Stop services
+    local PANEL_COMPOSE_FILE="$(get_existing_compose_file panel 2>/dev/null || true)"
+    local NODE_COMPOSE_FILE="$(get_existing_compose_file node 2>/dev/null || true)"
+    local STOPPED_ANY=false
+    local STOP_FAILED=false
+
     ui_spinner_start "Stopping services..."
-    $DOCKER_CMD -f "$PANEL_DIR/docker-compose.yml" down >/dev/null 2>&1
-    $DOCKER_CMD -f "$NODE_DIR/docker-compose.yml" down >/dev/null 2>&1
+    if [ -n "$PANEL_COMPOSE_FILE" ]; then
+        if run_compose_file "$PANEL_COMPOSE_FILE" down >/dev/null 2>&1; then
+            STOPPED_ANY=true
+        else
+            STOP_FAILED=true
+        fi
+    fi
+    if [ -n "$NODE_COMPOSE_FILE" ]; then
+        if run_compose_file "$NODE_COMPOSE_FILE" down >/dev/null 2>&1; then
+            STOPPED_ANY=true
+        else
+            STOP_FAILED=true
+        fi
+    fi
     ui_spinner_stop
-    ui_success "Services stopped"
+
+    if [ "$STOP_FAILED" = true ]; then
+        ui_error "Failed to stop one or more services"
+    elif [ "$STOPPED_ANY" = true ]; then
+        ui_success "Services stopped"
+    else
+        ui_warning "No compose services found to stop"
+    fi
 
     # Backup current state (just in case)
     ui_spinner_start "Creating safety backup..."
     local SAFETY_BACKUP="$BACKUP_DIR/pre_restore_$(date +%Y%m%d_%H%M%S).tar.gz"
-    tar -czf "$SAFETY_BACKUP" "$PANEL_DIR" "$DATA_DIR" 2>/dev/null
-    ui_spinner_stop
-    ui_success "Safety backup created"
+    local -a SAFETY_ITEMS=()
+    [ -d "$PANEL_DIR" ] && SAFETY_ITEMS+=("$PANEL_DIR")
+    [ -d "$DATA_DIR" ] && SAFETY_ITEMS+=("$DATA_DIR")
+    [ -d "$NODE_DIR" ] && SAFETY_ITEMS+=("$NODE_DIR")
+    [ -d "$(dirname "$NODE_DEF_CERTS")" ] && SAFETY_ITEMS+=("$(dirname "$NODE_DEF_CERTS")")
+
+    if [ "${#SAFETY_ITEMS[@]}" -gt 0 ] && tar -czf "$SAFETY_BACKUP" "${SAFETY_ITEMS[@]}" 2>/dev/null; then
+        ui_spinner_stop
+        ui_success "Safety backup created"
+    else
+        ui_spinner_stop
+        ui_warning "Safety backup could not be created"
+    fi
 
     # Remove old files
     ui_spinner_start "Cleaning old files..."
@@ -863,30 +1038,66 @@ do_restore() {
     echo -e "${CYAN}Fixing configurations for new server...${NC}"
 
     ui_spinner_start "Fixing .env files..."
-    fix_env_file "$PANEL_ENV"
-    fix_env_file "$NODE_ENV"
+    local RESTORE_ENV_OK=true
+    if [ -f "$PANEL_ENV" ]; then
+        fix_env_file "$PANEL_ENV" || RESTORE_ENV_OK=false
+    fi
+    if [ -f "$NODE_ENV" ]; then
+        fix_env_file "$NODE_ENV" || RESTORE_ENV_OK=false
+    fi
     ui_spinner_stop
-    ui_success ".env files fixed"
+    if [ "$RESTORE_ENV_OK" = true ]; then
+        ui_success ".env files fixed"
+    else
+        ui_warning "One or more .env files could not be fixed"
+    fi
 
     ui_spinner_start "Updating IPs in docker-compose..."
-    fix_docker_compose
-    ui_spinner_stop
-    ui_success "Docker compose IPs updated"
+    if fix_docker_compose; then
+        ui_spinner_stop
+        ui_success "Docker compose IPs updated"
+    else
+        ui_spinner_stop
+        ui_warning "Docker compose IP update skipped or failed"
+    fi
 
     # Apply smart fixes
     apply_smart_fix
 
     # Start services
+    local STARTED_ANY=false
+    local START_FAILED=false
+    PANEL_COMPOSE_FILE="$(get_existing_compose_file panel 2>/dev/null || true)"
+    NODE_COMPOSE_FILE="$(get_existing_compose_file node 2>/dev/null || true)"
+
     ui_spinner_start "Starting services..."
-    if [ -d "$NODE_DIR" ] && [ -f "$NODE_DIR/docker-compose.yml" ]; then
-        cd "$NODE_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
+    if [ -n "$NODE_COMPOSE_FILE" ]; then
+        if run_compose_file "$NODE_COMPOSE_FILE" up -d >/dev/null 2>&1; then
+            STARTED_ANY=true
+        else
+            START_FAILED=true
+        fi
     fi
-    cd "$PANEL_DIR" && $DOCKER_CMD up -d >/dev/null 2>&1
+    if [ -n "$PANEL_COMPOSE_FILE" ]; then
+        if run_compose_file "$PANEL_COMPOSE_FILE" up -d >/dev/null 2>&1; then
+            STARTED_ANY=true
+        else
+            START_FAILED=true
+        fi
+    fi
     ui_spinner_stop
-    ui_success "Services started"
+
+    if [ "$START_FAILED" = true ]; then
+        ui_error "Failed to start one or more services"
+    elif [ "$STARTED_ANY" = true ]; then
+        ui_success "Services started"
+    else
+        ui_warning "No compose services found to start"
+    fi
 
     # Restore database
     if grep -qiE "postgresql|postgres" "$PANEL_ENV" 2>/dev/null && [ -f "$ROOT/database/db.sql" ]; then
+        local DB_IMPORTED=false
         echo -e "${YELLOW}Waiting for database to initialize (30s)...${NC}"
         sleep 30
 
@@ -901,15 +1112,24 @@ do_restore() {
             
             # Drop and restore WITH PASSWORD using pipe
             if [ -n "$DB_PASS" ]; then
-                docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
-                cat "$ROOT/database/db.sql" | docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1
+                if docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 && \
+                   cat "$ROOT/database/db.sql" | docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+                    DB_IMPORTED=true
+                fi
             else
-                docker exec "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1
-                cat "$ROOT/database/db.sql" | docker exec -i "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1
+                if docker exec "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;" >/dev/null 2>&1 && \
+                   cat "$ROOT/database/db.sql" | docker exec -i "$DB_CONT" psql -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+                    DB_IMPORTED=true
+                fi
             fi
         fi
         ui_spinner_stop
-        ui_success "Database imported"
+
+        if [ "$DB_IMPORTED" = true ]; then
+            ui_success "Database imported"
+        else
+            ui_error "Database import failed"
+        fi
     fi
 
     # Cleanup
@@ -1110,9 +1330,10 @@ backup_menu() {
         echo "4)  🗑️  Delete Backup"
         echo "5)  🤖 Setup Telegram Bot"
         echo "6)  🧪 Test Telegram"
-        echo "7)  ⏰ Setup Cron Scheduler"
-        echo "8)  🔧 Run Smart Fix Only"
-        echo "9)  📋 View Logs"
+        echo "7)  ❌ Remove Telegram Settings"
+        echo "8)  ⏰ Setup Cron Scheduler"
+        echo "9)  🔧 Run Smart Fix Only"
+        echo "10) 📋 View Logs"
         echo ""
         echo "0)  ↩️  Back"
         echo ""
@@ -1125,11 +1346,12 @@ backup_menu() {
             4) delete_backup ;;
             5) setup_telegram ;;
             6) test_telegram; pause ;;
-            7) setup_cron ;;
-            8) apply_smart_fix; pause ;;
-            9) view_backup_logs ;;
+            7) remove_telegram_settings ;;
+            8) setup_cron ;;
+            9) apply_smart_fix; pause ;;
+            10) view_backup_logs ;;
             0) return ;;
-            *) ;;
+            *) ui_error "Invalid option"; sleep 1 ;;
         esac
     done
 }
