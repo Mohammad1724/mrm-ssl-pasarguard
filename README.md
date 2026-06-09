@@ -71,8 +71,8 @@ mrm
 <td width="50%">
 
 ### ⚡ ابزارها
-- ویزارد ساخت Inbound
 - مدیریت قالب صفحه ساب
+- مدیریت سایت فیک
 - کنترل سرویس و ادمین
 
 </td>
@@ -140,7 +140,6 @@ mrm → Backup & Restore → Telegram Settings
 ├── backup.sh            # بکاپ و تلگرام
 ├── migrator.sh          # ابزار مهاجرت
 ├── theme.sh             # مدیریت قالب
-├── inbound.sh           # ویزارد کانفیگ
 ├── site.sh              # سایت فیک
 ├── port_manager.sh      # مدیریت پورت
 └── domain_separator.sh  # تفکیک دامنه
