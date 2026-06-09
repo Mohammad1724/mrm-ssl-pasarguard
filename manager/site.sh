@@ -4,6 +4,40 @@ if [ -z "$PANEL_DIR" ]; then source /opt/mrm-manager/utils.sh; fi
 
 WWW_DIR="/var/www/html"
 
+site_invalid_option() {
+    echo -e "${RED}Invalid option.${NC}"
+    sleep 1
+}
+
+clear_www_dir() {
+    mkdir -p "$WWW_DIR"
+    find "$WWW_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null
+}
+
+copy_dir_contents() {
+    local SRC_DIR="$1"
+    local DST_DIR="$2"
+
+    mkdir -p "$DST_DIR"
+    (cd "$SRC_DIR" && tar -cf - .) | (cd "$DST_DIR" && tar -xf -)
+}
+
+restore_www_backup() {
+    local BACKUP_DIR="$1"
+
+    [ -d "$BACKUP_DIR" ] || return 1
+    clear_www_dir
+    copy_dir_contents "$BACKUP_DIR" "$WWW_DIR"
+}
+
+restart_nginx_checked() {
+    if ! nginx -t >/dev/null 2>&1; then
+        return 1
+    fi
+
+    systemctl restart nginx >/dev/null 2>&1
+}
+
 install_nginx_if_needed() {
     # Install required tools
     local NEED_INSTALL=false
@@ -22,58 +56,82 @@ install_nginx_if_needed() {
 }
 
 download_template() {
-    local URL=$1
-    local NAME=$2
+    local URL="$1"
+    local NAME="$2"
+    local TMP_DIR
+    local TEMPLATE_ZIP
+    local EXTRACT_DIR
+    local SITE_BACKUP
+    local SOURCE_DIR
+    local ITEMS
+    local FIRST_ITEM
 
     echo -e "${BLUE}Downloading template: $NAME...${NC}"
-    
-    # Backup current site
-    if [ -f "$WWW_DIR/index.html" ]; then
-        cp "$WWW_DIR/index.html" "/tmp/index_backup.html"
+
+    TMP_DIR=$(mktemp -d /tmp/mrm-site.XXXXXX 2>/dev/null)
+    if [ -z "$TMP_DIR" ] || [ ! -d "$TMP_DIR" ]; then
+        echo -e "${RED}✘ Failed to create temporary workspace!${NC}"
+        return 1
     fi
-    
-    rm -rf "$WWW_DIR"/*
+
+    TEMPLATE_ZIP="$TMP_DIR/template.zip"
+    EXTRACT_DIR="$TMP_DIR/extracted"
+    SITE_BACKUP="$TMP_DIR/site-backup"
+    mkdir -p "$EXTRACT_DIR" "$SITE_BACKUP" "$WWW_DIR"
+
+    # Backup current site
+    copy_dir_contents "$WWW_DIR" "$SITE_BACKUP" 2>/dev/null || true
 
     # Download
-    if wget -qO /tmp/template.zip "$URL"; then
-        # Check if file is valid zip
-        if file /tmp/template.zip | grep -q "Zip archive"; then
-            unzip -q -o /tmp/template.zip -d "$WWW_DIR"
-            
-            # If zip contained a single folder, move contents up
-            local ITEMS=$(ls -1 "$WWW_DIR" | wc -l)
-            local FIRST_ITEM=$(ls -1 "$WWW_DIR" | head -1)
-            if [ "$ITEMS" -eq 1 ] && [ -d "$WWW_DIR/$FIRST_ITEM" ]; then
-                mv "$WWW_DIR/$FIRST_ITEM"/* "$WWW_DIR/" 2>/dev/null
-                rmdir "$WWW_DIR/$FIRST_ITEM" 2>/dev/null
-            fi
-            
-            rm -f /tmp/template.zip
-
-            # Fix permissions
-            chown -R www-data:www-data "$WWW_DIR" 2>/dev/null
-            chmod -R 755 "$WWW_DIR"
-
-            echo -e "${GREEN}✔ Template installed successfully!${NC}"
-        else
-            echo -e "${RED}✘ Downloaded file is not a valid ZIP!${NC}"
-            # Restore backup
-            if [ -f "/tmp/index_backup.html" ]; then
-                cp "/tmp/index_backup.html" "$WWW_DIR/index.html"
-            fi
-        fi
-    else
+    if ! wget -qO "$TEMPLATE_ZIP" "$URL"; then
         echo -e "${RED}✘ Download failed! URL may be invalid.${NC}"
-        # Restore backup
-        if [ -f "/tmp/index_backup.html" ]; then
-            cp "/tmp/index_backup.html" "$WWW_DIR/index.html"
-        fi
+        rm -rf "$TMP_DIR"
+        return 1
     fi
-    
-    rm -f /tmp/template.zip /tmp/index_backup.html 2>/dev/null
+
+    # Check if file is valid zip
+    if ! unzip -tqq "$TEMPLATE_ZIP" >/dev/null 2>&1; then
+        echo -e "${RED}✘ Downloaded file is not a valid ZIP!${NC}"
+        rm -rf "$TMP_DIR"
+        return 1
+    fi
+
+    if ! unzip -q -o "$TEMPLATE_ZIP" -d "$EXTRACT_DIR" >/dev/null 2>&1; then
+        echo -e "${RED}✘ Failed to extract template ZIP!${NC}"
+        rm -rf "$TMP_DIR"
+        return 1
+    fi
+
+    ITEMS=$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 | wc -l)
+    FIRST_ITEM=$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 | head -1)
+    SOURCE_DIR="$EXTRACT_DIR"
+
+    if [ "$ITEMS" -eq 1 ] && [ -n "$FIRST_ITEM" ] && [ -d "$FIRST_ITEM" ]; then
+        SOURCE_DIR="$FIRST_ITEM"
+    fi
+
+    clear_www_dir
+    if ! copy_dir_contents "$SOURCE_DIR" "$WWW_DIR"; then
+        echo -e "${RED}✘ Failed to deploy template files! Restoring previous site...${NC}"
+        restore_www_backup "$SITE_BACKUP" >/dev/null 2>&1 || true
+        rm -rf "$TMP_DIR"
+        return 1
+    fi
+
+    # Fix permissions
+    chown -R www-data:www-data "$WWW_DIR" 2>/dev/null
+    chmod -R 755 "$WWW_DIR"
+
+    echo -e "${GREEN}✔ Template installed successfully!${NC}"
+    rm -rf "$TMP_DIR"
+    return 0
 }
 
 setup_fake_site() {
+    local DEFAULT_CONF="/etc/nginx/sites-available/default"
+    local DEFAULT_CONF_BACKUP=""
+    local SITE_CHANGE_OK=true
+
     clear
     echo -e "${CYAN}=============================================${NC}"
     echo -e "${YELLOW}      FAKE SITE MANAGER                      ${NC}"
@@ -104,12 +162,12 @@ setup_fake_site() {
     read -p "Select: " T_OPT
 
     case $T_OPT in
-        1) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page296/oxer.zip" "Digital Agency" ;;
-        2) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page293/chocolux.zip" "Coffee Shop" ;;
-        3) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page294/shapel.zip" "Portfolio" ;;
-        4) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page296/constra.zip" "Construction" ;;
-        5) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page293/dgital.zip" "Crypto" ;;
-        6) 
+        1) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page296/oxer.zip" "Digital Agency" || SITE_CHANGE_OK=false ;;
+        2) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page293/chocolux.zip" "Coffee Shop" || SITE_CHANGE_OK=false ;;
+        3) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page294/shapel.zip" "Portfolio" || SITE_CHANGE_OK=false ;;
+        4) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page296/constra.zip" "Construction" || SITE_CHANGE_OK=false ;;
+        5) download_template "https://www.free-css.com/assets/files/free-css-templates/download/page293/dgital.zip" "Crypto" || SITE_CHANGE_OK=false ;;
+        6)
             cat > "$WWW_DIR/index.html" <<'HTMLEOF'
 <!DOCTYPE html>
 <html>
@@ -174,9 +232,10 @@ HTMLEOF
             echo ""
             read -p "Enter Zip URL: " ZIP_URL
             if [ -n "$ZIP_URL" ]; then
-                download_template "$ZIP_URL" "Custom Template"
+                download_template "$ZIP_URL" "Custom Template" || SITE_CHANGE_OK=false
             else
                 echo -e "${RED}URL cannot be empty.${NC}"
+                SITE_CHANGE_OK=false
             fi
             ;;
         10)
@@ -184,11 +243,24 @@ HTMLEOF
             echo -e "${GREEN}✔ Restored default nginx page.${NC}"
             ;;
         11) return ;;
-        *) return ;;
+        *)
+            site_invalid_option
+            return
+            ;;
     esac
 
+    if [ "$SITE_CHANGE_OK" != "true" ]; then
+        pause
+        return
+    fi
+
+    DEFAULT_CONF_BACKUP=$(mktemp /tmp/mrm-nginx-default.XXXXXX 2>/dev/null || true)
+    if [ -n "$DEFAULT_CONF_BACKUP" ] && [ -f "$DEFAULT_CONF" ]; then
+        cp "$DEFAULT_CONF" "$DEFAULT_CONF_BACKUP"
+    fi
+
     # Ensure Nginx config is correct
-    cat > "/etc/nginx/sites-available/default" <<'NGINXEOF'
+    cat > "$DEFAULT_CONF" <<'NGINXEOF'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -220,7 +292,18 @@ NGINXEOF
 </html>
 HTMLEOF
 
-    systemctl restart nginx
+    if ! restart_nginx_checked; then
+        echo -e "${RED}✘ Nginx config test/restart failed! Reverting site config...${NC}"
+        if [ -n "$DEFAULT_CONF_BACKUP" ] && [ -f "$DEFAULT_CONF_BACKUP" ]; then
+            cp "$DEFAULT_CONF_BACKUP" "$DEFAULT_CONF"
+            restart_nginx_checked >/dev/null 2>&1 || systemctl start nginx >/dev/null 2>&1 || true
+        fi
+        rm -f "$DEFAULT_CONF_BACKUP"
+        pause
+        return
+    fi
+
+    rm -f "$DEFAULT_CONF_BACKUP"
 
     echo ""
     echo -e "${YELLOW}Tip: Set Fallback Port to 80 in your Inbound settings.${NC}"
@@ -229,23 +312,48 @@ HTMLEOF
 
 toggle_site() {
     if systemctl is-active --quiet nginx; then
-        systemctl stop nginx
-        echo -e "${YELLOW}Nginx Stopped (Port 80 freed).${NC}"
+        if systemctl stop nginx >/dev/null 2>&1; then
+            echo -e "${YELLOW}Nginx Stopped (Port 80 freed).${NC}"
+        else
+            echo -e "${RED}Failed to stop Nginx.${NC}"
+        fi
     else
-        systemctl start nginx
-        echo -e "${GREEN}Nginx Started.${NC}"
+        if restart_nginx_checked; then
+            echo -e "${GREEN}Nginx Started.${NC}"
+        else
+            echo -e "${RED}Failed to start Nginx. Check configuration with: nginx -t${NC}"
+        fi
     fi
     pause
 }
 
 edit_site() {
+    local TMP_DIR
+    local INDEX_BACKUP
+
     if [ -f "$WWW_DIR/index.html" ]; then
+        TMP_DIR=$(mktemp -d /tmp/mrm-site-edit.XXXXXX 2>/dev/null)
+        INDEX_BACKUP="$TMP_DIR/index.html.bak"
+        [ -n "$TMP_DIR" ] && cp "$WWW_DIR/index.html" "$INDEX_BACKUP" 2>/dev/null || true
+
         nano "$WWW_DIR/index.html"
-        systemctl restart nginx
+
+        if restart_nginx_checked; then
+            echo -e "${GREEN}✔ Site updated and Nginx restarted.${NC}"
+        else
+            echo -e "${RED}✘ Nginx restart failed after editing site.${NC}"
+            if [ -f "$INDEX_BACKUP" ]; then
+                cp "$INDEX_BACKUP" "$WWW_DIR/index.html"
+                restart_nginx_checked >/dev/null 2>&1 || systemctl start nginx >/dev/null 2>&1 || true
+                echo -e "${YELLOW}Previous index.html restored.${NC}"
+            fi
+        fi
+
+        rm -rf "$TMP_DIR" 2>/dev/null
     else
         echo -e "${RED}No index.html found. Install a template first.${NC}"
-        pause
     fi
+    pause
 }
 
 site_menu() {
@@ -274,7 +382,7 @@ site_menu() {
             2) toggle_site ;;
             3) edit_site ;;
             4) return ;;
-            *) ;;
+            *) site_invalid_option ;;
         esac
     done
 }
