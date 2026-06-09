@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================
-# INTERACTIVE UI LIBRARY (FIXED STATUS)
+# INTERACTIVE UI LIBRARY (SAFE ENHANCED)
 # ============================================
 
 # Colors
@@ -24,28 +24,52 @@ UI_H="═"
 UI_V="║"
 
 # ============================================
+# TERMINAL HELPERS
+# ============================================
+
+ui_has_tput() {
+    command -v tput >/dev/null 2>&1 && [ -n "${TERM:-}" ] && [ "$TERM" != "dumb" ]
+}
+
+ui_cursor_hide() {
+    ui_has_tput && tput civis 2>/dev/null || true
+}
+
+ui_cursor_show() {
+    ui_has_tput && tput cnorm 2>/dev/null || true
+}
+
+# ============================================
 # HEADER & BOX FUNCTIONS
 # ============================================
 
 ui_header() {
-    local TITLE=$1
-    local WIDTH=${2:-50}
-    
+    local TITLE="$1"
+    local WIDTH="${2:-50}"
+    local MIN_WIDTH
+    local PADDING
+    local i
+
+    MIN_WIDTH=$(( ${#TITLE} + 6 ))
+    [ "$WIDTH" -lt "$MIN_WIDTH" ] && WIDTH="$MIN_WIDTH"
+    [ "$WIDTH" -lt 40 ] && WIDTH=40
+
     clear
-    
+
     # Top border
     echo -ne "${UI_CYAN}${UI_TL}"
     for ((i=0; i<WIDTH-2; i++)); do echo -ne "${UI_H}"; done
     echo -e "${UI_TR}${UI_NC}"
-    
+
     # Title
-    local PADDING=$(( (WIDTH - 2 - ${#TITLE}) / 2 ))
+    PADDING=$(( (WIDTH - 2 - ${#TITLE}) / 2 ))
+    [ "$PADDING" -lt 0 ] && PADDING=0
     echo -ne "${UI_CYAN}${UI_V}${UI_NC}"
     for ((i=0; i<PADDING; i++)); do echo -ne " "; done
     echo -ne "${UI_YELLOW}${UI_BOLD}${TITLE}${UI_NC}"
     for ((i=0; i<WIDTH-2-PADDING-${#TITLE}; i++)); do echo -ne " "; done
     echo -e "${UI_CYAN}${UI_V}${UI_NC}"
-    
+
     # Bottom border
     echo -ne "${UI_CYAN}${UI_BL}"
     for ((i=0; i<WIDTH-2; i++)); do echo -ne "${UI_H}"; done
@@ -53,30 +77,50 @@ ui_header() {
     echo ""
 }
 
+ui_divider() {
+    local WIDTH="${1:-46}"
+    local i
+
+    echo -ne "${UI_DIM}"
+    for ((i=0; i<WIDTH; i++)); do echo -ne "─"; done
+    echo -e "${UI_NC}"
+}
+
+ui_section() {
+    local TITLE="$1"
+    ui_divider 46
+    echo -e "${UI_BLUE}${UI_BOLD}${TITLE}${UI_NC}"
+    ui_divider 46
+}
+
+ui_kv() {
+    local KEY="$1"
+    local VALUE="$2"
+    echo -e "${UI_DIM}${KEY}:${UI_NC} ${UI_CYAN}${VALUE}${UI_NC}"
+}
+
 ui_status_bar() {
-    # Default Status (Red)
     local PANEL_STATUS="${UI_RED}●${UI_NC}"
     local NODE_STATUS="${UI_RED}●${UI_NC}"
     local NGINX_STATUS="${UI_RED}●${UI_NC}"
-    
-    # Check Panel (Pasarguard or Marzban)
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE "pasarguard|marzban"; then
+
+    # Check Panel (Pasarguard / Marzban / Rebecca)
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE "pasarguard|marzban|rebecca"; then
         PANEL_STATUS="${UI_GREEN}●${UI_NC}"
     fi
 
-    # Check Node (More flexible check: looks for 'node' in any container name)
-    # Also checks if it's NOT the exporter to avoid false positives if possible
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "node"; then
+    # Check Node containers
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qiE "pg-node|marzban-node|rebecca-node|(^|[-_])node($|[-_])"; then
         NODE_STATUS="${UI_GREEN}●${UI_NC}"
     fi
-    
+
     # Check Nginx (Service OR Container)
     if systemctl is-active --quiet nginx 2>/dev/null; then
         NGINX_STATUS="${UI_GREEN}●${UI_NC}"
     elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qi "nginx"; then
         NGINX_STATUS="${UI_GREEN}●${UI_NC}"
     fi
-    
+
     echo -e "${UI_DIM}┌──────────────────────────────────────────────┐${UI_NC}"
     echo -e "${UI_DIM}│${UI_NC} Panel: $PANEL_STATUS  Node: $NODE_STATUS  Nginx: $NGINX_STATUS          ${UI_DIM}│${UI_NC}"
     echo -e "${UI_DIM}└──────────────────────────────────────────────┘${UI_NC}"
@@ -88,15 +132,29 @@ ui_status_bar() {
 # ============================================
 
 ui_progress() {
-    local CURRENT=$1
-    local TOTAL=$2
-    local WIDTH=${3:-40}
-    local LABEL=${4:-"Progress"}
-    
-    local PERCENT=$((CURRENT * 100 / TOTAL))
-    local FILLED=$((CURRENT * WIDTH / TOTAL))
-    local EMPTY=$((WIDTH - FILLED))
-    
+    local CURRENT="${1:-0}"
+    local TOTAL="${2:-0}"
+    local WIDTH="${3:-40}"
+    local LABEL="${4:-Progress}"
+    local SAFE_CURRENT
+    local PERCENT
+    local FILLED
+    local EMPTY
+    local i
+
+    if [ "$TOTAL" -le 0 ] 2>/dev/null; then
+        PERCENT=0
+        FILLED=0
+        EMPTY="$WIDTH"
+    else
+        SAFE_CURRENT="$CURRENT"
+        [ "$SAFE_CURRENT" -lt 0 ] 2>/dev/null && SAFE_CURRENT=0
+        [ "$SAFE_CURRENT" -gt "$TOTAL" ] 2>/dev/null && SAFE_CURRENT="$TOTAL"
+        PERCENT=$((SAFE_CURRENT * 100 / TOTAL))
+        FILLED=$((SAFE_CURRENT * WIDTH / TOTAL))
+        EMPTY=$((WIDTH - FILLED))
+    fi
+
     echo -ne "\r${LABEL}: ["
     echo -ne "${UI_GREEN}"
     for ((i=0; i<FILLED; i++)); do echo -ne "█"; done
@@ -114,7 +172,9 @@ ui_progress_done() {
 # ============================================
 
 ui_spinner_start() {
-    local MESSAGE=${1:-"Loading..."}
+    local MESSAGE="${1:-Loading...}"
+
+    ui_spinner_stop
     (
         local SPIN='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
         local i=0
@@ -128,9 +188,10 @@ ui_spinner_start() {
 }
 
 ui_spinner_stop() {
-    if [ -n "$SPINNER_PID" ]; then
-        kill $SPINNER_PID 2>/dev/null
-        wait $SPINNER_PID 2>/dev/null
+    if [ -n "${SPINNER_PID:-}" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        unset SPINNER_PID
         echo -ne "\r\033[K"
     fi
 }
@@ -140,60 +201,79 @@ ui_spinner_stop() {
 # ============================================
 
 ui_menu() {
-    local TITLE=$1
+    local TITLE="$1"
     shift
     local OPTIONS=("$@")
     local SELECTED=0
     local COUNT=${#OPTIONS[@]}
-    
-    tput civis
-    
+    local key
+    local i
+
+    ui_cursor_hide
+
     while true; do
         clear
         ui_header "$TITLE"
         ui_status_bar
-        
+
         for i in "${!OPTIONS[@]}"; do
-            if [ $i -eq $SELECTED ]; then
+            if [ "$i" -eq "$SELECTED" ]; then
                 echo -e "  ${UI_CYAN}▶${UI_NC} ${UI_WHITE}${UI_BOLD}${OPTIONS[$i]}${UI_NC}"
             else
                 echo -e "    ${UI_DIM}${OPTIONS[$i]}${UI_NC}"
             fi
         done
-        
+
         echo ""
         echo -e "${UI_DIM}Use ↑↓ arrows to navigate, Enter to select, q to quit${UI_NC}"
-        
-        read -rsn1 key
+
+        if ! read -rsn1 key; then
+            ui_cursor_show
+            echo -1
+            return 255
+        fi
+
         case "$key" in
             $'\x1b')
-                read -rsn2 key
-                case "$key" in
-                    '[A') ((SELECTED--)); [ $SELECTED -lt 0 ] && SELECTED=$((COUNT - 1)) ;;
-                    '[B') ((SELECTED++)); [ $SELECTED -ge $COUNT ] && SELECTED=0 ;;
-                esac
+                if read -rsn2 key; then
+                    case "$key" in
+                        '[A') ((SELECTED--)); [ "$SELECTED" -lt 0 ] && SELECTED=$((COUNT - 1)) ;;
+                        '[B') ((SELECTED++)); [ "$SELECTED" -ge "$COUNT" ] && SELECTED=0 ;;
+                    esac
+                fi
                 ;;
-            '') tput cnorm; echo $SELECTED; return $SELECTED ;;
-            'q'|'Q') tput cnorm; echo -1; return 255 ;;
+            '')
+                ui_cursor_show
+                echo "$SELECTED"
+                return "$SELECTED"
+                ;;
+            'q'|'Q')
+                ui_cursor_show
+                echo -1
+                return 255
+                ;;
         esac
     done
 }
 
 ui_confirm() {
-    local MESSAGE=$1
-    local DEFAULT=${2:-n}
+    local MESSAGE="$1"
+    local DEFAULT="${2:-n}"
     local PROMPT="[y/N]"
-    [ "$DEFAULT" == "y" ] && PROMPT="[Y/n]"
+    local REPLY
+
+    [ "$DEFAULT" = "y" ] && PROMPT="[Y/n]"
     echo -ne "${UI_YELLOW}? ${UI_NC}${MESSAGE} ${UI_DIM}${PROMPT}${UI_NC} "
     read -r REPLY
-    [ -z "$REPLY" ] && REPLY=$DEFAULT
+    [ -z "$REPLY" ] && REPLY="$DEFAULT"
     case "$REPLY" in [Yy]*) return 0 ;; *) return 1 ;; esac
 }
 
 ui_input() {
-    local LABEL=$1
-    local DEFAULT=$2
+    local LABEL="$1"
+    local DEFAULT="$2"
     local RESULT=""
+
     if [ -n "$DEFAULT" ]; then
         echo -ne "${UI_CYAN}? ${UI_NC}${LABEL} ${UI_DIM}[$DEFAULT]${UI_NC}: "
     else
