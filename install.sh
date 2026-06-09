@@ -30,9 +30,8 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 
 # Create directories
-echo -e "${BLUE}[1/4] Creating directories...${NC}"
+echo -e "${BLUE}[1/3] Creating directories...${NC}"
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/inbound"
 
 # Core Files List
 FILES=(
@@ -47,7 +46,6 @@ FILES=(
     "mirza.sh"
     "main.sh"
 )
-
 
 # Optional files
 OPT_FILES=(
@@ -112,7 +110,7 @@ set_executable_if_needed() {
 validate_download_prerequisites() {
     local FILE
 
-    for FILE in "${FILES[@]}" "${INBOUND_FILES[@]}"; do
+    for FILE in "${FILES[@]}"; do
         if ! get_local_source_path "$FILE" >/dev/null 2>&1; then
             if ! command -v curl >/dev/null 2>&1; then
                 echo -e "${RED}curl is required for online installation but is not installed.${NC}"
@@ -176,7 +174,7 @@ install_file() {
 validate_download_prerequisites
 
 # Install Core Files
-echo -e "${BLUE}[2/4] Installing core files...${NC}"
+echo -e "${BLUE}[2/3] Installing core files...${NC}"
 for FILE in "${FILES[@]}"; do
     if ! install_file "$FILE" "false"; then
         echo -e "${RED}CRITICAL ERROR: Installation failed at $FILE${NC}"
@@ -184,17 +182,8 @@ for FILE in "${FILES[@]}"; do
     fi
 done
 
-# Install Inbound Module
-echo -e "${BLUE}[3/4] Installing inbound module...${NC}"
-for FILE in "${INBOUND_FILES[@]}"; do
-    if ! install_file "$FILE" "false"; then
-        echo -e "${RED}CRITICAL ERROR: Installation failed at $FILE${NC}"
-        exit 1
-    fi
-done
-
 # Install Optional Files
-echo -e "${BLUE}[4/4] Installing optional files...${NC}"
+echo -e "${BLUE}[3/3] Installing optional files...${NC}"
 for FILE in "${OPT_FILES[@]}"; do
     install_file "$FILE" "true"
 done
@@ -203,6 +192,7 @@ done
 echo ""
 echo -e "${YELLOW}Cleaning up old files...${NC}"
 rm -f "$INSTALL_DIR/inbound.sh" 2>/dev/null && echo -e "  ${GREEN}✔${NC} Removed old inbound.sh"
+rm -rf "$INSTALL_DIR/inbound" 2>/dev/null && echo -e "  ${GREEN}✔${NC} Removed inbound module"
 rm -f "$INSTALL_DIR/node.sh" 2>/dev/null
 rm -f "$INSTALL_DIR/port_manager.sh" 2>/dev/null
 
@@ -217,7 +207,7 @@ echo -e "${CYAN}║        ${GREEN}✔ Installation Complete!${CYAN}            
 echo -e "${CYAN}╠══════════════════════════════════════════════╣${NC}"
 echo -e "${CYAN}║${NC}  Installed files:                            ${CYAN}║${NC}"
 echo -e "${CYAN}║${NC}    • Core modules: ${GREEN}${#FILES[@]}${NC}                        ${CYAN}║${NC}"
-echo -e "${CYAN}║${NC}    • Inbound module: ${GREEN}${#INBOUND_FILES[@]}${NC} files               ${CYAN}║${NC}"
+echo -e "${CYAN}║${NC}    • Optional files: ${GREEN}${#OPT_FILES[@]}${NC}                     ${CYAN}║${NC}"
 echo -e "${CYAN}║${NC}                                              ${CYAN}║${NC}"
 echo -e "${CYAN}║${NC}  ${YELLOW}Type 'mrm' to run the manager${NC}              ${CYAN}║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
