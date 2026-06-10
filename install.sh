@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM Manager Installer v3.2
+# MRM Manager Installer v4.0
 # ==========================================
 
 INSTALL_DIR="/opt/mrm-manager"
@@ -42,6 +42,8 @@ FILES=(
     "domain_separator.sh"
     "site.sh"
     "theme.sh"
+    "settings.sh"
+    "diagnostics.sh"
     "migrator.sh"
     "mirza.sh"
     "main.sh"
