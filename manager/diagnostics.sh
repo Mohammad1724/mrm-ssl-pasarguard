@@ -165,6 +165,9 @@ mrm_render_home_dashboard() {
     echo -e "${UI_DIM}Features:${UI_NC} SSL $(mrm_ssl_status_text)   Backup ${BACKUP_STATUS}   Telegram ${TG_STATUS}"
     echo -e "${UI_DIM}Extras:${UI_NC} Theme ${THEME_STATUS}   Domain Split ${DOMAIN_STATUS}"
     ui_kv "Last Backup" "$(mrm_latest_backup_text)"
+    if declare -f mrm_latest_restore_point_text >/dev/null 2>&1; then
+        ui_kv "Last Restore Point" "$(mrm_latest_restore_point_text)"
+    fi
     echo ""
 }
 
