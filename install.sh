@@ -25,7 +25,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 echo -e "${CYAN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║      MRM Manager Installer v3.2              ║${NC}"
+echo -e "${CYAN}║      MRM Manager Installer v4.0              ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
