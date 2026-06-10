@@ -45,6 +45,7 @@ FILES=(
     "settings.sh"
     "diagnostics.sh"
     "offline.sh"
+    "safe_ops.sh"
     "migrator.sh"
     "mirza.sh"
     "main.sh"
