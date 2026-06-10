@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM MANAGER v4.0 
+# MRM MANAGER v4.0
 # ==========================================
 
 bootstrap_error() {
@@ -33,6 +33,7 @@ load_required_module "/opt/mrm-manager/site.sh"
 load_required_module "/opt/mrm-manager/theme.sh"
 load_required_module "/opt/mrm-manager/settings.sh"
 load_required_module "/opt/mrm-manager/diagnostics.sh"
+load_required_module "/opt/mrm-manager/offline.sh"
 load_required_module "/opt/mrm-manager/migrator.sh"
 load_required_module "/opt/mrm-manager/mirza.sh"
 
@@ -418,10 +419,11 @@ tools_menu() {
         echo "3) 🎨 Theme Manager"
         echo "4) ⚙️  Settings Center"
         echo "5) 🩺 Diagnostics & Self-Heal"
-        echo "6) 🔄 Migration (Pasarguard → Rebecca)"
+        echo "6) 🇮🇷 Iran / Offline Mode"
+        echo "7) 🔄 Migration (Pasarguard → Rebecca)"
         echo ""
-        echo "7) ⚡ Optimize Network (BBR)"
-        echo "8) 🔧 Auto Fix"
+        echo "8) ⚡ Optimize Network (BBR)"
+        echo "9) 🔧 Auto Fix"
         echo ""
         echo "0) ↩️  Back"
         echo ""
@@ -433,9 +435,10 @@ tools_menu() {
             3) theme_menu ;;
             4) settings_menu ;;
             5) diagnostics_menu ;;
-            6) migrator_menu ;;
-            7) optimize_network ;;
-            8) auto_fix ;;
+            6) offline_menu ;;
+            7) migrator_menu ;;
+            8) optimize_network ;;
+            9) auto_fix ;;
             0) return ;;
             *) invalid_menu_option ;;
         esac
