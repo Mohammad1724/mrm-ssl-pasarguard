@@ -14,6 +14,7 @@ export HOME="${HOME:-/root}"
 # Load modules
 source /opt/mrm-manager/utils.sh
 source /opt/mrm-manager/ui.sh
+if ! declare -f mrm_create_restore_point >/dev/null 2>&1 && [ -r /opt/mrm-manager/safe_ops.sh ]; then source /opt/mrm-manager/safe_ops.sh; fi
 
 # Configuration
 BACKUP_DIR="/root/mrm-backups"
@@ -406,6 +407,12 @@ setup_telegram() {
         PROXY_URL=""
     fi
 
+    if declare -f mrm_create_restore_point >/dev/null 2>&1; then
+        local RESTORE_POINT_ID
+        RESTORE_POINT_ID="$(mrm_create_restore_point "telegram-settings" "none" "$TG_CONFIG")"
+        [ -n "$RESTORE_POINT_ID" ] && echo -e "${BLUE}Restore point created: $RESTORE_POINT_ID${NC}"
+    fi
+
     cat > "$TG_CONFIG" << EOF
 TG_TOKEN="$TK"
 TG_CHAT="$CI"
@@ -441,6 +448,12 @@ remove_telegram_settings() {
     read -p "Delete Telegram settings? (y/N): " CONFIRM
 
     if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+        if declare -f mrm_create_restore_point >/dev/null 2>&1; then
+            local RESTORE_POINT_ID
+            RESTORE_POINT_ID="$(mrm_create_restore_point "telegram-settings-remove" "none" "$TG_CONFIG")"
+            [ -n "$RESTORE_POINT_ID" ] && echo -e "${BLUE}Restore point created: $RESTORE_POINT_ID${NC}"
+        fi
+
         rm -f "$TG_CONFIG"
         ui_success "Telegram settings removed."
         log_backup "INFO" "Telegram settings removed"
