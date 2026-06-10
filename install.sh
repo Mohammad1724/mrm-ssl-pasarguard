@@ -44,6 +44,7 @@ FILES=(
     "theme.sh"
     "settings.sh"
     "diagnostics.sh"
+    "offline.sh"
     "migrator.sh"
     "mirza.sh"
     "main.sh"
