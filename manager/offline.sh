@@ -262,7 +262,7 @@ offline_show_status() {
     fi
 
     CODENAME="$(offline_get_codename)"
-    CURRENT_APT="$(offline_get_current_apt_mirror 2>/dev/null || echo Not")"
+    CURRENT_APT="$(offline_get_current_apt_mirror 2>/dev/null || echo Not)"
     CURRENT_DOCKER="$(offline_get_current_docker_mirror 2>/dev/null || echo Not)"
 
     ui_section "Environment"
