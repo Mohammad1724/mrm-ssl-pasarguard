@@ -116,7 +116,7 @@ mrm → Backup & Restore → Telegram Settings
 
 ```
 ╔══════════════════════════════════════════════╗
-║           MRM MANAGER v2.0                   ║
+║           MRM MANAGER v4.0                   ║
 ╚══════════════════════════════════════════════╝
   Panel: 🟢    Node: 🟢    Nginx: 🟢
 
