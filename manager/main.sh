@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# MRM MANAGER v3.2 - Full Pro Edition
+# MRM MANAGER v4.0 
 # ==========================================
 
 bootstrap_error() {
@@ -31,6 +31,8 @@ load_required_module "/opt/mrm-manager/backup.sh"
 load_required_module "/opt/mrm-manager/domain_separator.sh"
 load_required_module "/opt/mrm-manager/site.sh"
 load_required_module "/opt/mrm-manager/theme.sh"
+load_required_module "/opt/mrm-manager/settings.sh"
+load_required_module "/opt/mrm-manager/diagnostics.sh"
 load_required_module "/opt/mrm-manager/migrator.sh"
 load_required_module "/opt/mrm-manager/mirza.sh"
 
@@ -414,10 +416,12 @@ tools_menu() {
         echo "1) 🌐 Domain Separator (Panel & Sub)"
         echo "2) 🎭 Fake Site Manager"
         echo "3) 🎨 Theme Manager"
-        echo "4) 🔄 Migration (Pasarguard → Rebecca)"
+        echo "4) ⚙️  Settings Center"
+        echo "5) 🩺 Diagnostics & Self-Heal"
+        echo "6) 🔄 Migration (Pasarguard → Rebecca)"
         echo ""
-        echo "5) ⚡ Optimize Network (BBR)"
-        echo "6) 🔧 Auto Fix"
+        echo "7) ⚡ Optimize Network (BBR)"
+        echo "8) 🔧 Auto Fix"
         echo ""
         echo "0) ↩️  Back"
         echo ""
@@ -427,9 +431,11 @@ tools_menu() {
             1) domain_menu ;;
             2) site_menu ;;
             3) theme_menu ;;
-            4) migrator_menu ;;
-            5) optimize_network ;;
-            6) auto_fix ;;
+            4) settings_menu ;;
+            5) diagnostics_menu ;;
+            6) migrator_menu ;;
+            7) optimize_network ;;
+            8) auto_fix ;;
             0) return ;;
             *) invalid_menu_option ;;
         esac
@@ -447,7 +453,11 @@ main_menu() {
         clear
         ui_header "MRM MANAGER v3.2" 50
         ui_status_bar
+        if declare -f mrm_render_home_dashboard >/dev/null 2>&1; then
+            mrm_render_home_dashboard
+        fi
 
+        ui_section "MAIN MENU"
         echo "1) 🔐 SSL Certificates"
         echo "2) 💾 Backup & Restore"
         echo "3) 🤖 Mirza Pro (Telegram Bot)"
