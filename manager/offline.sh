@@ -16,6 +16,8 @@ OFFLINE_DOCKER_MIRRORS=(
 )
 OFFLINE_RECOMMENDED_APT_MIRROR="http://mirror.arvancloud.ir/ubuntu"
 OFFLINE_RECOMMENDED_DOCKER_MIRROR="https://docker.arvancloud.ir"
+OFFLINE_LOCAL_PANEL_ARCHIVE="/root/pasarguard-standalone.tar.gz"
+OFFLINE_LOCAL_NODE_ARCHIVE="/root/pg-node-standalone.tar.gz"
 
 offline_invalid_option() {
     if declare -f invalid_menu_option >/dev/null 2>&1; then
@@ -34,6 +36,15 @@ offline_require_ubuntu() {
     fi
 
     [ "$OS_ID" = "ubuntu" ]
+}
+
+offline_validate_domain() {
+    local DOMAIN="$1"
+    local PATTERN='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+
+    [ -n "$DOMAIN" ] || return 1
+    [ "${#DOMAIN}" -le 253 ] || return 1
+    [[ "$DOMAIN" =~ $PATTERN ]]
 }
 
 offline_get_codename() {
@@ -82,6 +93,52 @@ try:
 except Exception:
     pass
 PYEOF
+}
+
+offline_extract_local_bundle() {
+    local ARCHIVE="$1"
+    local PREFIX="$2"
+    local TMP_DIR
+
+    [ -f "$ARCHIVE" ] || return 1
+
+    TMP_DIR=$(mktemp -d "/tmp/${PREFIX}.XXXXXX" 2>/dev/null) || return 1
+    tar -xzf "$ARCHIVE" -C "$TMP_DIR" >/dev/null 2>&1 || {
+        rm -rf "$TMP_DIR"
+        return 1
+    }
+
+    printf '%s\n' "$TMP_DIR"
+}
+
+offline_prepare_local_install_mirrors() {
+    local CURRENT_APT
+    local CURRENT_DOCKER
+    local BACKUP_DIR
+    local CONFIRM
+
+    CURRENT_APT="$(offline_get_current_apt_mirror 2>/dev/null || true)"
+    CURRENT_DOCKER="$(offline_get_current_docker_mirror 2>/dev/null || true)"
+
+    if offline_is_known_apt_mirror "$CURRENT_APT" && offline_is_known_docker_mirror "$CURRENT_DOCKER"; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}Internal mirrors are not fully configured yet.${NC}"
+    echo -e "${CYAN}MRM can apply the recommended Ubuntu and Docker mirrors before installation.${NC}"
+    echo ""
+    read -r -p "Apply recommended mirrors first? (Y/n): " CONFIRM
+    if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
+        return 0
+    fi
+
+    BACKUP_DIR="$(offline_create_backup)"
+    [ -n "$BACKUP_DIR" ] || return 1
+
+    offline_apply_apt_mirror "$OFFLINE_RECOMMENDED_APT_MIRROR" "$BACKUP_DIR" || return 1
+    offline_apply_docker_mirror "$OFFLINE_RECOMMENDED_DOCKER_MIRROR" "$BACKUP_DIR" || return 1
+
+    return 0
 }
 
 offline_is_known_apt_mirror() {
@@ -450,14 +507,8 @@ offline_apply_both_recommended() {
 
 offline_check_readiness() {
     local CMD
-    local BUNDLE
     local FOUND_ANY=false
     local REQUIRED_COMMANDS=(curl tar unzip python3 jq docker nginx certbot)
-    local BUNDLE_PATTERNS=(
-        "/root/pasarguard-standalone*.tar.gz"
-        "/root/pg-node-standalone*.tar.gz"
-        "/root/mrm-ssl-pasarguard*.tar.gz"
-    )
 
     clear
     ui_header "OFFLINE READINESS CHECK"
@@ -493,17 +544,23 @@ offline_check_readiness() {
     done
 
     echo ""
-    ui_section "Local Bundles"
-    for BUNDLE in "${BUNDLE_PATTERNS[@]}"; do
-        set -- $BUNDLE
-        if [ -e "$1" ]; then
-            ui_success "$1"
-            FOUND_ANY=true
-        fi
-    done
+    ui_section "Expected Local Bundles"
+    if [ -f "$OFFLINE_LOCAL_PANEL_ARCHIVE" ]; then
+        ui_success "$OFFLINE_LOCAL_PANEL_ARCHIVE"
+        FOUND_ANY=true
+    else
+        ui_warning "$OFFLINE_LOCAL_PANEL_ARCHIVE (required for local panel install)"
+    fi
+
+    if [ -f "$OFFLINE_LOCAL_NODE_ARCHIVE" ]; then
+        ui_success "$OFFLINE_LOCAL_NODE_ARCHIVE"
+        FOUND_ANY=true
+    else
+        ui_warning "$OFFLINE_LOCAL_NODE_ARCHIVE (required for local node install)"
+    fi
 
     if [ "$FOUND_ANY" != true ]; then
-        ui_warning "No local tar.gz bundles found in /root"
+        ui_warning "Place the required tar.gz files in /root with the exact names shown above"
     fi
 
     echo ""
@@ -540,6 +597,200 @@ offline_restore_latest_backup() {
     pause
 }
 
+offline_install_panel_local() {
+    local WORK_DIR
+    local EXTRACTED_ROOT
+    local RESPONSES=""
+    local SSL_MODE
+    local SSL_DOMAIN=""
+    local COMMAND_ARGS=()
+
+    clear
+    ui_header "LOCAL PASARGUARD INSTALL"
+
+    if ! offline_require_ubuntu; then
+        ui_error "This module currently supports Ubuntu only"
+        pause
+        return
+    fi
+
+    echo -e "${CYAN}Required file:${NC} $OFFLINE_LOCAL_PANEL_ARCHIVE"
+    echo -e "${YELLOW}Place the panel standalone package in /root with this exact name.${NC}"
+    echo ""
+
+    if [ ! -f "$OFFLINE_LOCAL_PANEL_ARCHIVE" ]; then
+        ui_error "Required archive not found: $OFFLINE_LOCAL_PANEL_ARCHIVE"
+        pause
+        return
+    fi
+
+    if ! offline_prepare_local_install_mirrors; then
+        ui_error "Failed to prepare internal mirrors"
+        pause
+        return
+    fi
+
+    echo "Choose panel installation mode:"
+    echo "1) With SSL"
+    echo "2) Without SSL"
+    echo ""
+    read -r -p "Select [1-2]: " SSL_MODE
+
+    case "$SSL_MODE" in
+        1)
+            read -r -p "Enter panel domain for SSL (example: panel.example.com): " SSL_DOMAIN
+            if ! offline_validate_domain "$SSL_DOMAIN"; then
+                ui_error "Invalid domain format"
+                pause
+                return
+            fi
+            COMMAND_ARGS=(install --database timescaledb --ssl-domain "$SSL_DOMAIN")
+            ;;
+        2|"")
+            COMMAND_ARGS=(install --database timescaledb --no-ssl)
+            ;;
+        *)
+            offline_invalid_option
+            return
+            ;;
+    esac
+
+    if [ -d "/opt/pasarguard" ]; then
+        echo -e "${YELLOW}Existing PasarGuard installation detected at /opt/pasarguard.${NC}"
+        read -r -p "Continue and allow standalone installer to override it? (y/N): " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Cancelled"
+            pause
+            return
+        fi
+        if offline_is_known_apt_mirror "$(offline_get_current_apt_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+        if offline_is_known_docker_mirror "$(offline_get_current_docker_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+        RESPONSES+="y\n"
+        RESPONSES+="n\n"
+    else
+        if offline_is_known_apt_mirror "$(offline_get_current_apt_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+        if offline_is_known_docker_mirror "$(offline_get_current_docker_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+        RESPONSES+="n\n"
+    fi
+
+    WORK_DIR="$(offline_extract_local_bundle "$OFFLINE_LOCAL_PANEL_ARCHIVE" mrm-local-panel)"
+    if [ -z "$WORK_DIR" ] || [ ! -d "$WORK_DIR" ]; then
+        ui_error "Failed to extract panel archive"
+        pause
+        return
+    fi
+
+    EXTRACTED_ROOT="$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
+    [ -n "$EXTRACTED_ROOT" ] || EXTRACTED_ROOT="$WORK_DIR"
+
+    if [ ! -f "$EXTRACTED_ROOT/iran-sanction/pasarguard-standalone.sh" ]; then
+        ui_error "Standalone installer not found inside archive"
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+        pause
+        return
+    fi
+
+    chmod +x "$EXTRACTED_ROOT/iran-sanction/pasarguard-standalone.sh"
+
+    ui_info "Installing standalone launcher..."
+    if ! "$EXTRACTED_ROOT/iran-sanction/pasarguard-standalone.sh" install-script; then
+        ui_error "Failed to install standalone PasarGuard launcher"
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+        pause
+        return
+    fi
+
+    ui_info "Running local PasarGuard installation..."
+    if printf '%b' "$RESPONSES" | pasarguard "${COMMAND_ARGS[@]}"; then
+        ui_success "PasarGuard installed successfully from local archive"
+    else
+        ui_error "PasarGuard installation failed"
+    fi
+
+    rm -rf "$WORK_DIR" 2>/dev/null || true
+    pause
+}
+
+offline_install_node_local() {
+    local WORK_DIR
+    local EXTRACTED_ROOT
+    local RESPONSES=""
+
+    clear
+    ui_header "LOCAL PGNODE INSTALL"
+
+    if ! offline_require_ubuntu; then
+        ui_error "This module currently supports Ubuntu only"
+        pause
+        return
+    fi
+
+    echo -e "${CYAN}Required file:${NC} $OFFLINE_LOCAL_NODE_ARCHIVE"
+    echo -e "${YELLOW}Place the node standalone package in /root with this exact name.${NC}"
+    echo -e "${YELLOW}Run this on the node server, not on the panel server.${NC}"
+    echo ""
+
+    if [ ! -f "$OFFLINE_LOCAL_NODE_ARCHIVE" ]; then
+        ui_error "Required archive not found: $OFFLINE_LOCAL_NODE_ARCHIVE"
+        pause
+        return
+    fi
+
+    if [ -d "/opt/pg-node" ]; then
+        ui_warning "Existing PgNode installation detected at /opt/pg-node"
+        ui_info "For safety, local node install is only supported on a clean server in MRM."
+        ui_info "If you need reinstall, uninstall the old node first and retry."
+        pause
+        return
+    fi
+
+    if ! offline_prepare_local_install_mirrors; then
+        ui_error "Failed to prepare internal mirrors"
+        pause
+        return
+    fi
+
+    if offline_is_known_apt_mirror "$(offline_get_current_apt_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+    if offline_is_known_docker_mirror "$(offline_get_current_docker_mirror 2>/dev/null || true)"; then RESPONSES+="n\n"; fi
+
+    WORK_DIR="$(offline_extract_local_bundle "$OFFLINE_LOCAL_NODE_ARCHIVE" mrm-local-node)"
+    if [ -z "$WORK_DIR" ] || [ ! -d "$WORK_DIR" ]; then
+        ui_error "Failed to extract node archive"
+        pause
+        return
+    fi
+
+    EXTRACTED_ROOT="$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
+    [ -n "$EXTRACTED_ROOT" ] || EXTRACTED_ROOT="$WORK_DIR"
+
+    if [ ! -f "$EXTRACTED_ROOT/iran-sanction/pg-node-standalone.sh" ]; then
+        ui_error "Standalone PgNode installer not found inside archive"
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+        pause
+        return
+    fi
+
+    chmod +x "$EXTRACTED_ROOT/iran-sanction/pg-node-standalone.sh"
+
+    ui_info "Installing standalone PgNode launcher..."
+    if ! "$EXTRACTED_ROOT/iran-sanction/pg-node-standalone.sh" install-script; then
+        ui_error "Failed to install standalone PgNode launcher"
+        rm -rf "$WORK_DIR" 2>/dev/null || true
+        pause
+        return
+    fi
+
+    ui_info "Running local PgNode installation..."
+    if printf '%b' "$RESPONSES" | pg-node install -y; then
+        ui_success "PgNode installed successfully from local archive"
+    else
+        ui_error "PgNode installation failed"
+    fi
+
+    rm -rf "$WORK_DIR" 2>/dev/null || true
+    pause
+}
+
 offline_menu() {
     while true; do
         clear
@@ -550,7 +801,9 @@ offline_menu() {
         echo "4) 🐳 Apply Recommended Docker Mirror"
         echo "5) 🚀 Apply Both Recommended Mirrors"
         echo "6) 🧰 Offline Readiness Check"
-        echo "7) ♻️  Restore Last Mirror Backup"
+        echo "7) 📦 Install PasarGuard Panel from Local Tarball"
+        echo "8) ⚙️  Install PgNode from Local Tarball"
+        echo "9) ♻️  Restore Last Mirror Backup"
         echo "0) ↩️  Back"
         echo ""
         read -p "Select: " OPT
@@ -562,7 +815,9 @@ offline_menu() {
             4) offline_apply_recommended_docker ;;
             5) offline_apply_both_recommended ;;
             6) offline_check_readiness ;;
-            7) offline_restore_latest_backup ;;
+            7) offline_install_panel_local ;;
+            8) offline_install_node_local ;;
+            9) offline_restore_latest_backup ;;
             0) return ;;
             *) offline_invalid_option ;;
         esac
