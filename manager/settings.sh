@@ -58,6 +58,9 @@ settings_show_summary() {
     ui_kv "Theme Source URL" "${THEME_HTML_URL:-Not Set}"
     ui_kv "Backup Directory" "${BACKUP_DIR:-/root/mrm-backups}"
     ui_kv "Telegram Backup" "$(settings_telegram_status)"
+    if declare -f mrm_latest_restore_point_text >/dev/null 2>&1; then
+        ui_kv "Last Restore Point" "$(mrm_latest_restore_point_text)"
+    fi
     echo ""
 
     pause
